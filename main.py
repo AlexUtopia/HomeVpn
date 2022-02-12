@@ -3,14 +3,12 @@ import subprocess
 import json
 import ipaddress
 import urllib.request
+import urllib.parse
 
 
-class StunServerAddressList:
-    def __init__(self, config_file_path=None):
-        if config_file_path is None:
-            self.__config_file_path = "./stun-servers.config.json"
-        else:
-            self.__config_file_path = str(config_file_path)
+class JsonConfigLoader:
+    def __init__(self, config_file_path):
+        self.__config_file_path = str(config_file_path)
 
     def get(self):
         return self.__load_from_config()
@@ -19,8 +17,18 @@ class StunServerAddressList:
         config_file = open(self.__config_file_path)
         result = json.load(config_file)
         config_file.close()
-        print("Load STUN servers from config: {}".format(result))
+        print("Load from config: {}".format(result))
         return result
+
+
+class StunServerAddressList(JsonConfigLoader):
+    def __init__(self, config_file_path=None):
+        if config_file_path is None:
+            super().__init__("./stun-servers.config.json")
+        else:
+            super().__init__(config_file_path)
+
+    pass
 
 
 class IpAddressAndPort:
@@ -123,17 +131,52 @@ class OpenVpnServer:
         result = subprocess.run(
             [self.OPEN_VPN, "--config", self.__config_file_path, "--port", str(self.__local_port), "--daemon"],
             capture_output=True,
-            text=True, check=True
+            text=True
         )
-        print("OpenVpn server STARTED!!!")
+        print("OpenVpn server return: {}".format(result))
+
+        if result.returncode:
+            raise Exception("OpenVpn server start FAIL: {}".format(result.stderr))
+
+        print("OpenVpn server start OK")
+
+
+class TelegramBotConfig(JsonConfigLoader):
+    def __init__(self, config_file_path=None):
+        if config_file_path is None:
+            super().__init__("./telegram-bot.config.json")
+        else:
+            super().__init__(config_file_path)
+
+    pass
 
 
 class TelegramClient:
+    ENCODING = "utf-8"
+    __config = TelegramBotConfig().get()
+
+    def send_message(self, message):
+        with urllib.request.urlopen(self.__get_send_message_url(), self.__get_data(message)) as f:
+            print("Telegram send message: {}".format(f.read().decode(self.ENCODING)))
+
+    def __get_send_message_url(self):
+        return self.__get_url("sendMessage")
+
+    def __get_url(self, command):
+        return "https://api.telegram.org/bot{}/{}".format(self.__config["bot_token"], command)
+
+    def __get_data(self, message):
+        data = urllib.parse.urlencode({"chat_id": self.__config["chat_id"], "text": message})
+        return data.encode(self.ENCODING)
 
 
-# curl -X POST -H 'Content-Type: application/json' -d '{"chat_id": "-687389280", "text": "Galina hello!!! this message from me for you (from my linux console, hhhhhh)))))"}' https://api.telegram.org/bot5296572881:AAFkHMbDlDvpWR2mEC3p2q0sb8ycOxbQmnI/sendMessage
+open_vpn_local_port = 35000
 
+stun_client22 = MyExternalIpAddressAndPort(open_vpn_local_port)
+my_ip_address_and_port = stun_client22.get()
 
+TelegramClient().send_message(
+    "Хорошего дня, лови новые параметры подключения\nIP Address: {}\nPort: {}".format(
+        my_ip_address_and_port.get_ip_address(), my_ip_address_and_port.get_port()))
 
-stun_client22 = MyExternalIpAddressAndPort(35000)
-stun_client22.get()
+OpenVpnServer(open_vpn_local_port).run()
