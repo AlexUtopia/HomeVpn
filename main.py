@@ -170,6 +170,27 @@ class TelegramClient:
         return data.encode(self.ENCODING)
 
 
+# class UdpPing:
+#     HPING = "hping3"
+#
+#     def __init__(self, ip_address_and_port, local_port):
+#         self.__ip_address_and_port = ip_address_and_port
+#         self.__local_port = local_port
+#
+#     def ping(self):
+#
+#     def __ping(self):
+#         udp_mode_option = "-2"
+#         verbose_mode_option = "-V"
+#         packet_count_option = "--count {}".format(1)
+#
+#         result = subprocess.run(
+#             [self.HPING, self.__stun_server_address, "-v", "-p", str(self.__local_port)], capture_output=True,
+#             text=True
+#         )
+#         print("Stun client return: {}".format(result))
+
+
 open_vpn_local_port = 35000
 
 stun_client22 = MyExternalIpAddressAndPort(open_vpn_local_port)

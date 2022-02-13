@@ -28,7 +28,7 @@ fixme utopia расписать алгоритм + UML (mermaid)
 
 ```sh
 
-sudo apt-get install python3.8 stun-client openvpn
+sudo apt-get install python3.8 stun-client openvpn wget tar
 
 ```
 
