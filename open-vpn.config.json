@@ -1,0 +1,9 @@
+{
+  "open_vpn_server_name": "HomeVpn",
+  "open_vpn_config_dir": "/etc/openvpn",
+  "open_vpn_client_config_dir": "/etc/openvpn/client",
+  "easy_rsa_version": "3.0.8",
+  "easy_rsa_config_dir": "/etc/openvpn/easy-rsa",
+  "easy_rsa_pki_dir": "/etc/openvpn/easy-rsa/pki",
+  "easy_rsa_script_path": "/etc/openvpn/easy-rsa/easyrsa"
+}
