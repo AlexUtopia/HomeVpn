@@ -1,5 +1,6 @@
 {
   "open_vpn_server_name": "HomeVpn",
+  "open_vpn_server_port": 35000,
   "open_vpn_config_dir": "/etc/openvpn",
   "open_vpn_client_config_dir": "/etc/openvpn/client",
   "easy_rsa_version": "3.0.8",
