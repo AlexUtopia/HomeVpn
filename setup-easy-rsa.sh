@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Основополагающая статья
 # https://losst.ru/nastrojka-openvpn-v-ubuntu
@@ -7,13 +7,9 @@
 # Setup parameters
 #
 
-OPEN_VPN_CONFIG_DIR="/etc/openvpn"
-EASY_RSA_CONFIG_DIR="${OPEN_VPN_CONFIG_DIR}/easy-rsa"
-EASY_RSA_PKI_DIR="${EASY_RSA_CONFIG_DIR}/pki"
-EASY_RSA_VERSION="3.0.8"
+MY_DIR="$(dirname "$(readlink -f "$0")")"
 
-EASY_RSA_SCRIPT_PATH="${EASY_RSA_CONFIG_DIR}/easyrsa"
-OPEN_VPN_SERVER_NAME="HomeVpn"
+. "${MY_DIR}/open-vpn.config.sh"
 
 download_easy_rsa() {
   local DOWNLOAD_DIR=$1
@@ -22,7 +18,7 @@ download_easy_rsa() {
   local EASY_RSA_DOWNLOAD_URL="https://github.com/OpenVPN/easy-rsa/releases/download/v${EASY_RSA_VERSION}/${EASY_RSA_DOWNLOAD_FILE}"
   local EASY_RSA_DOWNLOADED_FILE_PATH="${DOWNLOAD_DIR}/${EASY_RSA_DOWNLOAD_FILE}"
 
-  wget -O "${EASY_RSA_DOWNLOADED_FILE_PATH}" -N ${EASY_RSA_DOWNLOAD_URL} || return $?
+  wget -O "${EASY_RSA_DOWNLOADED_FILE_PATH}" -N "${EASY_RSA_DOWNLOAD_URL}" || return $?
 
   tar --strip-components=1 -C "${DOWNLOAD_DIR}" -xvf "${EASY_RSA_DOWNLOADED_FILE_PATH}" || return $?
 
@@ -30,7 +26,7 @@ download_easy_rsa() {
 }
 
 setup_ca() {
-  cd "${EASY_RSA_CONFIG_DIR}" || return $?
+  pushd "${EASY_RSA_CONFIG_DIR}" || return $?
 
   echo "[2.1] EasyRSA init-pki"
 
@@ -62,11 +58,13 @@ setup_ca() {
 
   echo "[2.5] EasyRSA gen-crl: OK"
 
+  popd
+
   return 0
 }
 
 build_certificates_for_open_vpn_server() {
-  cd "${EASY_RSA_CONFIG_DIR}" || return $?
+  pushd "${EASY_RSA_CONFIG_DIR}" || return $?
 
   echo "[3.1] EasyRSA build-server-full"
 
@@ -76,23 +74,25 @@ build_certificates_for_open_vpn_server() {
 
   echo "[3.2] Copy keys for OpenVPN server"
 
-  cp "${EASY_RSA_PKI_DIR}/ca.crt" "${OPEN_VPN_CONFIG_DIR}/"
-  cp "${EASY_RSA_PKI_DIR}/dh.pem" "${OPEN_VPN_CONFIG_DIR}/"
-  cp "${EASY_RSA_PKI_DIR}/crl.pem" "${OPEN_VPN_CONFIG_DIR}/"
-  cp "${EASY_RSA_PKI_DIR}/ta.key" "${OPEN_VPN_CONFIG_DIR}/"
-  cp "${EASY_RSA_PKI_DIR}/issued/${OPEN_VPN_SERVER_NAME}.crt" "${OPEN_VPN_CONFIG_DIR}/"
-  cp "${EASY_RSA_PKI_DIR}/private/${OPEN_VPN_SERVER_NAME}.key" "${OPEN_VPN_CONFIG_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/ca.crt" "${OPEN_VPN_KEYS_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/dh.pem" "${OPEN_VPN_KEYS_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/crl.pem" "${OPEN_VPN_KEYS_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/ta.key" "${OPEN_VPN_KEYS_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/issued/${OPEN_VPN_SERVER_NAME}.crt" "${OPEN_VPN_KEYS_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/private/${OPEN_VPN_SERVER_NAME}.key" "${OPEN_VPN_KEYS_DIR}/"
 
   echo "[3.2] Copy keys for OpenVPN server: OK"
+
+  popd
 
   return 0
 }
 
-mkdir -p ${EASY_RSA_CONFIG_DIR}
+mkdir -p "${EASY_RSA_CONFIG_DIR}"
 
 echo "[1] Download easy-rsa"
 
-download_easy_rsa ${EASY_RSA_CONFIG_DIR} || return $?
+download_easy_rsa "${EASY_RSA_CONFIG_DIR}" || return $?
 
 echo "[1] Download easy-rsa: OK"
 
@@ -107,3 +107,9 @@ echo "[3] Build certificates for OpenVPN server"
 build_certificates_for_open_vpn_server || return $?
 
 echo "[3] Build certificates for OpenVPN server: OK"
+
+echo "[4] Build watchdog user \"${WATCHDOG_USER_NAME}\""
+
+"${MY_DIR}/build-client.sh" "${WATCHDOG_USER_NAME}" || return $?
+
+echo "[4] Build watchdog user: OK"

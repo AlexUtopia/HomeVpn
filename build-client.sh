@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Основополагающая статья
 # https://losst.ru/nastrojka-openvpn-v-ubuntu
@@ -7,20 +7,19 @@
 # Setup parameters
 #
 
-OPEN_VPN_CONFIG_DIR="/etc/openvpn"
-EASY_RSA_CONFIG_DIR="${OPEN_VPN_CONFIG_DIR}/easy-rsa"
-EASY_RSA_PKI_DIR="${EASY_RSA_CONFIG_DIR}/pki"
-EASY_RSA_VERSION="3.0.8"
+MY_DIR="$(dirname "$(readlink -f "$0")")"
 
-EASY_RSA_SCRIPT_PATH="${EASY_RSA_CONFIG_DIR}/easyrsa"
-OPEN_VPN_SERVER_NAME="HomeVpn"
+. "${MY_DIR}/open-vpn.config.sh"
 
-USER_NAME="TestUser22"
+if [ -z "$1" ]; then
+  echo "User name not set"
+  return 1
+fi
+
+USER_NAME="$1"
 
 build_certificates_for_open_vpn_client() {
-  cd "${EASY_RSA_CONFIG_DIR}" || return $?
-
-  # fixme utopia Проверить пользователя на существование
+  pushd "${EASY_RSA_CONFIG_DIR}" || return $?
 
   echo "[1.1] EasyRSA build-client-full"
 
@@ -30,10 +29,14 @@ build_certificates_for_open_vpn_client() {
 
   echo "[1.2] Copy keys for OpenVPN client"
 
-  cp "${EASY_RSA_PKI_DIR}/issued/${USER_NAME}.crt" "${OPEN_VPN_CONFIG_DIR}/client/"
-  cp "${EASY_RSA_PKI_DIR}/private/${USER_NAME}.key" "${OPEN_VPN_CONFIG_DIR}/client/"
+  mkdir -p "${OPEN_VPN_CLIENT_KEYS_DIR}/"
+
+  ${COPY} "${EASY_RSA_PKI_DIR}/issued/${USER_NAME}.crt" "${OPEN_VPN_CLIENT_KEYS_DIR}/"
+  ${COPY} "${EASY_RSA_PKI_DIR}/private/${USER_NAME}.key" "${OPEN_VPN_CLIENT_KEYS_DIR}/"
 
   echo "[1.2] Copy keys for OpenVPN client: OK"
+
+  popd
 
   return 0
 }

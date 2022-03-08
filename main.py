@@ -3,11 +3,9 @@ import subprocess
 import json
 import ipaddress
 import time
+import sys
 import urllib.request
 import urllib.parse
-
-WATCH_DOG_CLIENT_CONFIG = "watchdog-client.config"
-SLEEP_BEFORE_RECONNECT_SEC = 30
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -24,7 +22,7 @@ class TextConfigReader:
         result = ""
         with open(self.__config_file_path, mode="rt", encoding=self.__encoding) as config_file:
             result += str(config_file.read())
-        print("Load from config: {}".format(result))
+        # print("Load from config: {}".format(result))
         return result
 
 
@@ -36,6 +34,7 @@ class TextConfigWriter:
     def set(self, data):
         with open(self.__config_file_path, mode="wt", encoding=self.__encoding) as config_file:
             config_file.write(data)
+        return self.__config_file_path
 
 
 class JsonConfigLoader:
@@ -166,7 +165,7 @@ class OpenVpnServer:
 class OpenVpnClient:
     OPEN_VPN = "openvpn"
 
-    def __init__(self, local_port, config_file_path="./{}".format(WATCH_DOG_CLIENT_CONFIG)):
+    def __init__(self, local_port, config_file_path):
         self.__local_port = local_port
         self.__config_file_path = str(config_file_path)
 
@@ -185,18 +184,17 @@ class OpenVpnClient:
 
 
 class TelegramBotConfig(JsonConfigLoader):
-    def __init__(self, config_file_path=None):
-        if config_file_path is None:
-            super().__init__("./telegram-bot.config.json")
-        else:
-            super().__init__(config_file_path)
+    def __init__(self, config_file_path="./telegram-bot.config.json"):
+        super().__init__(config_file_path)
 
     pass
 
 
 class TelegramClient:
     ENCODING = "utf-8"
-    __config = TelegramBotConfig().get()
+
+    def __init__(self):
+        self.__config = TelegramBotConfig().get()
 
     def send_message(self, message):
         with urllib.request.urlopen(self.__get_send_message_url(), self.__get_data(message)) as f:
@@ -239,25 +237,28 @@ class OpenVpnConfig:
         self.__config_reader = JsonConfigLoader(str(open_vpn_config_path))
 
     def get_server_name(self):
-        return str(self.__config_reader.get()["open_vpn_server_name"])
+        return self.get_config_parameter("open_vpn_server_name")
 
     def get_server_port(self):
-        return str(self.__config_reader.get()["open_vpn_server_port"])
+        return int(self.get_config_parameter("open_vpn_server_port"))
 
-    def get_config_dir(self):
-        return str(self.__config_reader.get()["open_vpn_config_dir"])
+    def get_keys_dir(self):
+        return self.get_config_parameter("open_vpn_keys_dir")
 
-    def get_client_config_dir(self):
-        return str(self.__config_reader.get()["open_vpn_client_config_dir"])
+    def get_client_keys_dir(self):
+        return self.get_config_parameter("open_vpn_client_keys_dir")
 
     def get_easy_rsa_version(self):
-        return str(self.__config_reader.get()["easy_rsa_version"])
+        return self.get_config_parameter("easy_rsa_version")
+
+    def get_watchdog_user_name(self):
+        return self.get_config_parameter("watchdog_user_name")
 
     def get_ca_cert_path(self):
-        return "{}/ca.crt".format(self.get_config_dir())
+        return "{}/ca.crt".format(self.get_keys_dir())
 
     def get_tls_auth_key_path(self):
-        return "{}/ta.key".format(self.get_config_dir())
+        return "{}/ta.key".format(self.get_keys_dir())
 
     def get_ca_cert(self):
         return self.__parse(TextConfigReader(self.get_ca_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
@@ -267,6 +268,9 @@ class OpenVpnConfig:
         return self.__parse(TextConfigReader(self.get_tls_auth_key_path()).get(),
                             "-----BEGIN OpenVPN Static key V1-----",
                             "-----END OpenVPN Static key V1-----")
+
+    def get_config_parameter(self, name):
+        return str(self.__config_reader.get()[name])
 
     def __parse(self, config_as_string, begin_label, end_label):
         regex = re.compile(r"({}[\s\S]*{})".format(begin_label, end_label), re.MULTILINE)
@@ -279,16 +283,16 @@ class OpenVpnConfig:
 
 class OpenVpnClientConfig(OpenVpnConfig):
     def __init__(self, user_name, open_vpn_config_path="./open-vpn.config.json"):
-        super().__init__(str(open_vpn_config_path))
+        super().__init__(open_vpn_config_path)
         self.__user_name = user_name
 
     pass
 
     def get_client_cert_path(self):
-        return "{}/{}.crt".format(self.get_client_config_dir(), self.__user_name)
+        return "{}/{}.crt".format(self.get_client_keys_dir(), self.__user_name)
 
     def get_client_key_path(self):
-        return "{}/{}.key".format(self.get_client_config_dir(), self.__user_name)
+        return "{}/{}.key".format(self.get_client_keys_dir(), self.__user_name)
 
     def get_client_cert(self):
         return self.__parse(TextConfigReader(self.get_client_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
@@ -317,7 +321,7 @@ class OpenVpnConfigKeyValue:
     def render(self):
         result = ""
         for key, value in self.__container.items():
-            result += self.__render_value(key, value)
+            result += self.__render_key_value(key, value)
         return result
 
     def __add(self, key, value, as_xml):
@@ -326,7 +330,7 @@ class OpenVpnConfigKeyValue:
         else:
             self.__container[str(key)] = {"value": str(value), "as_xml": as_xml}
 
-    def __render_value(self, key, value):
+    def __render_key_value(self, key, value):
         if bool(value.is_xml):
             if value.value is None:
                 result = "<{0}></{0}>\n".format(key)
@@ -351,7 +355,7 @@ class OpenVpnClientConfigGenerator:
         self.__ip_address_and_port = ip_address_and_port
 
     def generate(self):
-        self.__output_client_config_file.set(self.__render_to_string())
+        return self.__output_client_config_file.set(self.__render_to_string())
 
     def __render_to_string(self):
         self.__generate()
@@ -399,33 +403,85 @@ class OpenVpnClientConfigGenerator:
         self.__key_value_config.add_as_xml("key", self.__open_vpn_client_config.get_client_key())
 
 
-open_vpn_server_port = OpenVpnConfig().get_server_port()
+class Main:
+    SLEEP_BEFORE_RECONNECT_SEC = 30
 
-# fixme utopia Конфигурацию сервера нужно генерировать из шаблона и подсовывать серверу ovpn файл
+    def __init__(self):
+        self.__open_vpn_config = OpenVpnConfig()
 
-OpenVpnServer(open_vpn_server_port).run()
+    def run(self):
+        self.__init()
 
-while True:
-    my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
+        open_vpn_server_port = self.__open_vpn_config.get_server_port()
 
-    TelegramClient().send_message(
-        "Хорошего дня, лови новые параметры подключения\nIP Address: {}\nPort: {}".format(
-            my_ip_address_and_port.get_ip_address(), my_ip_address_and_port.get_port()))
+        while True:
+            my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
 
-    OpenVpnClientConfigGenerator(my_ip_address_and_port, WATCH_DOG_CLIENT_CONFIG).generate()
+            TelegramClient().send_message(
+                "Хорошего дня, лови новые параметры подключения\nIP Address: {}\nPort: {}".format(
+                    my_ip_address_and_port.get_ip_address(), my_ip_address_and_port.get_port()))
 
-    # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
-    #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
+            watchdog_user_config_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, self.__open_vpn_config.get_watchdog_user_name()).generate()
 
-    try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
-        OpenVpnClient(WATCH_DOG_CLIENT_CONFIG).run()
-    except Exception:
-        print("Try udp hole punching and RECONNECT")
+            # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
+            #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
 
-    time.sleep(SLEEP_BEFORE_RECONNECT_SEC)
+            try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
+                OpenVpnClient(watchdog_user_config_path).run()
+            except Exception:
+                print("Try udp hole punching and RECONNECT")
+
+            time.sleep(self.SLEEP_BEFORE_RECONNECT_SEC)
+
+    def __init(self):
+        # fixme utopia Конфигурацию сервера нужно генерировать из шаблона и подсовывать серверу ovpn файл
+        OpenVpnServer(self.__open_vpn_config.get_server_port()).run()
+
 
 # fixme utopia Выставить main для получения данных с open-vpn.config.json
 #              Скрипты build-client.sh и setup-easy-rsa.sh должны использовать open-vpn.config.json
 
 # fixme utopia Telegram бот в отдельный поток для обслуживания пользователей, работаем в режиме long polling
 #              my_ip_address_and_port сделать шареной между потоками переменной
+
+# fixme utopia Провериь динамическое добавление клиента на работающем OpenVpn сервере (сервер не перезапускать)
+
+
+def help_usage():
+    print(
+        "config <config-parameter-name>\n"
+        "  or\n"
+        "run <none parameters>\n"
+        "  or\n"
+        "check <none parameters>\n"
+        "\n"
+        "\n"
+        "  config - get config parameter value by name from open-vpn.config.json\n"
+        "    available <config-parameter-name> see in open-vpn.config.json\n"
+        "\n"
+        "  run - run OpenVpn server\n"
+        "\n"
+        "  check - check you NAT type for udp hole punching\n"
+        "")
+
+
+def main():
+    if len(sys.argv) == 1:
+        help_usage()
+        return
+
+    command = sys.argv[1]
+    if command == "config":
+        if len(sys.argv) == 3:
+            config_parameter_name = str(sys.argv[2])
+            print(OpenVpnConfig().get_config_parameter(config_parameter_name))
+            return
+        else:
+            help_usage()
+            return
+    elif command == "run":
+        Main().run()
+
+
+if __name__ == '__main__':
+    main()
