@@ -1,3 +1,4 @@
+import os.path
 import re
 import subprocess
 import json
@@ -9,6 +10,23 @@ import urllib.parse
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
+
+class RealPath:
+    def __init__(self, file_name_or_relative_file_path):
+        self.__file_name_or_relative_file_path = str(file_name_or_relative_file_path)
+
+    def get(self):
+        this_script_dir = os.path.dirname(os.path.realpath(__file__))
+        result = os.path.abspath(os.path.join(this_script_dir, self.__file_name_or_relative_file_path))
+        print("XXX {}".format(result))
+        return result
+
+    def __str__(self):
+        return self.get()
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class TextConfigReader:
     def __init__(self, config_file_path, encoding="utf-8"):
@@ -46,11 +64,8 @@ class JsonConfigLoader:
 
 
 class StunServerAddressList(JsonConfigLoader):
-    def __init__(self, config_file_path=None):
-        if config_file_path is None:
-            super().__init__("./stun-servers.config.json")
-        else:
-            super().__init__(config_file_path)
+    def __init__(self, config_file_path=RealPath("stun-servers.config.json")):
+        super().__init__(config_file_path)
 
     pass
 
@@ -105,7 +120,7 @@ class StunClient:
             [self.STUN_CLIENT, self.__stun_server_address, "-v", "-p", str(self.__local_port)], capture_output=True,
             text=True
         )
-        print("Stun client return: {}".format(result))
+        # print("Stun client return: {}".format(result))
 
         if result.returncode != self.STUN_RESPONSE_OK:
             raise Exception("Stun client call FAIL: {}".format(result.stderr))
@@ -120,7 +135,7 @@ class StunClient:
         for it in result_raw:
             result.append(IpAddressAndPort(it))
 
-        print("Stun client parsed output: {}".format(result))
+        # print("Stun client parsed output: {}".format(result))
         return result
 
 
@@ -144,14 +159,12 @@ class MyExternalIpAddressAndPort:
 class OpenVpnServer:
     OPEN_VPN = "openvpn"
 
-    def __init__(self, local_port, config_file_path="./openvpn-server.config"):
-        self.__local_port = local_port
+    def __init__(self, config_file_path=RealPath("server.ovpn")):
         self.__config_file_path = str(config_file_path)
 
     def run(self):
         result = subprocess.run(
-            [self.OPEN_VPN, "--config", self.__config_file_path, "--port", str(self.__local_port), "--daemon"],
-            capture_output=True,
+            [self.OPEN_VPN, "--config", self.__config_file_path, "--daemon"],
             text=True
         )
         print("OpenVpn server return: {}".format(result))
@@ -165,11 +178,11 @@ class OpenVpnServer:
 class OpenVpnClient:
     OPEN_VPN = "openvpn"
 
-    def __init__(self, local_port, config_file_path):
-        self.__local_port = local_port
+    def __init__(self, config_file_path):
         self.__config_file_path = str(config_file_path)
 
     def run(self):
+        print("TTTT {}".format(self.__config_file_path))
         result = subprocess.run(
             [self.OPEN_VPN, "--config", self.__config_file_path],
             capture_output=True,
@@ -184,7 +197,7 @@ class OpenVpnClient:
 
 
 class TelegramBotConfig(JsonConfigLoader):
-    def __init__(self, config_file_path="./telegram-bot.config.json"):
+    def __init__(self, config_file_path=RealPath("telegram-bot.config.json")):
         super().__init__(config_file_path)
 
     pass
@@ -233,8 +246,8 @@ class TelegramClient:
 
 
 class OpenVpnConfig:
-    def __init__(self, open_vpn_config_path="./open-vpn.config.json"):
-        self.__config_reader = JsonConfigLoader(str(open_vpn_config_path))
+    def __init__(self, open_vpn_config_path=RealPath("open-vpn.config.json")):
+        self.__config_reader = JsonConfigLoader(open_vpn_config_path)
 
     def get_server_name(self):
         return self.get_config_parameter("open_vpn_server_name")
@@ -245,8 +258,14 @@ class OpenVpnConfig:
     def get_keys_dir(self):
         return self.get_config_parameter("open_vpn_keys_dir")
 
+    def get_server_logs_dir(self):
+        return self.get_config_parameter("open_vpn_server_logs_dir")
+
     def get_client_keys_dir(self):
         return self.get_config_parameter("open_vpn_client_keys_dir")
+
+    def get_client_logs_dir(self):
+        return self.get_config_parameter("open_vpn_client_logs_dir")
 
     def get_easy_rsa_version(self):
         return self.get_config_parameter("easy_rsa_version")
@@ -254,53 +273,77 @@ class OpenVpnConfig:
     def get_watchdog_user_name(self):
         return self.get_config_parameter("watchdog_user_name")
 
+    def get_server_log_path(self):
+        return os.path.join(self.get_server_logs_dir(), "server.log")
+
     def get_ca_cert_path(self):
-        return "{}/ca.crt".format(self.get_keys_dir())
+        return os.path.join(self.get_keys_dir(), "ca.crt")
 
     def get_tls_auth_key_path(self):
-        return "{}/ta.key".format(self.get_keys_dir())
+        return os.path.join(self.get_keys_dir(), "ta.key")
+
+    def get_dh_pem_path(self):
+        return os.path.join(self.get_keys_dir(), "dh.pem")
+
+    def get_server_cert_path(self):
+        return os.path.join(self.get_keys_dir(), "{}.crt".format(self.get_server_name()))
+
+    def get_server_key_path(self):
+        return os.path.join(self.get_keys_dir(), "{}.key".format(self.get_server_name()))
 
     def get_ca_cert(self):
-        return self.__parse(TextConfigReader(self.get_ca_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
-                            "-----END CERTIFICATE-----")
+        return self._parse(TextConfigReader(self.get_ca_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
+                           "-----END CERTIFICATE-----")
 
     def get_tls_auth_key(self):
-        return self.__parse(TextConfigReader(self.get_tls_auth_key_path()).get(),
-                            "-----BEGIN OpenVPN Static key V1-----",
-                            "-----END OpenVPN Static key V1-----")
+        return self._parse(TextConfigReader(self.get_tls_auth_key_path()).get(),
+                           "-----BEGIN OpenVPN Static key V1-----",
+                           "-----END OpenVPN Static key V1-----")
+
+    def get_dh_pem(self):
+        return self._parse(TextConfigReader(self.get_dh_pem_path()).get(),
+                           "-----BEGIN DH PARAMETERS-----",
+                           "-----END DH PARAMETERS-----")
+
+    def get_server_cert(self):
+        return self._parse(TextConfigReader(self.get_server_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
+                           "-----END CERTIFICATE-----")
+
+    def get_server_key(self):
+        return self._parse(TextConfigReader(self.get_server_key_path()).get(), "-----BEGIN PRIVATE KEY-----",
+                           "-----END PRIVATE KEY-----")
 
     def get_config_parameter(self, name):
         return str(self.__config_reader.get()[name])
 
-    def __parse(self, config_as_string, begin_label, end_label):
+    def _parse(self, config_as_string, begin_label, end_label):
         regex = re.compile(r"({}[\s\S]*{})".format(begin_label, end_label), re.MULTILINE)
-        if not regex.match():
-            print("[W] config_as_string: {}".format(config_as_string))
-            return ""  # fixme utopia бросить исключение
-
         return regex.findall(config_as_string)[0]
 
 
 class OpenVpnClientConfig(OpenVpnConfig):
-    def __init__(self, user_name, open_vpn_config_path="./open-vpn.config.json"):
+    def __init__(self, user_name, open_vpn_config_path=RealPath("open-vpn.config.json")):
         super().__init__(open_vpn_config_path)
         self.__user_name = user_name
 
     pass
 
+    def get_client_log_path(self):
+        return os.path.join(self.get_client_logs_dir(), "{}.log".format(self.__user_name))
+
     def get_client_cert_path(self):
-        return "{}/{}.crt".format(self.get_client_keys_dir(), self.__user_name)
+        return os.path.join(self.get_client_keys_dir(), "{}.crt".format(self.__user_name))
 
     def get_client_key_path(self):
-        return "{}/{}.key".format(self.get_client_keys_dir(), self.__user_name)
+        return os.path.join(self.get_client_keys_dir(), "{}.key".format(self.__user_name))
 
     def get_client_cert(self):
-        return self.__parse(TextConfigReader(self.get_client_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
-                            "-----END CERTIFICATE-----")
+        return super()._parse(TextConfigReader(self.get_client_cert_path()).get(), "-----BEGIN CERTIFICATE-----",
+                              "-----END CERTIFICATE-----")
 
     def get_client_key(self):
-        return self.__parse(TextConfigReader(self.get_client_key_path()).get(), "-----BEGIN PRIVATE KEY-----",
-                            "-----END PRIVATE KEY-----")
+        return super()._parse(TextConfigReader(self.get_client_key_path()).get(), "-----BEGIN PRIVATE KEY-----",
+                              "-----END PRIVATE KEY-----")
 
     # fixme utopia Получить весь список пользователей
     # fixme utopia Сохранять вместе с логином пользователя telegram
@@ -326,36 +369,104 @@ class OpenVpnConfigKeyValue:
 
     def __add(self, key, value, as_xml):
         if value is None:
-            self.__container[str(key)] = {"value": None, "as_xml": as_xml}
+            self.__container[str(key)] = {"parameter_value": None, "as_xml": as_xml}
         else:
-            self.__container[str(key)] = {"value": str(value), "as_xml": as_xml}
+            self.__container[str(key)] = {"parameter_value": str(value), "as_xml": as_xml}
 
     def __render_key_value(self, key, value):
-        if bool(value.is_xml):
-            if value.value is None:
+        parameter_value = value["parameter_value"]
+        if bool(value["as_xml"]):
+            if parameter_value is None:
                 result = "<{0}></{0}>\n".format(key)
             else:
-                result = "<{0}>\n{1}\n</{0}>\n".format(key, value)
+                result = "<{0}>\n{1}\n</{0}>\n".format(key, parameter_value)
         else:
-            if value.value is None:
+            if parameter_value is None:
                 result = "{}\n".format(key)
             else:
-                result = "{} {}\n".format(key, value)
+                result = "{} {}\n".format(key, parameter_value)
         return result
+
+
+class OpenVpnServerConfigGenerator:
+    def __init__(self, config_template_file_path=RealPath("open-vpn-server.config.template"),
+                 output_config_dir=RealPath(".")):
+        self.__config_template_reader = TextConfigReader(config_template_file_path)
+        self.__key_value_config = OpenVpnConfigKeyValue()
+        self.__open_vpn_config = OpenVpnConfig()
+        self.__output_config_file = TextConfigWriter(
+            os.path.join(str(output_config_dir), "server.ovpn"))
+
+    def generate(self):
+        return self.__output_config_file.set(self.__render_to_string())
+
+    def __render_to_string(self):
+        self.__generate()
+        return self.__key_value_config.render()
+
+    def __generate(self):
+        self.__parse_template()
+        self.__add_port()
+        self.__add_key_direction()
+        self.__add_ca_cert()
+        self.__add_tls_auth_key()
+        self.__add_dh_pem()
+        self.__add_server_cert()
+        self.__add_server_key()
+        self.__add_server_log()
+
+    def __parse_template(self):
+        regex = re.compile(r"^[ \t]*([a-z\-_0-9]+)[ \t]*(.*)\n", re.MULTILINE)
+        tmp = regex.findall(self.__config_template_reader.get())
+
+        if len(tmp) == 0:
+            raise Exception("Parse ip_address_and_port FAIL")  # fixme utopia text
+
+        for t in tmp:
+            self.__key_value_config.add(t[0], t[1])
+
+    def __add_port(self):
+        self.__key_value_config.add("port", self.__open_vpn_config.get_server_port())
+
+    def __add_key_direction(self):
+        self.__key_value_config.add("key-direction", 0)
+
+    def __add_ca_cert(self):
+        self.__key_value_config.add_as_xml("ca", self.__open_vpn_config.get_ca_cert())
+
+    def __add_tls_auth_key(self):
+        self.__key_value_config.add_as_xml("tls-auth", self.__open_vpn_config.get_tls_auth_key())
+
+    def __add_dh_pem(self):
+        self.__key_value_config.add_as_xml("dh", self.__open_vpn_config.get_dh_pem())
+
+    def __add_server_cert(self):
+        self.__key_value_config.add_as_xml("cert", self.__open_vpn_config.get_server_cert())
+
+    def __add_server_key(self):
+        self.__key_value_config.add_as_xml("key", self.__open_vpn_config.get_server_key())
+
+    def __add_server_log(self):
+        self.__key_value_config.add("log", self.__open_vpn_config.get_server_log_path())
+
+        d = os.path.dirname(self.__open_vpn_config.get_server_log_path())
+        if not os.path.exists(d):
+            os.makedirs(d)
 
 
 class OpenVpnClientConfigGenerator:
     def __init__(self, ip_address_and_port, user_name,
-                 client_config_template_file_path="./open-vpn-client.config.template", output_client_config_dir="."):
-        self.__client_config_template_reader = TextConfigReader(client_config_template_file_path)
+                 config_template_file_path=RealPath("open-vpn-client.config.template"),
+                 output_client_config_dir=RealPath(".")):
+        self.__config_template_reader = TextConfigReader(config_template_file_path)
         self.__key_value_config = OpenVpnConfigKeyValue()
         self.__open_vpn_client_config = OpenVpnClientConfig(user_name)
-        self.__output_client_config_file = TextConfigWriter(
-            "{}/{}.ovpn".format(str(output_client_config_dir), user_name))
+        self.__output_config_file = TextConfigWriter(
+            os.path.join(str(output_client_config_dir), "client-{}.ovpn".format(user_name)))
         self.__ip_address_and_port = ip_address_and_port
 
     def generate(self):
-        return self.__output_client_config_file.set(self.__render_to_string())
+        return self.__output_config_file.set(self.__render_to_string())
 
     def __render_to_string(self):
         self.__generate()
@@ -370,10 +481,11 @@ class OpenVpnClientConfigGenerator:
         self.__add_tls_auth_key()
         self.__add_client_cert()
         self.__add_client_key()
+        self.__add_client_log()
 
     def __parse_template(self):
         regex = re.compile(r"^[ \t]*([a-z\-_0-9]+)[ \t]*(.*)\n", re.MULTILINE)
-        tmp = regex.findall(self.__client_config_template_reader.get())
+        tmp = regex.findall(self.__config_template_reader.get())
 
         if len(tmp) == 0:
             raise Exception("Parse ip_address_and_port FAIL")  # fixme utopia text
@@ -402,26 +514,35 @@ class OpenVpnClientConfigGenerator:
     def __add_client_key(self):
         self.__key_value_config.add_as_xml("key", self.__open_vpn_client_config.get_client_key())
 
+    def __add_client_log(self):
+        self.__key_value_config.add("log", self.__open_vpn_client_config.get_client_log_path())
 
-class Main:
+        d = os.path.dirname(self.__open_vpn_client_config.get_client_log_path())
+        if not os.path.exists(d):
+            os.makedirs(d)
+
+
+class Daemon:
     SLEEP_BEFORE_RECONNECT_SEC = 30
+    SLEEP_AFTER_SERVER_START_SEC = 5
 
     def __init__(self):
         self.__open_vpn_config = OpenVpnConfig()
 
     def run(self):
-        self.__init()
-
         open_vpn_server_port = self.__open_vpn_config.get_server_port()
 
         while True:
             my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
 
+            self.__init()
+
             TelegramClient().send_message(
                 "Хорошего дня, лови новые параметры подключения\nIP Address: {}\nPort: {}".format(
                     my_ip_address_and_port.get_ip_address(), my_ip_address_and_port.get_port()))
 
-            watchdog_user_config_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, self.__open_vpn_config.get_watchdog_user_name()).generate()
+            watchdog_user_config_path = OpenVpnClientConfigGenerator(my_ip_address_and_port,
+                                                                     self.__open_vpn_config.get_watchdog_user_name()).generate()
 
             # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
             #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
@@ -431,11 +552,14 @@ class Main:
             except Exception:
                 print("Try udp hole punching and RECONNECT")
 
+            # fixme utopia вырубить сервер
+
             time.sleep(self.SLEEP_BEFORE_RECONNECT_SEC)
 
     def __init(self):
-        # fixme utopia Конфигурацию сервера нужно генерировать из шаблона и подсовывать серверу ovpn файл
-        OpenVpnServer(self.__open_vpn_config.get_server_port()).run()
+        server_config_path = OpenVpnServerConfigGenerator().generate()
+        OpenVpnServer(server_config_path).run()
+        time.sleep(self.SLEEP_AFTER_SERVER_START_SEC)
 
 
 # fixme utopia Выставить main для получения данных с open-vpn.config.json
@@ -454,6 +578,8 @@ def help_usage():
         "run <none parameters>\n"
         "  or\n"
         "check <none parameters>\n"
+        "  or\n"
+        "user_ovpn <user name>\n"
         "\n"
         "\n"
         "  config - get config parameter value by name from open-vpn.config.json\n"
@@ -462,6 +588,8 @@ def help_usage():
         "  run - run OpenVpn server\n"
         "\n"
         "  check - check you NAT type for udp hole punching\n"
+        "\n"
+        "  user_ovpn - generate openvpn client config file (*.ovpn) for specified user\n"
         "")
 
 
@@ -479,8 +607,18 @@ def main():
         else:
             help_usage()
             return
+
     elif command == "run":
-        Main().run()
+        Daemon().run()
+
+    elif command == "user_ovpn":
+        if len(sys.argv) == 3:
+            user_name = str(sys.argv[2])
+            print(OpenVpnClientConfigGenerator(user_name).generate())
+            return
+        else:
+            help_usage()
+            return
 
 
 if __name__ == '__main__':

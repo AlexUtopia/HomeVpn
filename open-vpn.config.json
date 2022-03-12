@@ -1,11 +1,13 @@
 {
   "open_vpn_server_name": "HomeVpn",
   "open_vpn_server_port": 35000,
-  "open_vpn_keys_dir": "/etc/openvpn",
-  "open_vpn_client_keys_dir": "/etc/openvpn/client",
+  "open_vpn_keys_dir": "/home/utopia/openvpn/HomeVpn",
+  "open_vpn_server_logs_dir": "/var/log/openvpn/HomeVpn/server",
+  "open_vpn_client_keys_dir": "/home/utopia/openvpn/HomeVpn/client",
+  "open_vpn_client_logs_dir": "/var/log/openvpn/HomeVpn/client",
   "easy_rsa_version": "3.0.8",
-  "easy_rsa_config_dir": "/etc/openvpn/easy-rsa",
-  "easy_rsa_pki_dir": "/etc/openvpn/easy-rsa/pki",
-  "easy_rsa_script_path": "/etc/openvpn/easy-rsa/easyrsa",
+  "easy_rsa_config_dir": "/home/utopia/openvpn/HomeVpn/easy-rsa",
+  "easy_rsa_pki_dir": "/home/utopia/openvpn/HomeVpn/easy-rsa/pki",
+  "easy_rsa_script_path": "/home/utopia/openvpn/HomeVpn/easy-rsa/easyrsa",
   "watchdog_user_name": "watchdog"
 }

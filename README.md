@@ -32,6 +32,8 @@ sudo apt-get install python3.8 stun-client openvpn wget tar
 
 ```
 
+https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
+
 ## 2.3 Настройка Telegram-бота
 
 Используем Telegram-бота для отправки IP адреса/порта VPN сервера в специальную группу (OpenVpnChatBot)
