@@ -18,7 +18,8 @@ ifconfig-pool-persist /var/log/openvpn/ipp.txt
 # to know to route the OpenVPN client
 # address pool (10.8.0.0/255.255.255.0)
 # back to the OpenVPN server.
-push "route 192.168.0.0 255.255.255.0"
+; Этот параметр мне картину мира портит с точки зрения watchdog клиента у которого идут лесом DNS'ы
+;push "route 192.168.0.0 255.255.255.0"
 
 # If enabled, this directive will configure
 # all clients to redirect their default
@@ -36,7 +37,7 @@ push "route 192.168.0.0 255.255.255.0"
 # http://openvpn.net/faq.html#dhcpcaveats
 # The addresses below refer to the public
 # DNS servers provided by opendns.com.
-;push "dhcp-option DNS 8.8.8.8"
+push "dhcp-option DNS 8.8.8.8"
 ;push "dhcp-option DNS 208.67.220.220"
 
 # Uncomment this directive to allow different
@@ -66,5 +67,5 @@ persist-tun
 
 log                   /var/log/openvpn/openvpn.log
 verb                  9
-mute                  20
+mute                  200
 explicit-exit-notify  1

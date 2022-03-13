@@ -8,8 +8,9 @@ import sys
 import urllib.request
 import urllib.parse
 
-
 # https://tproger.ru/translations/demystifying-decorators-in-python/
+from builtins import enumerate
+
 
 class RealPath:
     def __init__(self, file_name_or_relative_file_path):
@@ -18,7 +19,6 @@ class RealPath:
     def get(self):
         this_script_dir = os.path.dirname(os.path.realpath(__file__))
         result = os.path.abspath(os.path.join(this_script_dir, self.__file_name_or_relative_file_path))
-        print("XXX {}".format(result))
         return result
 
     def __str__(self):
@@ -51,7 +51,7 @@ class TextConfigWriter:
 
     def set(self, data):
         with open(self.__config_file_path, mode="wt", encoding=self.__encoding) as config_file:
-            config_file.write(data)
+            config_file.write(str(data))
         return self.__config_file_path
 
 
@@ -102,7 +102,7 @@ class IpAddressAndPort:
 
 class StunClient:
     STUN_RESPONSE_OK = 2
-    REGEX_PATTERN = r"MappedAddress.*=.*{}".format(IpAddressAndPort.REGEX_PATTERN)
+    REGEX_PATTERN = r"MappedAddress = {}".format(IpAddressAndPort.REGEX_PATTERN)
     STUN_CLIENT = "stun"
 
     def __init__(self, stun_server_address, local_port):
@@ -135,7 +135,6 @@ class StunClient:
         for it in result_raw:
             result.append(IpAddressAndPort(it))
 
-        # print("Stun client parsed output: {}".format(result))
         return result
 
 
@@ -182,7 +181,6 @@ class OpenVpnClient:
         self.__config_file_path = str(config_file_path)
 
     def run(self):
-        print("TTTT {}".format(self.__config_file_path))
         result = subprocess.run(
             [self.OPEN_VPN, "--config", self.__config_file_path],
             capture_output=True,
@@ -273,6 +271,9 @@ class OpenVpnConfig:
     def get_watchdog_user_name(self):
         return self.get_config_parameter("watchdog_user_name")
 
+    def get_my_current_ip_address_and_port(self):
+        return self.get_config_parameter("my_current_ip_address_and_port")
+
     def get_server_log_path(self):
         return os.path.join(self.get_server_logs_dir(), "server.log")
 
@@ -351,27 +352,49 @@ class OpenVpnClientConfig(OpenVpnConfig):
 
 class OpenVpnConfigKeyValue:
     def __init__(self):
-        self.__container = {}
+        self.__container = []
 
-    def add(self, key, value):
+    def add_default(self, key, value):
         as_xml = False
         self.__add(key, value, as_xml)
 
+    def add(self, key, value):
+        as_xml = False
+        self.__add_with_replace(key, value, as_xml)
+
     def add_as_xml(self, key, value):
         as_xml = True
-        self.__add(key, value, as_xml)
+        self.__add_with_replace(key, value, as_xml)
 
     def render(self):
         result = ""
-        for key, value in self.__container.items():
+        for (key, value) in self.__container:
             result += self.__render_key_value(key, value)
         return result
 
-    def __add(self, key, value, as_xml):
-        if value is None:
-            self.__container[str(key)] = {"parameter_value": None, "as_xml": as_xml}
+    def __add_with_replace(self, key, value, as_xml):
+        index = self.__get_key_index(key)
+        if index is None:
+            self.__add(key, value, as_xml)
         else:
-            self.__container[str(key)] = {"parameter_value": str(value), "as_xml": as_xml}
+            self.__container[index] = self.__build_key_value_as_tuple(key, value, as_xml)
+
+    def __get_key_index(self, key):
+        index = 0
+        for (k, v) in self.__container:
+            if k == key:
+                return index
+            index += 1
+        return None
+
+    def __add(self, key, value, as_xml):
+        self.__container.append(self.__build_key_value_as_tuple(key, value, as_xml))
+
+    def __build_key_value_as_tuple(self, key, value, as_xml):
+        if value is None:
+            return str(key), {"parameter_value": None, "as_xml": as_xml}
+        else:
+            return str(key), {"parameter_value": str(value), "as_xml": as_xml}
 
     def __render_key_value(self, key, value):
         parameter_value = value["parameter_value"]
@@ -423,7 +446,7 @@ class OpenVpnServerConfigGenerator:
             raise Exception("Parse ip_address_and_port FAIL")  # fixme utopia text
 
         for t in tmp:
-            self.__key_value_config.add(t[0], t[1])
+            self.__key_value_config.add_default(t[0], t[1])
 
     def __add_port(self):
         self.__key_value_config.add("port", self.__open_vpn_config.get_server_port())
@@ -491,7 +514,7 @@ class OpenVpnClientConfigGenerator:
             raise Exception("Parse ip_address_and_port FAIL")  # fixme utopia text
 
         for t in tmp:
-            self.__key_value_config.add(t[0], t[1])
+            self.__key_value_config.add_default(t[0], t[1])
 
     def __add_ip_address(self):
         self.__key_value_config.add("remote", self.__ip_address_and_port.get_ip_address())
@@ -534,6 +557,8 @@ class Daemon:
 
         while True:
             my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
+
+            TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(my_ip_address_and_port)
 
             self.__init()
 
@@ -614,7 +639,10 @@ def main():
     elif command == "user_ovpn":
         if len(sys.argv) == 3:
             user_name = str(sys.argv[2])
-            print(OpenVpnClientConfigGenerator(user_name).generate())
+            open_vpn_config = OpenVpnConfig()
+            my_ip_address_and_port = IpAddressAndPort(
+                TextConfigReader(open_vpn_config.get_my_current_ip_address_and_port()).get())
+            print(OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate())
             return
         else:
             help_usage()

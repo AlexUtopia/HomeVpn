@@ -21,6 +21,6 @@ persist-tun
 
 log                   /var/log/openvpn/openvpn-client.log
 verb                  6
-mute                  20
+mute                  2000
 ping                  10
 ping-exit             30
