@@ -8,8 +8,8 @@ import sys
 import urllib.request
 import urllib.parse
 
+
 # https://tproger.ru/translations/demystifying-decorators-in-python/
-from builtins import enumerate
 
 
 class RealPath:
@@ -150,15 +150,15 @@ class MyExternalIpAddressAndPort:
                 result = stun_client.get_my_ip_address_and_port()
                 print("My external IP address and port: {}".format(result))
                 return result
-            except Exception:
-                print("[WARNING]")
+            except Exception as ex:
+                print("[WARNING] Get my IP address and port FAIL (but we continue): {}".format(ex))
         raise Exception("My external IP address and port NOT FOUND")
 
 
 class OpenVpnServer:
     OPEN_VPN = "openvpn"
 
-    def __init__(self, config_file_path=RealPath("server.ovpn")):
+    def __init__(self, config_file_path):
         self.__config_file_path = str(config_file_path)
 
     def run(self):
@@ -317,7 +317,8 @@ class OpenVpnConfig:
     def get_config_parameter(self, name):
         return str(self.__config_reader.get()[name])
 
-    def _parse(self, config_as_string, begin_label, end_label):
+    @staticmethod
+    def _parse(config_as_string, begin_label, end_label):
         regex = re.compile(r"({}[\s\S]*{})".format(begin_label, end_label), re.MULTILINE)
         return regex.findall(config_as_string)[0]
 
@@ -390,13 +391,15 @@ class OpenVpnConfigKeyValue:
     def __add(self, key, value, as_xml):
         self.__container.append(self.__build_key_value_as_tuple(key, value, as_xml))
 
-    def __build_key_value_as_tuple(self, key, value, as_xml):
+    @staticmethod
+    def __build_key_value_as_tuple(key, value, as_xml):
         if value is None:
             return str(key), {"parameter_value": None, "as_xml": as_xml}
         else:
             return str(key), {"parameter_value": str(value), "as_xml": as_xml}
 
-    def __render_key_value(self, key, value):
+    @staticmethod
+    def __render_key_value(key, value):
         parameter_value = value["parameter_value"]
         if bool(value["as_xml"]):
             if parameter_value is None:
@@ -566,16 +569,18 @@ class Daemon:
                 "Хорошего дня, лови новые параметры подключения\nIP Address: {}\nPort: {}".format(
                     my_ip_address_and_port.get_ip_address(), my_ip_address_and_port.get_port()))
 
+            watchdog_user_name = self.__open_vpn_config.get_watchdog_user_name()
             watchdog_user_config_path = OpenVpnClientConfigGenerator(my_ip_address_and_port,
-                                                                     self.__open_vpn_config.get_watchdog_user_name()).generate()
+                                                                     watchdog_user_name).generate()
 
             # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
             #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
 
             try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
+                  # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
                 OpenVpnClient(watchdog_user_config_path).run()
-            except Exception:
-                print("Try udp hole punching and RECONNECT")
+            except Exception as ex:
+                print("Try udp hole punching and RECONNECT: {}".format(ex))
 
             # fixme utopia вырубить сервер
 
@@ -585,15 +590,6 @@ class Daemon:
         server_config_path = OpenVpnServerConfigGenerator().generate()
         OpenVpnServer(server_config_path).run()
         time.sleep(self.SLEEP_AFTER_SERVER_START_SEC)
-
-
-# fixme utopia Выставить main для получения данных с open-vpn.config.json
-#              Скрипты build-client.sh и setup-easy-rsa.sh должны использовать open-vpn.config.json
-
-# fixme utopia Telegram бот в отдельный поток для обслуживания пользователей, работаем в режиме long polling
-#              my_ip_address_and_port сделать шареной между потоками переменной
-
-# fixme utopia Провериь динамическое добавление клиента на работающем OpenVpn сервере (сервер не перезапускать)
 
 
 def help_usage():

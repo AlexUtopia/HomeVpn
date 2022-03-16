@@ -33,6 +33,7 @@ sudo apt-get install python3.8 stun-client openvpn wget tar
 ```
 
 https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
+https://openvpn.net/community-resources/reference-manual-for-openvpn-2-4/
 
 ## 2.3 Настройка Telegram-бота
 
