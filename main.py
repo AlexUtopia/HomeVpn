@@ -7,6 +7,7 @@ import time
 import sys
 import urllib.request
 import urllib.parse
+import stun
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -138,6 +139,36 @@ class StunClient:
         return result
 
 
+class StunClient2:
+    STUN_PORT_DEFAULT = 3478
+
+    def __init__(self, stun_server_address, local_port):
+        self.__stun_server_address = stun_server_address
+        self.__local_port = local_port
+
+    def get_my_ip_address_and_port(self):
+        stun_server_hostname, stun_server_port = self.__parse_stun_server_address()
+
+        nat_type, my_ip_address, my_port = stun.get_ip_info(source_port=self.__local_port,
+                                                            stun_host=stun_server_hostname, stun_port=stun_server_port)
+        print(
+            "NAT type: {}\nUDP hole punching: {}".format(nat_type, self.__nat_adapted_for_udp_hole_punching(nat_type)))
+        return IpAddressAndPort(my_ip_address, my_port)
+
+    @staticmethod
+    def __nat_adapted_for_udp_hole_punching(nat_type):
+        # https://www.rfc-editor.org/rfc/rfc3489#section-10.1
+        return (nat_type == stun.FullCone) or (nat_type == stun.RestricNAT) or (nat_type == stun.RestricPortNAT) or (
+                nat_type == stun.OpenInternet)
+
+    def __parse_stun_server_address(self):
+        result = urllib.parse.urlparse(self.__stun_server_address, False)
+        hostname = result.hostname
+        port = self.STUN_PORT_DEFAULT if result.port is None else int(result.port)
+        print("STUN server: {}:{}".format(hostname, port))
+        return hostname, port
+
+
 class MyExternalIpAddressAndPort:
     def __init__(self, local_port):
         self.__local_port = local_port
@@ -146,7 +177,7 @@ class MyExternalIpAddressAndPort:
         stun_server_address_list = StunServerAddressList()
         for stun_server_address in stun_server_address_list.get():
             try:
-                stun_client = StunClient(stun_server_address, self.__local_port)
+                stun_client = StunClient2(stun_server_address, self.__local_port)
                 result = stun_client.get_my_ip_address_and_port()
                 print("My external IP address and port: {}".format(result))
                 return result

@@ -26,14 +26,35 @@ fixme utopia расписать алгоритм + UML (mermaid)
 
 ## 2.2 Стороннее ПО для установки
 
+### 2.2.1 Ubuntu 18.04 LTS (bionic)
+
 ```sh
 
-sudo apt-get install python3.8 stun-client openvpn wget tar
+sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip
+
+sudo python3.8 -m pip install pip --force-reinstall
+
+sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall
 
 ```
 
+[Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
+[STUN клиент для Python (pystun3)](https://pypi.org/project/pystun3/)
+
 https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
 https://openvpn.net/community-resources/reference-manual-for-openvpn-2-4/
+
+https://stty.io/2019/05/13/qemu-vm-wireguard-vpn-tun-tap-networking/
+https://www.linux.org.ru/forum/admin/5709331
+https://askubuntu.com/questions/544065/routing-problem-openvpn-kvm
+http://sassan.me.uk/blog/qemu-and-openvpn-secure-and-convenient-remote-access-to-virtual-servers/
+
+https://openvpn.net/community-resources/ethernet-bridging/
+
+
+Wireless bridge on KVM virtual machine
+https://bbs.archlinux.org/viewtopic.php?id=207907
+https://superuser.com/questions/694929/wireless-bridge-on-kvm-virtual-machine
 
 ## 2.3 Настройка Telegram-бота
 
