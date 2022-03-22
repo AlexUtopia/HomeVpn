@@ -663,6 +663,10 @@ def main():
     elif command == "run":
         Daemon().run()
 
+    elif command == "check":
+        open_vpn_config = OpenVpnConfig()
+        MyExternalIpAddressAndPort(open_vpn_config.get_server_port()).get()
+
     elif command == "user_ovpn":
         if len(sys.argv) == 3:
             user_name = str(sys.argv[2])
