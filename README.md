@@ -22,13 +22,32 @@ fixme utopia расписать алгоритм + UML (mermaid)
 
 ## 2.1 Как понять что удастся обойти NAT
 
+NAT удастся обойти если:
+ - NAT отсутствует
+ - NAT настроен в режиме **Full-cone**
+ - NAT настроен в режиме **Restricted cone**
+ - NAT настроен в режиме **Restricted port cone**
+
+Проверить возможность обхода NAT можно при помощи скрипта main.py (команда check)
+
+```bash
+
+$ python3.8 main.py check
+STUN server: stun.l.google.com:19302
+NAT type: Full Cone
+UDP hole punching: True
+My external IP address and port: 78.106.192.197:63016
+
+```
+
+Если "UDP hole punching: True", то NAT удастся обойти.
 
 
 ## 2.2 Стороннее ПО для установки
 
 ### 2.2.1 Ubuntu 18.04 LTS (bionic)
 
-```sh
+```bash
 
 sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip
 
@@ -39,6 +58,7 @@ sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall
 ```
 
 [Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
+
 [STUN клиент для Python (pystun3)](https://pypi.org/project/pystun3/)
 
 https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
