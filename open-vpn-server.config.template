@@ -19,7 +19,7 @@ ifconfig-pool-persist /var/log/openvpn/ipp.txt
 # address pool (10.8.0.0/255.255.255.0)
 # back to the OpenVPN server.
 ; Этот параметр мне картину мира портит с точки зрения watchdog клиента у которого идут лесом DNS'ы
-;push "route 192.168.0.0 255.255.255.0"
+push "route 172.20.0.0 255.255.0.0"
 
 # If enabled, this directive will configure
 # all clients to redirect their default
