@@ -1,3 +1,4 @@
+import atexit
 import os.path
 import re
 import subprocess
@@ -8,6 +9,11 @@ import sys
 import urllib.request
 import urllib.parse
 import stun
+import getpass
+import tuntap
+import iptc
+import socket
+import platform
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -579,6 +585,324 @@ class OpenVpnClientConfigGenerator:
             os.makedirs(d)
 
 
+# Make network bridge
+# 1)
+# ip link add name br0 type bridge
+# ip addr add 172.20.0.1/16 dev br0
+# ip link set br0 up
+# [X] dnsmasq --interface=br0 --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254
+
+# 2)
+# sysctl net.ipv4.ip_forward=1
+
+# 3)
+# iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+# iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# Make tap device
+
+# 1)
+# https://docs.python.org/3/library/getpass.html#getpass.getuser
+# https://gist.github.com/arvati/546617042fcf2669f330b739075c1c5d
+# https://community.openvpn.net/openvpn/wiki/ManagingWindowsTAPDrivers
+# ip tuntap add dev tap0 mode tap user "YOUR_USER_NAME_HERE"
+# ip link set tap0 up promisc on
+# ip link set tap0 master br0 [нужно? - понять]
+
+# 2)
+# set ip address manually
+
+# 3) https://stackoverflow.com/questions/3837069/how-to-get-network-interface-card-names-in-python
+# iptables -A FORWARD -i tap0 -o wlan0 -j ACCEPT
+
+# https://scapy.readthedocs.io/en/latest/api/scapy.sendrecv.html?highlight=bridge_and_sniff#scapy.sendrecv.bridge_and_sniff
+# https://stackoverflow.com/questions/9337545/writing-an-ethernet-bridge-in-python-with-scapy
+# https://gist.github.com/mgalgs/1856631
+
+class NetworkInterface:
+    def __init__(self, name):
+        self.__name = str(name)
+
+    def __str__(self):
+        return self.__name
+
+    def __repr__(self):
+        return self.__str__()
+
+    @staticmethod
+    def list():
+        return socket.if_nameindex()
+
+    @staticmethod
+    def get_internet_if():
+        # fixme utopia Костыль
+        return NetworkInterface("wlp9s0")
+
+    def exists(self):
+        for not_used, if_name in self.list():
+            if if_name == self.__name:
+                return True
+        return False
+
+    def is_wireless(self):
+        # fixme utopia Реализовать
+        return True
+
+    def is_internet(self):
+        return True
+
+    def is_wired(self):
+        # fixme utopia Реализовать
+        return True
+
+    def is_bridged(self):
+        # fixme utopia Реализовать
+        return True
+
+
+class BridgeFirewall:
+    """
+    # @details см. https://wiki.gentoo.org/wiki/QEMU/Bridge_with_Wifi_Routing и https://wiki.gentoo.org/wiki/QEMU/Options#Virtual_network_cable_.28TAP.29
+    """
+
+    def __init__(self, bridge, internet_if):
+        self.__bridge_name = str(bridge)
+        self.__internet_if_name = str(internet_if)
+        atexit.register(self.clear)
+
+    def setup(self):
+        self.__setup_filter_bridge_to_internet()
+        self.__setup_nat_postrouting_masquerade()
+        self.__setup_filter_internet_to_bridge()
+
+    def clear(self):
+        clear = True
+        self.__setup_filter_bridge_to_internet(clear)
+        self.__setup_nat_postrouting_masquerade(clear)
+        self.__setup_filter_internet_to_bridge(clear)
+
+    def __setup_filter_bridge_to_internet(self, clear=False):
+        # sudo iptables -t filter -A FORWARD -i {self.__bridge_name} -o {self.__internet_if_name} -j ACCEPT
+        # sudo iptables -t filter -L -v -n
+
+        table = iptc.Table(iptc.Table.FILTER)
+        chain = iptc.Chain(table, "FORWARD")
+
+        rule = iptc.Rule()
+        rule.in_interface = self.__bridge_name
+        rule.out_interface = self.__internet_if_name
+        target = iptc.Target(rule, "ACCEPT")
+        rule.target = target
+
+        if clear:
+            chain.delete_rule(rule)
+        else:
+            chain.insert_rule(rule)
+        table.commit()
+
+    def __setup_nat_postrouting_masquerade(self, clear=False):
+        # sudo iptables -t nat -A POSTROUTING -o {self.__internet_if_name} -j MASQUERADE
+        # sudo iptables -t nat -L -v -n
+
+        table = iptc.Table(iptc.Table.NAT)
+        chain = iptc.Chain(table, "POSTROUTING")
+
+        rule = iptc.Rule()
+        rule.out_interface = self.__internet_if_name
+        target = iptc.Target(rule, "MASQUERADE")
+        rule.target = target
+
+        if clear:
+            chain.delete_rule(rule)
+        else:
+            chain.insert_rule(rule)
+        table.commit()
+
+    def __setup_filter_internet_to_bridge(self, clear=False):
+        # sudo iptables -t filter -A FORWARD -i {self.__internet_if_name} -o {self.__bridge_name} -m state --state RELATED,ESTABLISHED -j ACCEPT
+        # sudo iptables -t filter -L -v -n
+
+        table = iptc.Table(iptc.Table.FILTER)
+        chain = iptc.Chain(table, "FORWARD")
+
+        rule = iptc.Rule()
+        rule.in_interface = self.__internet_if_name
+        rule.out_interface = self.__bridge_name
+        target = iptc.Target(rule, "ACCEPT")
+        rule.target = target
+
+        match = iptc.Match(rule, "state")
+        match.state = "RELATED,ESTABLISHED"
+        rule.add_match(match)
+
+        if clear:
+            chain.delete_rule(rule)
+        else:
+            chain.insert_rule(rule)
+        table.commit()
+
+
+class NetworkBridge:
+    def __init__(self, name, ip_network): # fixme utopia Использовать логику TapName для name
+        self.__interface = NetworkInterface(name)
+        self.__ip_interface = ipaddress.ip_interface(ip_network)
+        self.__bridge_ip_address = self.__ip_interface.ip + 1
+        self.__bridge_prefixlen = self.__ip_interface.network.prefixlen
+        atexit.register(self.close)
+
+    def create(self):
+        if self.__interface.exists():
+            return
+
+        self.__set_ip_forwarding()
+
+        try:
+            subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
+            subprocess.check_call(
+                "ip addr add {} dev {}".format(self.__get_bridge_ip_and_mask(), self.__interface),
+                shell=True)
+            subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
+        except:
+            self.close()
+
+        self.__setup_firewall()
+
+    def close(self):
+        if not self.__interface.exists():
+            return
+
+        print("clear!")
+        self.__clear_firewall()
+
+        subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
+        subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
+
+    def add_and_configure_tap(self, tap_if):
+        tap_if.config(self.__ip_interface.network)
+        subprocess.check_call("ip link set {} master {}".format(tap_if, self.__interface), shell=True)
+
+    @staticmethod
+    def __set_ip_forwarding():
+        subprocess.check_call("sysctl -w net.ipv4.ip_forward=1", shell=True)
+
+    def __setup_firewall(self):
+        internet_if = NetworkInterface.get_internet_if()
+        BridgeFirewall(self.__interface, internet_if).setup()
+
+    def __clear_firewall(self):
+        internet_if = NetworkInterface.get_internet_if()
+        BridgeFirewall(self.__interface, internet_if).clear()
+
+    def __get_bridge_ip_and_mask(self):
+        return "{}/{}".format(self.__bridge_ip_address, self.__bridge_prefixlen)
+
+
+class TapName:
+    NAME_TEMPLATE = "homevpn-tap"  # fixme utopia Взять названме с конфига (open_vpn_server_name)
+    REGEX_PATTERN = r"^{}([0-9]+)".format(NAME_TEMPLATE)
+    INDEX_NOT_FOUND = 1 # fixme utopia Индекс как-то криво вяжется с назначением ip адесов внутри бриджа
+
+    def __init__(self):
+        self.__index = TapName.INDEX_NOT_FOUND
+        for not_used, if_name in NetworkInterface.list():
+            current_index = self.get_index_from_if_name(if_name)
+            if current_index > self.__index:
+                self.__index = current_index
+        self.__index += 1
+
+    def __str__(self):
+        return self.get_name()
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_index(self):
+        return self.__index
+
+    def get_name(self):
+        return "{}{}".format(self.NAME_TEMPLATE, self.get_index())
+
+    @staticmethod
+    def get_index_from_if_name(if_name):
+        regex = re.compile(TapName.REGEX_PATTERN)
+        result_raw = regex.findall(if_name)
+
+        if len(result_raw) == 0:
+            return TapName.INDEX_NOT_FOUND
+
+        return int(result_raw[0])
+
+
+class Tap:
+    def __init__(self):
+        self.__tap_name = TapName()
+        self.__interface = NetworkInterface(self.__tap_name)
+
+        nic_type = "Tap"
+        if not sys.platform.startswith("win"):
+            self.__tap = tuntap.Tap(nic_type, str(self.__tap_name))
+        else:
+            self.__tap = tuntap.WinTap(nic_type)
+
+        atexit.register(self.close)
+
+    def __str__(self):
+        return self.__tap_name
+
+    def __repr__(self):
+        return self.__str__()
+
+    def create(self):
+        if self.__interface.exists():
+            return
+
+        self.__tap.create()
+
+    def config(self, ip_network):
+        if not self.__interface.exists():
+            return
+
+        ip_address, netmask = self.__get_ip_address_and_netmask(ip_network)
+        self.__tap.config(str(ip_address), str(netmask))
+
+    def close(self):
+        if not self.__interface.exists():
+            return
+
+        self.__tap.close()
+
+    def __get_ip_address_and_netmask(self, ip_network):
+        increment_ip = self.__tap_name.get_index()
+        if increment_ip >= ip_network.num_addresses:
+            raise Exception("AHTUNG!!!")  # fixme utopia Текстовка
+
+        return ip_network.network_address + increment_ip, ip_network.netmask
+
+
+class VirtualMachine:
+    def __init__(self, network_bridge):
+        self.__tap = Tap()
+        self.__network_bridge = network_bridge
+
+    def run(self):
+        "qemu-system-{}".format(platform.machine())
+
+    def __qemu_command_line(self):
+        return "qemu-system-{}".format(platform.machine())
+
+    def __kvm_enable(self):
+        return "-enable-kvm"
+
+    def __ram_size(self):  # fixme utopia Использовать psutil
+        return "m 4096"
+
+    def __network(self):
+        self.__tap.create()
+        self.__network_bridge.add_and_configure_tap(self.__tap)
+
+        return "-device virtio-net,netdev=vmnic -netdev tap,id=vmnic,ifname=vnet0,script=no,downscript=no"
+
+
 class Daemon:
     SLEEP_BEFORE_RECONNECT_SEC = 30
     SLEEP_AFTER_SERVER_START_SEC = 5
@@ -608,7 +932,7 @@ class Daemon:
             #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
 
             try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
-                  # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
+                # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
                 OpenVpnClient(watchdog_user_config_path).run()
             except Exception as ex:
                 print("Try udp hole punching and RECONNECT: {}".format(ex))
@@ -678,6 +1002,9 @@ def main():
         else:
             help_usage()
             return
+
+    elif command == "test":
+        NetworkBridge("brbr0", "192.168.100.1/16").close()
 
 
 if __name__ == '__main__':

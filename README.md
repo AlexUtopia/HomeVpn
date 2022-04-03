@@ -46,15 +46,28 @@ My external IP address and port: 78.106.192.197:63016
 
 ## 2.2 Стороннее ПО для установки
 
+Понять [какому пакету принадлежит данная команда](https://askubuntu.com/questions/13792/finding-out-what-package-a-command-came-from)
+можно так (пример, для команды ip)
+
+```bash
+
+dpkg -S $(which ip)
+
+```
+
 ### 2.2.1 Ubuntu 18.04 LTS (bionic)
 
 ```bash
 
-sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer
+sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer procps iptables net-tools bridge-utils iproute2
 
 sudo python3.8 -m pip install pip --force-reinstall
 
 sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall
+
+sudo pip3.8 install 'python-pytuntap==1.0.5' --force-reinstall
+
+sudo pip3.8 install 'python-iptables==1.0.0' --force-reinstall
 
 ```
 
@@ -64,6 +77,10 @@ https://ubuntu.com/blog/kvm-hyphervisor
 [Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
 
 [STUN клиент для Python (pystun3)](https://pypi.org/project/pystun3/)
+
+[TUN/TAP менеджер для Python (python-pytuntap)](https://pypi.org/project/python-pytuntap/)
+
+[iptables (linux firewall) обёртка для Python (python-iptables)](https://pypi.org/project/python-iptables/)
 
 https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
 https://openvpn.net/community-resources/reference-manual-for-openvpn-2-4/
@@ -151,6 +168,8 @@ https://bbs.archlinux.org/viewtopic.php?id=207907
 
 https://wiki.gentoo.org/wiki/QEMU/Bridge_with_Wifi_Routing
 
+https://wiki.gentoo.org/wiki/QEMU/Options#Virtual_network_cable_.28TAP.29
+
 ### 2.6.2 Проброс хостовой видеокарты в гостевую ОС
 
 Возможные варианты проброса видеокарты в гостевую ОС
@@ -203,6 +222,8 @@ sudo ./build-client.sh имя_пользователя
 ```
 
 4. запустить систему OpenVpn сервер
+
+Права суперпользователя необходимы для запуска OpenVpn сервера.
 
 ```bash
 
