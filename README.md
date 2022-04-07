@@ -59,13 +59,11 @@ dpkg -S $(which ip)
 
 ```bash
 
-sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer procps iptables net-tools bridge-utils iproute2
+sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer procps iptables iproute2 dnsmasq-base
 
 sudo python3.8 -m pip install pip --force-reinstall
 
 sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall
-
-sudo pip3.8 install 'python-pytuntap==1.0.5' --force-reinstall
 
 sudo pip3.8 install 'python-iptables==1.0.0' --force-reinstall
 
@@ -77,8 +75,6 @@ https://ubuntu.com/blog/kvm-hyphervisor
 [Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
 
 [STUN клиент для Python (pystun3)](https://pypi.org/project/pystun3/)
-
-[TUN/TAP менеджер для Python (python-pytuntap)](https://pypi.org/project/python-pytuntap/)
 
 [iptables (linux firewall) обёртка для Python (python-iptables)](https://pypi.org/project/python-iptables/)
 

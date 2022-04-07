@@ -311,6 +311,9 @@ class OpenVpnConfig:
     def get_my_current_ip_address_and_port(self):
         return self.get_config_parameter("my_current_ip_address_and_port")
 
+    def get_vm_bridge_ip_network(self):
+        return ipaddress.ip_network(self.get_config_parameter("vm_bridge_ip_network"))
+
     def get_server_log_path(self):
         return os.path.join(self.get_server_logs_dir(), "server.log")
 
@@ -668,7 +671,6 @@ class BridgeFirewall:
     def __init__(self, bridge, internet_if):
         self.__bridge_name = str(bridge)
         self.__internet_if_name = str(internet_if)
-        atexit.register(self.clear)
 
     def setup(self):
         self.__setup_filter_bridge_to_internet()
@@ -680,6 +682,12 @@ class BridgeFirewall:
         self.__setup_filter_bridge_to_internet(clear)
         self.__setup_nat_postrouting_masquerade(clear)
         self.__setup_filter_internet_to_bridge(clear)
+
+    def clear_at_exit(self):
+        try:
+            self.clear()
+        except Exception as ex:
+            print("FFF: {}".format(ex))
 
     def __setup_filter_bridge_to_internet(self, clear=False):
         # sudo iptables -t filter -A FORWARD -i {self.__bridge_name} -o {self.__internet_if_name} -j ACCEPT
@@ -743,9 +751,9 @@ class BridgeFirewall:
 
 
 class NetworkBridge:
-    def __init__(self, name, ip_network): # fixme utopia Использовать логику TapName для name
+    def __init__(self, name, ip_network):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
         self.__interface = NetworkInterface(name)
-        self.__ip_interface = ipaddress.ip_interface(ip_network)
+        self.__ip_interface = ipaddress.ip_interface(str(ip_network))
         self.__bridge_ip_address = self.__ip_interface.ip + 1
         self.__bridge_prefixlen = self.__ip_interface.network.prefixlen
         atexit.register(self.close)
@@ -766,19 +774,19 @@ class NetworkBridge:
             self.close()
 
         self.__setup_firewall()
+        self.__setup_bridge_dhcp()
 
     def close(self):
         if not self.__interface.exists():
             return
 
-        print("clear!")
         self.__clear_firewall()
 
         subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
         subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
 
     def add_and_configure_tap(self, tap_if):
-        tap_if.config(self.__ip_interface.network)
+        # tap_if.config(self.__ip_interface.network)
         subprocess.check_call("ip link set {} master {}".format(tap_if, self.__interface), shell=True)
 
     @staticmethod
@@ -791,16 +799,22 @@ class NetworkBridge:
 
     def __clear_firewall(self):
         internet_if = NetworkInterface.get_internet_if()
-        BridgeFirewall(self.__interface, internet_if).clear()
+        BridgeFirewall(self.__interface, internet_if).clear_at_exit()
 
     def __get_bridge_ip_and_mask(self):
         return "{}/{}".format(self.__bridge_ip_address, self.__bridge_prefixlen)
+
+    def __setup_bridge_dhcp(self):
+        # fixme utopia --dhcp-range прибито гвоздями
+        subprocess.check_call(
+            "dnsmasq --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254".format(self.__interface),
+            shell=True)
 
 
 class TapName:
     NAME_TEMPLATE = "homevpn-tap"  # fixme utopia Взять названме с конфига (open_vpn_server_name)
     REGEX_PATTERN = r"^{}([0-9]+)".format(NAME_TEMPLATE)
-    INDEX_NOT_FOUND = 1 # fixme utopia Индекс как-то криво вяжется с назначением ip адесов внутри бриджа
+    INDEX_NOT_FOUND = 1  # fixme utopia Индекс как-то криво вяжется с назначением ip адесов внутри бриджа
 
     def __init__(self):
         self.__index = TapName.INDEX_NOT_FOUND
@@ -838,16 +852,10 @@ class Tap:
         self.__tap_name = TapName()
         self.__interface = NetworkInterface(self.__tap_name)
 
-        nic_type = "Tap"
-        if not sys.platform.startswith("win"):
-            self.__tap = tuntap.Tap(nic_type, str(self.__tap_name))
-        else:
-            self.__tap = tuntap.WinTap(nic_type)
-
         atexit.register(self.close)
 
     def __str__(self):
-        return self.__tap_name
+        return str(self.__interface)
 
     def __repr__(self):
         return self.__str__()
@@ -856,27 +864,32 @@ class Tap:
         if self.__interface.exists():
             return
 
-        self.__tap.create()
+        subprocess.check_call("ip tuntap add dev {} mode tap".format(self.__interface), shell=True)
+        subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
+        # ip tuntap add dev tap0 mode tap user "YOUR_USER_NAME_HERE"
+        # ip link set tap0 up promisc on
 
     def config(self, ip_network):
         if not self.__interface.exists():
             return
 
-        ip_address, netmask = self.__get_ip_address_and_netmask(ip_network)
-        self.__tap.config(str(ip_address), str(netmask))
+        subprocess.check_call(
+            "ip addr add {} dev {}".format(self.__get_bridge_ip_and_mask(ip_network), self.__interface),
+            shell=True)
 
     def close(self):
         if not self.__interface.exists():
             return
 
-        self.__tap.close()
+        subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
+        subprocess.check_call("ip tuntap del dev {} mode tap".format(self.__interface), shell=True)
 
-    def __get_ip_address_and_netmask(self, ip_network):
+    def __get_bridge_ip_and_mask(self, ip_network):
         increment_ip = self.__tap_name.get_index()
         if increment_ip >= ip_network.num_addresses:
             raise Exception("AHTUNG!!!")  # fixme utopia Текстовка
 
-        return ip_network.network_address + increment_ip, ip_network.netmask
+        return "{}/{}".format(ip_network.network_address + increment_ip, ip_network.prefixlen)
 
 
 class VirtualMachine:
@@ -885,7 +898,16 @@ class VirtualMachine:
         self.__network_bridge = network_bridge
 
     def run(self):
-        "qemu-system-{}".format(platform.machine())
+        self.__network_bridge.create()
+
+        command_line = self.__command_line()
+        print(command_line)
+        subprocess.check_call(command_line, shell=True)
+
+    def __command_line(self):
+        command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(), self.__network(),
+                              self.__other(), self.__disk()]
+        return " ".join(command_parts_list)
 
     def __qemu_command_line(self):
         return "qemu-system-{}".format(platform.machine())
@@ -894,13 +916,24 @@ class VirtualMachine:
         return "-enable-kvm"
 
     def __ram_size(self):  # fixme utopia Использовать psutil
-        return "m 4096"
+        return "-m 4096"
 
     def __network(self):
         self.__tap.create()
         self.__network_bridge.add_and_configure_tap(self.__tap)
 
-        return "-device virtio-net,netdev=vmnic -netdev tap,id=vmnic,ifname=vnet0,script=no,downscript=no"
+        tap_name = str(self.__tap)
+        netdev_id = "{}-id".format(tap_name)
+
+        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac=00:12:35:56:78:9a".format(
+            tap_name, netdev_id)
+
+    def __disk(self):
+        return "disk1.img"
+
+    def __other(self):
+        # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
+        return "-vga std -vnc 127.0.0.1:2"
 
 
 class Daemon:
@@ -1004,7 +1037,19 @@ def main():
             return
 
     elif command == "test":
-        NetworkBridge("brbr0", "192.168.100.1/16").close()
+        vm_bridge_name = OpenVpnConfig().get_server_name()
+        vm_bridge_ip_network = OpenVpnConfig().get_vm_bridge_ip_network()
+        print("vm_bridge_name = {} | vm_bridge_ip_network = {}".format(vm_bridge_name, vm_bridge_ip_network))
+
+        network_bridge = NetworkBridge(vm_bridge_name, vm_bridge_ip_network)
+        # network_bridge.create()
+        # time.sleep(30)
+        # print("network_bridge.close()")
+        # network_bridge.close()
+        # print("network_bridge.close() +++")
+        # time.sleep(30)
+        vm = VirtualMachine(network_bridge)
+        vm.run()
 
 
 if __name__ == '__main__':
