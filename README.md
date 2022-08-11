@@ -59,24 +59,34 @@ dpkg -S $(which ip)
 
 ```bash
 
-sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer procps iptables iproute2 dnsmasq-base
+sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer procps iptables iproute2 dnsmasq-base procps
 
-sudo python3.8 -m pip install pip --force-reinstall
+sudo python3.8 -m pip install pip --force-reinstall --ignore-installed
 
-sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall
+sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall --ignore-installed
 
-sudo pip3.8 install 'python-iptables==1.0.0' --force-reinstall
+sudo pip3.8 install 'python-iptables==1.0.0' --force-reinstall --ignore-installed
+
+sudo pip3.8 install 'psutil==5.9.1' --force-reinstall --ignore-installed
 
 ```
 
+dnsmasq-base - dhcp сервер использумый для раздачи ip адресов внутри сетевого моста к которому привязаны виртуальные машины
+
+xvnc4viewer ---> xtigervncviewer
+
 fixme utopia Что нужно установить для KVM?
 https://ubuntu.com/blog/kvm-hyphervisor
+
+procps - для утилиты sysctl которая используется для записи параметров ядра
 
 [Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
 
 [STUN клиент для Python (pystun3)](https://pypi.org/project/pystun3/)
 
 [iptables (linux firewall) обёртка для Python (python-iptables)](https://pypi.org/project/python-iptables/)
+
+[Утилиты работы с процессами (psutil)](https://pypi.org/project/psutil/)
 
 https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
 https://openvpn.net/community-resources/reference-manual-for-openvpn-2-4/

@@ -8,6 +8,8 @@ import time
 import sys
 import urllib.request
 import urllib.parse
+
+import psutil
 import stun
 import getpass
 import tuntap
@@ -750,9 +752,44 @@ class BridgeFirewall:
         table.commit()
 
 
+# https://serverfault.com/questions/723292/dnsmasq-doesnt-automatically-reload-when-entry-is-added-to-etc-hosts
+# https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html --dhcp-hostsdir
+# https://psutil.readthedocs.io/en/latest/#psutil.net_if_addrs psutil.AF_LINK (17) - получить MAC адрес сетевого интерфейса
+# Сгенерировать MAC адрес
+class DnsProvider:
+    def __init__(self, interface, ip_network):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
+        self.__interface = interface
+        ip_interface = ipaddress.ip_interface(str(ip_network))
+
+        possible_ip_address_list = list(ip_interface.hosts())
+        if len(possible_ip_address_list) < 2:
+            raise Exception("FUCK 1!!!")  # fixme utopia text
+
+        self.__ip_address_first = possible_ip_address_list[0]
+        self.__ip_address_last = possible_ip_address_list[-1]
+
+    def start(self):
+        subprocess.run(self.__build_dnsmasq_command_line(), shell=True)
+
+    def stop(self):
+        print("stop")
+
+    def add_host(self):
+
+    # Реестр виртуальных машин где хранить данные + проверять на неповторяемость при создании новых vm
+    # Хранилище связей vm (/etc/hosts) -> mac_address (если не указан явно, сгенерировать уникальный) -> ip_address
+    # (брать из диапазона ip_network динамически)
+
+    def __build_dnsmasq_command_line(self):
+        return "dnsmasq --interface={} --bind-interfaces --dhcp-range={},{}".format(self.__interface,
+                                                                                    self.__ip_address_first,
+                                                                                    self.__ip_address_last)
+
+
 class NetworkBridge:
-    def __init__(self, name, ip_network):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
-        self.__interface = NetworkInterface(name)
+    def __init__(self, name,
+                 ip_network):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
+        self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__ip_interface = ipaddress.ip_interface(str(ip_network))
         self.__bridge_ip_address = self.__ip_interface.ip + 1
         self.__bridge_prefixlen = self.__ip_interface.network.prefixlen
@@ -806,12 +843,24 @@ class NetworkBridge:
 
     def __setup_bridge_dhcp(self):
         # fixme utopia --dhcp-range прибито гвоздями
-        subprocess.check_call(
-            "dnsmasq --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254".format(self.__interface),
+
+        with subprocess.Popen(
+                ["dnsmasq --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254".format(
+                    self.__interface),
+                ], stdout=subprocess.PIPE, shell=True) as proc:
+            time.sleep(5)
+            print(proc.pid)
+
+        subprocess.run(
+            "dnsmasq --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254".format(
+                self.__interface),
             shell=True)
+
+        print("XXXXXXXXXXXXXXXXXXXxx")
 
 
 class TapName:
+    # название = <open_vpn_server_name>_<vm_name>_tap
     NAME_TEMPLATE = "homevpn-tap"  # fixme utopia Взять названме с конфига (open_vpn_server_name)
     REGEX_PATTERN = r"^{}([0-9]+)".format(NAME_TEMPLATE)
     INDEX_NOT_FOUND = 1  # fixme utopia Индекс как-то криво вяжется с назначением ip адесов внутри бриджа
@@ -905,7 +954,8 @@ class VirtualMachine:
         subprocess.check_call(command_line, shell=True)
 
     def __command_line(self):
-        command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(), self.__network(),
+        command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
+                              self.__network(),
                               self.__other(), self.__disk()]
         return " ".join(command_parts_list)
 
@@ -924,6 +974,9 @@ class VirtualMachine:
 
         tap_name = str(self.__tap)
         netdev_id = "{}-id".format(tap_name)
+
+        # fixme utopia Присвоим ip адрес vm через mac адрес
+        # https://superuser.com/questions/1413011/setting-a-static-ip-upon-qemu-vm-creation
 
         return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac=00:12:35:56:78:9a".format(
             tap_name, netdev_id)
@@ -949,7 +1002,8 @@ class Daemon:
         while True:
             my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
 
-            TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(my_ip_address_and_port)
+            TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(
+                my_ip_address_and_port)
 
             self.__init()
 
@@ -1037,10 +1091,14 @@ def main():
             return
 
     elif command == "test":
+        print("XXX")
+        for proc in psutil.process_iter():
+            print("fff: {}".format(proc.cmdline()))
         vm_bridge_name = OpenVpnConfig().get_server_name()
         vm_bridge_ip_network = OpenVpnConfig().get_vm_bridge_ip_network()
         print("vm_bridge_name = {} | vm_bridge_ip_network = {}".format(vm_bridge_name, vm_bridge_ip_network))
-
+        # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
+        return
         network_bridge = NetworkBridge(vm_bridge_name, vm_bridge_ip_network)
         # network_bridge.create()
         # time.sleep(30)
