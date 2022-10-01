@@ -925,9 +925,62 @@ class VmRegistry:
         self.__registry_as_dict = self.__registry_reader.get()
 
 
-class Hosts:
-    def __init__(self):
-        print("hello!")
+# https://man7.org/linux/man-pages/man5/resolv.conf.5.html
+class ResolvConf:
+    __SPACE_SYMBOLS = "[\t ]"
+    __SPACE_SYMBOLS_ZERO_OR_MORE = f"{__SPACE_SYMBOLS}*"
+    __SPACE_SYMBOLS_ONE_OR_MORE = f"{__SPACE_SYMBOLS}+"
+    __IP_ADDRESS_REGEX = r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"
+    __NAMESERVER = "nameserver"
+
+    def __init__(self, resolv_conf_path="/etc/resolv.conf"):
+        self.__reader = TextConfigReader(RealPath(resolv_conf_path).get())
+        self.__writer = TextConfigWriter(RealPath(resolv_conf_path).get())
+        self.__content = str()
+
+    def add_nameserver_if(self, nameserver_ip_address):
+        target_ip_address = ipaddress.ip_address(nameserver_ip_address)
+
+        if target_ip_address in self.get_nameserver_list():
+            return
+
+        self.__content += f"\n{self.__NAMESERVER} {target_ip_address}"
+        self.__save()
+
+    def remove_nameserver(self, nameserver_ip_address):
+        target_ip_address = ipaddress.ip_address(nameserver_ip_address)
+
+        self.__load()
+        regex = re.compile(self.__build_nameserver_remover_regex(target_ip_address), re.MULTILINE)
+        empty_line = ""
+        self.__content = regex.sub(empty_line, self.__content)
+        self.__save()
+
+    def get_nameserver_list(self):
+        self.__load()
+        regex = re.compile(self.__build_nameserver_search_regex(), re.MULTILINE)
+        tmp = regex.findall(self.__content)
+
+        result = set()
+        for t in tmp:
+            result.add(ipaddress.ip_address(t))
+        return result
+
+    def __load(self):
+        self.__content = self.__reader.get()
+
+    def __save(self):
+        self.__writer.set(self.__content)
+
+    def __build_nameserver_search_regex(self):
+        return self.__build_basic_regex(f"({self.__IP_ADDRESS_REGEX})")
+
+    def __build_nameserver_remover_regex(self, target_nameserver_ip_address):
+        return f"({self.__build_basic_regex(str(target_nameserver_ip_address))})"
+
+    def __build_basic_regex(self, value, parameter=__NAMESERVER):
+        return f"^{self.__SPACE_SYMBOLS_ZERO_OR_MORE}{parameter}{self.__SPACE_SYMBOLS_ONE_OR_MORE}{value}{self.__SPACE_SYMBOLS_ZERO_OR_MORE}$"
+
 
 # https://serverfault.com/questions/723292/dnsmasq-doesnt-automatically-reload-when-entry-is-added-to-etc-hosts
 # https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html --dhcp-hostsdir
@@ -947,7 +1000,7 @@ class DnsDhcpProvider:
     def start(self):
         command_line = self.__build_dnsmasq_command_line()
         print(command_line)
-        #subprocess.check_call(command_line, shell=True)
+        # subprocess.check_call(command_line, shell=True)
 
     def stop(self):
         self.__find_and_kill_target_dnsmasq_processes()
@@ -960,7 +1013,7 @@ class DnsDhcpProvider:
         # fixme utopia Надо научиться добавлять себя в /etc/hosts
         return "dnsmasq --log-debug --log-queries --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254 --dhcp-host=00:12:35:56:78:9a,disk1".format(
             self.__interface)
-        #return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} --dhcp-range=172.20.0.2,172.20.255.254".format(self.__interface,
+        # return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} --dhcp-range=172.20.0.2,172.20.255.254".format(self.__interface,
         #                                                                            self.__dhcp_host_dir)
 
     def __make_dhcp_host_dir(self):  # fixme utopia обобщить, os.makedirs() используется ещё в одном месте (RealPath?)
@@ -1283,6 +1336,12 @@ def main():
 
     elif command == "test":
         print("XXX")
+        print(ResolvConf().get_nameserver_list())
+        ResolvConf().add_nameserver_if("172.20.0.1")
+        print(ResolvConf().get_nameserver_list())
+        ResolvConf().remove_nameserver("172.20.0.1")
+        print(ResolvConf().get_nameserver_list())
+        return
         vm_bridge_name = OpenVpnConfig().get_server_name()
         print("vm_bridge_name = {}".format(vm_bridge_name))
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
