@@ -59,19 +59,25 @@ dpkg -S $(which ip)
 
 ```bash
 
-sudo apt-get install python3.8 openvpn wget tar python3-venv python3-pip qemu xvnc4viewer procps iptables iproute2 dnsmasq-base procps
+export PYTHON_VERSION=3.10
 
-sudo python3.8 -m pip install pip --force-reinstall --ignore-installed
+sudo apt-get install python${PYTHON_VERSION} openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base
 
-sudo pip3.8 install 'pystun3==1.0.0' --force-reinstall --ignore-installed
+sudo python${PYTHON_VERSION} -m pip install pip --force-reinstall --ignore-installed
 
-sudo pip3.8 install 'python-iptables==1.0.0' --force-reinstall --ignore-installed
+sudo pip${PYTHON_VERSION} install 'pystun3==1.0.0' --force-reinstall --ignore-installed
 
-sudo pip3.8 install 'psutil==5.9.1' --force-reinstall --ignore-installed
+sudo pip${PYTHON_VERSION} install 'python-iptables==1.0.0' --force-reinstall --ignore-installed
+
+sudo pip${PYTHON_VERSION} install 'psutil==5.9.1' --force-reinstall --ignore-installed
+
+sudo pip${PYTHON_VERSION} install 'netaddr==0.8.0' --force-reinstall --ignore-installed
+
+sudo pip${PYTHON_VERSION} install 'randmac==0.1' --force-reinstall --ignore-installed
 
 ```
 
-dnsmasq-base - dhcp сервер использумый для раздачи ip адресов внутри сетевого моста к которому привязаны виртуальные машины
+dnsmasq-base - dns/dhcp сервер использумый для раздачи ip адресов внутри сетевого моста к которому привязаны виртуальные машины
 
 xvnc4viewer ---> xtigervncviewer
 
@@ -158,7 +164,7 @@ sudo qemu-system-x86_64 -enable-kvm -m 4096 -cdrom ~/Загрузки/linuxmint-
 
 ```bash
 
-vncviewer -4 127.0.0.1:2
+xtigervncviewer 127.0.0.1:2
 
 ```
 
@@ -210,8 +216,9 @@ https://www.avoiderrors.com/easily-remote-connect-to-linux-mint-20-2-from-any-os
 
 # 3 Инсталяция системы
 
-1. сконфигурировать пути в open-vpn.config.json, **если необходимо**
-2. сгенерирвоать сертификаты для OpenVpn сервера
+1. настроить домашний роутер fixme utopia
+2. сконфигурировать пути в open-vpn.config.json, **если необходимо**
+3. сгенерировать сертификаты для OpenVpn сервера
 
 ```bash
 
@@ -219,7 +226,7 @@ sudo ./setup-easy-rsa.sh
 
 ```
 
-3. создать сертификаты для нового пользователя
+4. создать сертификаты для нового пользователя
 
 ```bash
 
@@ -227,7 +234,7 @@ sudo ./build-client.sh имя_пользователя
 
 ```
 
-4. запустить систему OpenVpn сервер
+5. запустить OpenVpn сервер
 
 Права суперпользователя необходимы для запуска OpenVpn сервера.
 
@@ -237,7 +244,7 @@ sudo python3.8 main.py run
 
 ```
 
-5. сгенерировать ovpn конфигурацию для пользователя, которому сгенерировали сертификаты на шаге (3)
+6. сгенерировать ovpn конфигурацию для пользователя, которому сгенерировали сертификаты на шаге (3)
 
 ```bash
 
@@ -245,13 +252,22 @@ python3.8 main.py user_ovpn имя_пользователя
 
 ```
 
-6. запустить OpenVpn клиента с конфигурацией полученной на шаге (5)
+7. запустить OpenVpn клиента на удалённом ПК с конфигурацией полученной на шаге (5)
 
 ```bash
 
 openvpn --config client-имя_пользователя.ovpn
 
 ```
+
+8. запустить виртуальную машину fixme utopia расписать работу с реестром виртуалок
+
+9. подлючиться к виртуальной машине fixme utopia
+
+ - пример ssh (расписать настройку на гостевой машине)
+ - пример rdp (расписать настройку на гостевой машине)
+ - пример vnc (расписать настройку на гостевой машине)
+
 
 # 4 Возможные конфигурации клиентского оборудования
 

@@ -8,11 +8,16 @@ import time
 import sys
 import urllib.request
 import urllib.parse
+import netaddr
+import randmac
+
+# fixme utopia Исправление для iptc который неадекватно работает на Ubuntu 22.04
+os.environ['XTABLES_LIBDIR'] = "/usr/lib/x86_64-linux-gnu/xtables/"
 
 import psutil
 import stun
-import getpass
-import tuntap
+# import getpass
+# import tuntap
 import iptc
 import socket
 import platform
@@ -22,12 +27,14 @@ import platform
 
 
 class RealPath:
-    def __init__(self, file_name_or_relative_file_path):
-        self.__file_name_or_relative_file_path = str(file_name_or_relative_file_path)
+    def __init__(self, path):
+        self.__path = str(path)
 
     def get(self):
+        if os.path.isabs(self.__path):
+            return self.__path
         this_script_dir = os.path.dirname(os.path.realpath(__file__))
-        result = os.path.abspath(os.path.join(this_script_dir, self.__file_name_or_relative_file_path))
+        result = os.path.abspath(os.path.join(this_script_dir, self.__path))
         return result
 
     def __str__(self):
@@ -64,7 +71,7 @@ class TextConfigWriter:
         return self.__config_file_path
 
 
-class JsonConfigLoader:
+class JsonConfigReader:
     def __init__(self, config_file_path, encoding="utf-8"):
         self.__text_config_reader = TextConfigReader(config_file_path, encoding)
 
@@ -72,7 +79,15 @@ class JsonConfigLoader:
         return json.loads(self.__text_config_reader.get())
 
 
-class StunServerAddressList(JsonConfigLoader):
+class JsonConfigWriter:
+    def __init__(self, config_file_path, encoding="utf-8"):
+        self.__text_config_writer = TextConfigWriter(config_file_path, encoding)
+
+    def set(self, data):
+        self.__text_config_writer.set(json.dumps(data))
+
+
+class StunServerAddressList(JsonConfigReader):
     def __init__(self, config_file_path=RealPath("stun-servers.config.json")):
         super().__init__(config_file_path)
 
@@ -170,7 +185,7 @@ class StunClient2:
                 nat_type == stun.OpenInternet)
 
     def __parse_stun_server_address(self):
-        result = urllib.parse.urlparse(self.__stun_server_address, False)
+        result = urllib.parse.urlparse(self.__stun_server_address, allow_fragments=False)
         hostname = result.hostname
         port = self.STUN_PORT_DEFAULT if result.port is None else int(result.port)
         print("STUN server: {}:{}".format(hostname, port))
@@ -233,7 +248,7 @@ class OpenVpnClient:
         print("OpenVpn client start OK")
 
 
-class TelegramBotConfig(JsonConfigLoader):
+class TelegramBotConfig(JsonConfigReader):
     def __init__(self, config_file_path=RealPath("telegram-bot.config.json")):
         super().__init__(config_file_path)
 
@@ -284,7 +299,7 @@ class TelegramClient:
 
 class OpenVpnConfig:
     def __init__(self, open_vpn_config_path=RealPath("open-vpn.config.json")):
-        self.__config_reader = JsonConfigLoader(open_vpn_config_path)
+        self.__config_reader = JsonConfigReader(open_vpn_config_path)
 
     def get_server_name(self):
         return self.get_config_parameter("open_vpn_server_name")
@@ -641,7 +656,7 @@ class NetworkInterface:
     @staticmethod
     def get_internet_if():
         # fixme utopia Костыль
-        return NetworkInterface("wlp9s0")
+        return NetworkInterface("wlp0s20f3")  # NetworkInterface("wlp9s0")
 
     def exists(self):
         for not_used, if_name in self.list():
@@ -752,47 +767,235 @@ class BridgeFirewall:
         table.commit()
 
 
+# https://en.wikipedia.org/wiki/Hostname
+# Название должно полностью подчиняться правилам формирования host имени
+# tolower case
+class VmName:
+    # https://stackoverflow.com/questions/106179/regular-expression-to-match-dns-hostname-or-ip-address
+    __REGEX = ""
+
+    def __init__(self, name):
+        self.__name = str(name)
+
+    def __str__(self):
+        return self.__name
+
+    def __repr__(self):
+        return self.__str__()
+
+
+# https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
+class VmMetaData:
+    def __init__(self, name, image_path, mac_address):
+        self.__name = VmName(name)
+        self.__image_path = str(image_path)
+        self.__mac_address = netaddr.EUI(str(mac_address))
+
+    def __hash__(self):
+        return self.__name.__hash__()
+
+    def __eq__(self, other):
+        if other is VmMetaData:
+            return self.__name.__eq__(other.get_name())
+        else:
+            return self.__name.__eq__(VmName(other))
+
+    @staticmethod
+    def from_dict(name, vm_registry_as_dict):
+        name_filtered_as_string = str(VmName(name))
+        if vm_registry_as_dict.get(name_filtered_as_string) is None:
+            return None
+        return VmMetaData(name_filtered_as_string, vm_registry_as_dict[name_filtered_as_string]["image_path"],
+                          vm_registry_as_dict[name_filtered_as_string]["mac_address"])
+
+    @staticmethod
+    def from_dict_strong(name, vm_registry_as_dict):
+        result = VmMetaData.from_dict(name, vm_registry_as_dict)
+        if result is None:
+            raise Exception("VM \"{}\" not found in registry".format(name))
+        return result
+
+    def append_to_dict_force(self, vm_registry_as_dict):
+        name_as_string = str(self.get_name())
+        image_path_as_string = str(self.get_image_path())
+        mac_address_as_string = str(self.get_mac_address())
+        vm_registry_as_dict.update({name_as_string: {"image_path": image_path_as_string,
+                                                     "mac_address": mac_address_as_string}})
+
+    def get_name(self):
+        return self.__name
+
+    def get_image_path(self):
+        return self.__image_path
+
+    def get_mac_address(self):
+        return self.__mac_address
+
+    def get_mac_address_as_string(self):
+        result = self.__mac_address
+        result.dialect = netaddr.mac_unix_expanded
+        return str(result)
+
+
+class VmRegistry:
+    # {
+    #   "vm1_name":
+    #   {
+    #     "image_path":  (String)
+    #     "mac_address": (String)
+    #   },
+    #   "vm2_name": { ... }
+    # }
+    #
+
+    __IMAGE_FORMAT = "qcow2"
+    __IMAGE_EXTENSION = ".img"
+
+    def __init__(self, vm_registry_config_path):
+        self.__registry_reader = JsonConfigReader(vm_registry_config_path)
+        self.__registry_writer = JsonConfigWriter(vm_registry_config_path)
+        self.__registry_as_dict = dict()
+        self.__vm_dir_default = os.path.dirname(vm_registry_config_path)
+
+    # Инсталлируем ОС через VirtualMachine( VmRegistry().create( vm_name, size_in_gib ), path_to_iso_installer = "/path/to/os_installer.iso" )
+    # Добавляем виртуалку в реестр при помощи
+
+    def create(self, name, size_in_gib=20):
+        self.__load_registry()
+        self.__check_non_exist(name)
+        result = self.__build_meta_data(name)
+        subprocess.run(self.__create_image_command_line(result, size_in_gib), shell=True)
+        self.__add_to_registry(result)
+        self.__save_registry()
+        return result
+
+    def list(self):
+        self.__load_registry()
+        result = []
+        for name in self.__meta_data_dict:
+            meta_data = self.__get_meta_data(name)
+            if meta_data is not None:
+                result.append(meta_data)
+        return result
+
+    def get_path_to_image_with_verifying(self, name):
+        self.__load_registry()
+        self.__check_exist(name)
+        result = self.__get_meta_data(name).get_image_path()
+        if os.path.exists(result) and os.path.isfile(result):
+            return result
+        raise Exception("VM not found in \"{}\"".format(result))
+
+    def __create_image_command_line(self, meta_data, size_in_gib):
+        return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), size_in_gib)
+
+    def __build_meta_data(self, name):
+        return VmMetaData(name, self.__get_image_path(name), self.__generate_random_mac_address())
+
+    def __get_image_path(self, name):
+        return os.path.join(self.__vm_dir_default, self.__get_image_filename(name))
+
+    def __get_image_filename(self, name):
+        return "{}{}".format(VmName(name), self.__IMAGE_EXTENSION)
+
+    @staticmethod
+    def __generate_random_mac_address(self):
+        return randmac.RandMac()
+
+    def __check_exist(self, name):
+        meta_data = self.__get_meta_data(name)
+        if meta_data is None:
+            raise Exception("VM with name \"{}\" not found".format(name))
+
+    def __check_non_exist(self, name):
+        meta_data = self.__get_meta_data(name)
+        if meta_data is not None:
+            raise Exception("VM with name \"{}\" already exist ({})".format(name, meta_data))
+
+    def __add_to_registry(self, meta_data):
+        meta_data.append_to_dict_force(self.__registry_as_dict)
+
+    def __get_meta_data(self, name):
+        return VmMetaData.from_dict(name, self.__registry_as_dict)
+
+    def __save_registry(self):
+        self.__registry_writer.set(self.__registry_as_dict)
+
+    def __load_registry(self):
+        self.__registry_as_dict = self.__registry_reader.get()
+
+
+class Hosts:
+    def __init__(self):
+        print("hello!")
+
 # https://serverfault.com/questions/723292/dnsmasq-doesnt-automatically-reload-when-entry-is-added-to-etc-hosts
 # https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html --dhcp-hostsdir
 # https://psutil.readthedocs.io/en/latest/#psutil.net_if_addrs psutil.AF_LINK (17) - получить MAC адрес сетевого интерфейса
 # Сгенерировать MAC адрес
-class DnsProvider:
-    def __init__(self, interface, ip_network):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
+# Внимательно посмотреть на опцию --dhcp-host - она позволяет биндить mac address на hostname
+# Генерируем рандомный mac адрес https://stackoverflow.com/questions/8484877/mac-address-generator-in-python
+class DnsDhcpProvider:
+    __HOST_EXTENSION = ".host"
+
+    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir"):
         self.__interface = interface
-        ip_interface = ipaddress.ip_interface(str(ip_network))
-
-        possible_ip_address_list = list(ip_interface.hosts())
-        if len(possible_ip_address_list) < 2:
-            raise Exception("FUCK 1!!!")  # fixme utopia text
-
-        self.__ip_address_first = possible_ip_address_list[0]
-        self.__ip_address_last = possible_ip_address_list[-1]
+        self.__dhcp_host_dir = RealPath(dhcp_host_dir).get()
+        self.__make_dhcp_host_dir()
+        atexit.register(self.stop)
 
     def start(self):
-        subprocess.run(self.__build_dnsmasq_command_line(), shell=True)
+        command_line = self.__build_dnsmasq_command_line()
+        print(command_line)
+        #subprocess.check_call(command_line, shell=True)
 
     def stop(self):
-        print("stop")
+        self.__find_and_kill_target_dnsmasq_processes()
 
-    def add_host(self):
-
-    # Реестр виртуальных машин где хранить данные + проверять на неповторяемость при создании новых vm
-    # Хранилище связей vm (/etc/hosts) -> mac_address (если не указан явно, сгенерировать уникальный) -> ip_address
-    # (брать из диапазона ip_network динамически)
+    def add_host(self, vm_meta_data):
+        TextConfigWriter(self.__get_dhcp_host_file_path(vm_meta_data)).set(
+            self.__build_dhcp_host_file_content(vm_meta_data))
 
     def __build_dnsmasq_command_line(self):
-        return "dnsmasq --interface={} --bind-interfaces --dhcp-range={},{}".format(self.__interface,
-                                                                                    self.__ip_address_first,
-                                                                                    self.__ip_address_last)
+        # fixme utopia Надо научиться добавлять себя в /etc/hosts
+        return "dnsmasq --log-debug --log-queries --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254 --dhcp-host=00:12:35:56:78:9a,disk1".format(
+            self.__interface)
+        #return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} --dhcp-range=172.20.0.2,172.20.255.254".format(self.__interface,
+        #                                                                            self.__dhcp_host_dir)
+
+    def __make_dhcp_host_dir(self):  # fixme utopia обобщить, os.makedirs() используется ещё в одном месте (RealPath?)
+        if os.path.exists(self.__dhcp_host_dir):
+            if not os.path.isdir(self.__dhcp_host_dir):
+                raise Exception(
+                    "\"{}\" is path to file, but should be a directory path")  # fixme utopia Надо дать пользователю рекомендацию что делать
+        else:
+            os.makedirs(self.__dhcp_host_dir)
+
+    def __get_dhcp_host_file_path(self, vm_meta_data):
+        return os.path.join(self.__dhcp_host_dir, self.__get_dhcp_host_file_name(vm_meta_data.get_name()))
+
+    def __get_dhcp_host_file_name(self, name):
+        return "{}{}".format(name, self.__HOST_EXTENSION)
+
+    @staticmethod
+    def __build_dhcp_host_file_content(vm_meta_data):
+        return "{},{}".format(vm_meta_data.get_mac_address_as_string(), vm_meta_data.get_name())
+
+    def __find_and_kill_target_dnsmasq_processes(self):
+        for process in psutil.process_iter():
+            if self.__compare_cmd_line(process.cmdline()):
+                print("KILL {}".format(process))
+                process.kill()
+
+    def __compare_cmd_line(self, psutil_process_cmdline):
+        return " ".join(psutil_process_cmdline).endswith(self.__build_dnsmasq_command_line())
 
 
 class NetworkBridge:
     def __init__(self, name,
-                 ip_network):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
-        self.__interface = NetworkInterface("{}-bridge".format(name))
-        self.__ip_interface = ipaddress.ip_interface(str(ip_network))
-        self.__bridge_ip_address = self.__ip_interface.ip + 1
-        self.__bridge_prefixlen = self.__ip_interface.network.prefixlen
+                 dhcp_host_dir="./dhcp-hostsdir"):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
+        self.__interface = NetworkInterface("{}-bridge".format(name).lower())
+        self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir)
         atexit.register(self.close)
 
     def create(self):
@@ -804,26 +1007,27 @@ class NetworkBridge:
         try:
             subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
             subprocess.check_call(
-                "ip addr add {} dev {}".format(self.__get_bridge_ip_and_mask(), self.__interface),
+                "ip addr add {} dev {}".format("172.20.0.1/16", self.__interface),
                 shell=True)
             subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
         except:
             self.close()
 
         self.__setup_firewall()
-        self.__setup_bridge_dhcp()
+        self.__setup_bridge_dns_dhcp()
 
     def close(self):
         if not self.__interface.exists():
             return
 
         self.__clear_firewall()
+        self.__clear_bridge_dns_dhcp()
 
         subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
         subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
 
-    def add_and_configure_tap(self, tap_if):
-        # tap_if.config(self.__ip_interface.network)
+    def add_and_configure_tap(self, tap_if, vm_meta_data):
+        self.__dns_dhcp_provider.add_host(vm_meta_data)
         subprocess.check_call("ip link set {} master {}".format(tap_if, self.__interface), shell=True)
 
     @staticmethod
@@ -838,30 +1042,18 @@ class NetworkBridge:
         internet_if = NetworkInterface.get_internet_if()
         BridgeFirewall(self.__interface, internet_if).clear_at_exit()
 
-    def __get_bridge_ip_and_mask(self):
-        return "{}/{}".format(self.__bridge_ip_address, self.__bridge_prefixlen)
+    def __setup_bridge_dns_dhcp(self):
+        self.__dns_dhcp_provider.start()
 
-    def __setup_bridge_dhcp(self):
-        # fixme utopia --dhcp-range прибито гвоздями
-
-        with subprocess.Popen(
-                ["dnsmasq --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254".format(
-                    self.__interface),
-                ], stdout=subprocess.PIPE, shell=True) as proc:
-            time.sleep(5)
-            print(proc.pid)
-
-        subprocess.run(
-            "dnsmasq --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254".format(
-                self.__interface),
-            shell=True)
-
-        print("XXXXXXXXXXXXXXXXXXXxx")
+    def __clear_bridge_dns_dhcp(self):
+        self.__dns_dhcp_provider.stop()
 
 
 class TapName:
     # название = <open_vpn_server_name>_<vm_name>_tap
     NAME_TEMPLATE = "homevpn-tap"  # fixme utopia Взять названме с конфига (open_vpn_server_name)
+    # название сформировать как open_vpn_server_name + hostname VM
+    # hostname VM сформировать уникально (как будем вязать на пользователя?)
     REGEX_PATTERN = r"^{}([0-9]+)".format(NAME_TEMPLATE)
     INDEX_NOT_FOUND = 1  # fixme utopia Индекс как-то криво вяжется с назначением ip адесов внутри бриджа
 
@@ -918,14 +1110,6 @@ class Tap:
         # ip tuntap add dev tap0 mode tap user "YOUR_USER_NAME_HERE"
         # ip link set tap0 up promisc on
 
-    def config(self, ip_network):
-        if not self.__interface.exists():
-            return
-
-        subprocess.check_call(
-            "ip addr add {} dev {}".format(self.__get_bridge_ip_and_mask(ip_network), self.__interface),
-            shell=True)
-
     def close(self):
         if not self.__interface.exists():
             return
@@ -942,9 +1126,12 @@ class Tap:
 
 
 class VirtualMachine:
-    def __init__(self, network_bridge):
+    def __init__(self, network_bridge,
+                 vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
+                 path_to_iso_installer=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
+        self.__vm_meta_data = vm_meta_data
 
     def run(self):
         self.__network_bridge.create()
@@ -959,18 +1146,21 @@ class VirtualMachine:
                               self.__other(), self.__disk()]
         return " ".join(command_parts_list)
 
-    def __qemu_command_line(self):
+    @staticmethod
+    def __qemu_command_line():
         return "qemu-system-{}".format(platform.machine())
 
-    def __kvm_enable(self):
+    @staticmethod
+    def __kvm_enable():
         return "-enable-kvm"
 
-    def __ram_size(self):  # fixme utopia Использовать psutil
+    @staticmethod
+    def __ram_size():  # fixme utopia Использовать psutil
         return "-m 4096"
 
     def __network(self):
         self.__tap.create()
-        self.__network_bridge.add_and_configure_tap(self.__tap)
+        self.__network_bridge.add_and_configure_tap(self.__tap, self.__vm_meta_data)
 
         tap_name = str(self.__tap)
         netdev_id = "{}-id".format(tap_name)
@@ -978,15 +1168,16 @@ class VirtualMachine:
         # fixme utopia Присвоим ip адрес vm через mac адрес
         # https://superuser.com/questions/1413011/setting-a-static-ip-upon-qemu-vm-creation
 
-        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac=00:12:35:56:78:9a".format(
-            tap_name, netdev_id)
+        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac={2}".format(
+            tap_name, netdev_id, self.__vm_meta_data.get_mac_address_as_string())
 
     def __disk(self):
-        return "disk1.img"
+        return "/opt/share/disk1.img"
 
     def __other(self):
         # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
-        return "-vga std -vnc 127.0.0.1:2"
+        # -vga std -vnc 127.0.0.1:2
+        return "-vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on"
 
 
 class Daemon:
@@ -1092,14 +1283,11 @@ def main():
 
     elif command == "test":
         print("XXX")
-        for proc in psutil.process_iter():
-            print("fff: {}".format(proc.cmdline()))
         vm_bridge_name = OpenVpnConfig().get_server_name()
-        vm_bridge_ip_network = OpenVpnConfig().get_vm_bridge_ip_network()
-        print("vm_bridge_name = {} | vm_bridge_ip_network = {}".format(vm_bridge_name, vm_bridge_ip_network))
+        print("vm_bridge_name = {}".format(vm_bridge_name))
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
-        return
-        network_bridge = NetworkBridge(vm_bridge_name, vm_bridge_ip_network)
+        # return
+        network_bridge = NetworkBridge(vm_bridge_name)
         # network_bridge.create()
         # time.sleep(30)
         # print("network_bridge.close()")
