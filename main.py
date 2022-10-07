@@ -331,6 +331,9 @@ class OpenVpnConfig:
     def get_vm_bridge_ip_network(self):
         return ipaddress.ip_network(self.get_config_parameter("vm_bridge_ip_network"))
 
+    def get_dns_config_dir(self):
+        return self.get_config_parameter("dns_config_dir")
+
     def get_server_log_path(self):
         return os.path.join(self.get_server_logs_dir(), "server.log")
 
@@ -641,7 +644,7 @@ class OpenVpnClientConfigGenerator:
 
 class NetworkInterface:
     def __init__(self, name):
-        self.__name = str(name)
+        self.__name = str(name)  # fixme utopia Наложить ограничения на имя
 
     def __str__(self):
         return self.__name
@@ -665,6 +668,7 @@ class NetworkInterface:
         return False
 
     def is_wireless(self):
+        # https://www.linux.org.ru/forum/general/11160638
         # fixme utopia Реализовать
         return True
 
@@ -678,6 +682,24 @@ class NetworkInterface:
     def is_bridged(self):
         # fixme utopia Реализовать
         return True
+
+    def get_ipv4_interface_if(self):
+        for net_if_name, snicaddr_list in psutil.net_if_addrs().items():
+            if net_if_name == self.__name:
+                for family, address, netmask, broadcast, ptp in snicaddr_list:
+                    if family == socket.AddressFamily.AF_INET:
+                        return ipaddress.ip_interface("{}/{}".format(address, netmask))
+
+        return None
+
+    def get_ipv6_interface_if(self):
+        for net_if_name, snicaddr_list in psutil.net_if_addrs().items():
+            if net_if_name == self.__name:
+                for family, address, netmask, broadcast, ptp in snicaddr_list:
+                    if family == socket.AddressFamily.AF_INET6:
+                        return ipaddress.ip_interface("{}".format(address))
+
+        return None
 
 
 class BridgeFirewall:
@@ -991,30 +1013,42 @@ class ResolvConf:
 class DnsDhcpProvider:
     __HOST_EXTENSION = ".host"
 
-    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir"):
+    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf()):
         self.__interface = interface
         self.__dhcp_host_dir = RealPath(dhcp_host_dir).get()
-        self.__make_dhcp_host_dir()
+        self.__resolv_conf = resolv_conf
+        self.__dnsmasq_command_line = str()
+        self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
         atexit.register(self.stop)
 
     def start(self):
-        command_line = self.__build_dnsmasq_command_line()
-        print(command_line)
-        # subprocess.check_call(command_line, shell=True)
+        if self.__dnsmasq_command_line:
+            return
+
+        self.__make_dhcp_host_dir()
+        self.__interface_ip_interface = self.__interface.get_ipv4_interface_if()
+        if self.__interface_ip_interface is None:
+            raise Exception("Target interface \"{}\" ipv4 address NOT ASSIGN".format(self.__interface))
+        self.__dnsmasq_command_line = self.__build_dnsmasq_command_line()
+
+        self.__add_dnsmasq_to_system_dsn_servers_list()
+        print(self.__dnsmasq_command_line)
+        subprocess.check_call(self.__dnsmasq_command_line, shell=True)
 
     def stop(self):
+        if not self.__dnsmasq_command_line:
+            return
+
         self.__find_and_kill_target_dnsmasq_processes()
+        self.__remove_dnsmasq_from_system_dsn_servers_list()
 
     def add_host(self, vm_meta_data):
         TextConfigWriter(self.__get_dhcp_host_file_path(vm_meta_data)).set(
             self.__build_dhcp_host_file_content(vm_meta_data))
 
     def __build_dnsmasq_command_line(self):
-        # fixme utopia Надо научиться добавлять себя в /etc/hosts
-        return "dnsmasq --log-debug --log-queries --interface={} --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254 --dhcp-host=00:12:35:56:78:9a,disk1".format(
-            self.__interface)
-        # return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} --dhcp-range=172.20.0.2,172.20.255.254".format(self.__interface,
-        #                                                                            self.__dhcp_host_dir)
+        return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} {}".format(
+            self.__interface, self.__dhcp_host_dir, self.__get_dhcp_range_parameter())
 
     def __make_dhcp_host_dir(self):  # fixme utopia обобщить, os.makedirs() используется ещё в одном месте (RealPath?)
         if os.path.exists(self.__dhcp_host_dir):
@@ -1041,13 +1075,37 @@ class DnsDhcpProvider:
                 process.kill()
 
     def __compare_cmd_line(self, psutil_process_cmdline):
-        return " ".join(psutil_process_cmdline).endswith(self.__build_dnsmasq_command_line())
+        return " ".join(psutil_process_cmdline).endswith(self.__dnsmasq_command_line)
+
+    def __get_dhcp_range_parameter(self):
+        ip_address_start, ip_address_end = self.__get_dhcp_range()
+        return "--dhcp-range={},{}".format(ip_address_start, ip_address_end)
+
+    def __get_dhcp_range(self):
+        ip_interface = self.__interface_ip_interface
+        ip_address_start = ip_interface.ip + 1
+        ip_address_end = list(ip_interface.network.hosts())[-1]
+        if ip_address_start > ip_address_end:
+            raise Exception(
+                "DHCP server available ip addresses FAIL (start={}, end={}, {})".format(ip_address_start,
+                                                                                        ip_address_end,
+                                                                                        ip_interface))
+        return ip_address_start, ip_address_end
+
+    def __add_dnsmasq_to_system_dsn_servers_list(self):
+        self.__resolv_conf.add_nameserver_if(self.__get_target_interface_ip_address())
+
+    def __remove_dnsmasq_from_system_dsn_servers_list(self):
+        self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
+
+    def __get_target_interface_ip_address(self):
+        return self.__interface_ip_interface.ip
 
 
 class NetworkBridge:
     def __init__(self, name,
                  dhcp_host_dir="./dhcp-hostsdir"):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
-        self.__interface = NetworkInterface("{}-bridge".format(name).lower())
+        self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir)
         atexit.register(self.close)
 
@@ -1063,11 +1121,11 @@ class NetworkBridge:
                 "ip addr add {} dev {}".format("172.20.0.1/16", self.__interface),
                 shell=True)
             subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
+
+            self.__setup_firewall()
+            self.__setup_bridge_dns_dhcp()
         except:
             self.close()
-
-        self.__setup_firewall()
-        self.__setup_bridge_dns_dhcp()
 
     def close(self):
         if not self.__interface.exists():
@@ -1230,7 +1288,11 @@ class VirtualMachine:
     def __other(self):
         # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
         # -vga std -vnc 127.0.0.1:2
-        return "-vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on"
+        # -bt hci,host:hci0
+        # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
+        # https://www.youtube.com/watch?v=ELbxhm1-rno
+        # -full-screen
+        return "-usb -device usb-host,vendorid=0x8087,productid=0x0026 -vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on,window-close=on"
 
 
 class Daemon:
@@ -1336,17 +1398,21 @@ def main():
 
     elif command == "test":
         print("XXX")
-        print(ResolvConf().get_nameserver_list())
-        ResolvConf().add_nameserver_if("172.20.0.1")
-        print(ResolvConf().get_nameserver_list())
-        ResolvConf().remove_nameserver("172.20.0.1")
-        print(ResolvConf().get_nameserver_list())
-        return
-        vm_bridge_name = OpenVpnConfig().get_server_name()
+        print(NetworkInterface("lo").get_ipv4_interface_if())
+        print(NetworkInterface("lo").get_ipv6_interface_if())
+        # return
+        # print(ResolvConf().get_nameserver_list())
+        # ResolvConf().add_nameserver_if("172.20.0.1")
+        # print(ResolvConf().get_nameserver_list())
+        # ResolvConf().remove_nameserver("172.20.0.1")
+        # print(ResolvConf().get_nameserver_list())
+        # return
+        config = OpenVpnConfig()
+        vm_bridge_name = config.get_server_name()
         print("vm_bridge_name = {}".format(vm_bridge_name))
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
         # return
-        network_bridge = NetworkBridge(vm_bridge_name)
+        network_bridge = NetworkBridge(vm_bridge_name, config.get_dns_config_dir())
         # network_bridge.create()
         # time.sleep(30)
         # print("network_bridge.close()")

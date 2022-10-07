@@ -13,5 +13,5 @@
   "my_current_ip_address_and_port": "./my_current_ip_address_and_port.txt",
   "vm_bridge_ip_network": "172.20.0.0/16",
   "vm_registry_path": "vm-registry.json",
-  "dns_config_dir": "./dhcp-hostsdir"
+  "dns_config_dir": "/opt/dhcp-hostsdir"
 }
