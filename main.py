@@ -328,8 +328,8 @@ class OpenVpnConfig:
     def get_my_current_ip_address_and_port(self):
         return self.get_config_parameter("my_current_ip_address_and_port")
 
-    def get_vm_bridge_ip_network(self):
-        return ipaddress.ip_network(self.get_config_parameter("vm_bridge_ip_network"))
+    def get_vm_bridge_ip_address_and_mask(self):
+        return ipaddress.ip_interface(self.get_config_parameter("vm_bridge_ip_address_and_mask"))
 
     def get_dns_config_dir(self):
         return self.get_config_parameter("dns_config_dir")
@@ -1103,9 +1103,10 @@ class DnsDhcpProvider:
 
 
 class NetworkBridge:
-    def __init__(self, name,
+    def __init__(self, name, bridge_ip_address_and_mask,
                  dhcp_host_dir="./dhcp-hostsdir"):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
         self.__interface = NetworkInterface("{}-bridge".format(name))
+        self.__bridge_ip_address_and_mask = ipaddress.ip_interface(bridge_ip_address_and_mask)
         self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir)
         atexit.register(self.close)
 
@@ -1118,7 +1119,7 @@ class NetworkBridge:
         try:
             subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
             subprocess.check_call(
-                "ip addr add {} dev {}".format("172.20.0.1/16", self.__interface),
+                "ip addr add {} dev {}".format(self.__get_ip_address_and_mask(), self.__interface),
                 shell=True)
             subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
 
@@ -1158,6 +1159,11 @@ class NetworkBridge:
 
     def __clear_bridge_dns_dhcp(self):
         self.__dns_dhcp_provider.stop()
+
+    def __get_ip_address_and_mask(self):
+        ip_address = self.__bridge_ip_address_and_mask.ip
+        ip_network = self.__bridge_ip_address_and_mask.network.prefixlen
+        return "{}/{}".format(ip_address, ip_network)
 
 
 class TapName:
@@ -1412,7 +1418,8 @@ def main():
         print("vm_bridge_name = {}".format(vm_bridge_name))
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
         # return
-        network_bridge = NetworkBridge(vm_bridge_name, config.get_dns_config_dir())
+        network_bridge = NetworkBridge(vm_bridge_name, config.get_vm_bridge_ip_address_and_mask(),
+                                       config.get_dns_config_dir())
         # network_bridge.create()
         # time.sleep(30)
         # print("network_bridge.close()")
