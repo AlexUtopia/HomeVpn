@@ -500,6 +500,7 @@ class OpenVpnServerConfigGenerator:
         self.__add_server_cert()
         self.__add_server_key()
         self.__add_server_log()
+        self.__add_client_route_to_vm_bridge_network()
 
     def __parse_template(self):
         regex = re.compile(r"^[ \t]*([a-z\-_0-9]+)[ \t]*(.*)\n", re.MULTILINE)
@@ -538,6 +539,10 @@ class OpenVpnServerConfigGenerator:
         d = os.path.dirname(self.__open_vpn_config.get_server_log_path())
         if not os.path.exists(d):
             os.makedirs(d)
+
+    def __add_client_route_to_vm_bridge_network(self):
+        ip_network = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().network
+        self.__key_value_config.add("push", "route {} {}".format(ip_network.network_address, ip_network.netmask))
 
 
 class OpenVpnClientConfigGenerator:
@@ -1233,13 +1238,6 @@ class Tap:
 
         subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
         subprocess.check_call("ip tuntap del dev {} mode tap".format(self.__interface), shell=True)
-
-    def __get_bridge_ip_and_mask(self, ip_network):
-        increment_ip = self.__tap_name.get_index()
-        if increment_ip >= ip_network.num_addresses:
-            raise Exception("AHTUNG!!!")  # fixme utopia Текстовка
-
-        return "{}/{}".format(ip_network.network_address + increment_ip, ip_network.prefixlen)
 
 
 class VirtualMachine:
