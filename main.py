@@ -302,37 +302,43 @@ class OpenVpnConfig:
         self.__config_reader = JsonConfigReader(open_vpn_config_path)
 
     def get_server_name(self):
-        return self.get_config_parameter("open_vpn_server_name")
+        return self.get_config_parameter_strong("open_vpn_server_name")
 
     def get_server_port(self):
-        return int(self.get_config_parameter("open_vpn_server_port"))
+        return int(self.get_config_parameter_strong("open_vpn_server_port"))
 
     def get_keys_dir(self):
-        return self.get_config_parameter("open_vpn_keys_dir")
+        return self.get_config_parameter_strong("open_vpn_keys_dir")
 
     def get_server_logs_dir(self):
-        return self.get_config_parameter("open_vpn_server_logs_dir")
+        return self.get_config_parameter_strong("open_vpn_server_logs_dir")
 
     def get_client_keys_dir(self):
-        return self.get_config_parameter("open_vpn_client_keys_dir")
+        return self.get_config_parameter_strong("open_vpn_client_keys_dir")
 
     def get_client_logs_dir(self):
-        return self.get_config_parameter("open_vpn_client_logs_dir")
+        return self.get_config_parameter_strong("open_vpn_client_logs_dir")
 
     def get_easy_rsa_version(self):
-        return self.get_config_parameter("easy_rsa_version")
+        return self.get_config_parameter_strong("easy_rsa_version")
 
     def get_watchdog_user_name(self):
-        return self.get_config_parameter("watchdog_user_name")
+        return self.get_config_parameter_strong("watchdog_user_name")
 
     def get_my_current_ip_address_and_port(self):
-        return self.get_config_parameter("my_current_ip_address_and_port")
+        return self.get_config_parameter_strong("my_current_ip_address_and_port")
 
     def get_vm_bridge_ip_address_and_mask(self):
-        return ipaddress.ip_interface(self.get_config_parameter("vm_bridge_ip_address_and_mask"))
+        return ipaddress.ip_interface(self.get_config_parameter_strong("vm_bridge_ip_address_and_mask"))
+
+    def get_internet_network_interface(self):
+        result = self.get_config_parameter("internet_network_interface")
+        if result is None:
+            return result
+        return NetworkInterface(result)
 
     def get_dns_config_dir(self):
-        return self.get_config_parameter("dns_config_dir")
+        return self.get_config_parameter_strong("dns_config_dir")
 
     def get_server_log_path(self):
         return os.path.join(self.get_server_logs_dir(), "server.log")
@@ -374,8 +380,17 @@ class OpenVpnConfig:
         return self._parse(TextConfigReader(self.get_server_key_path()).get(), "-----BEGIN PRIVATE KEY-----",
                            "-----END PRIVATE KEY-----")
 
+    def get_config_parameter_strong(self, name):
+        result = self.get_config_parameter(name)
+        if result is None:
+            raise Exception("Mandatory config parameter \"{}\" NOT FOUND".format(name))
+        return result
+
     def get_config_parameter(self, name):
-        return str(self.__config_reader.get()[name])
+        result = self.__config_reader.get()[name]
+        if result is None:
+            return None
+        return str(result)
 
     @staticmethod
     def _parse(config_as_string, begin_label, end_label):
@@ -648,8 +663,18 @@ class OpenVpnClientConfigGenerator:
 # https://gist.github.com/mgalgs/1856631
 
 class NetworkInterface:
+    # https://developers.google.com/speed/public-dns/docs/using#addresses
+    GOOGLE_PUBLIC_DNS_IPV4_1 = ipaddress.ip_address("8.8.8.8")
+    GOOGLE_PUBLIC_DNS_IPV4_2 = ipaddress.ip_address("8.8.4.4")
+
+    GOOGLE_PUBLIC_DNS_IPV6_1 = ipaddress.ip_address("2001:4860:4860:0:0:0:0:8888")
+    GOOGLE_PUBLIC_DNS_IPV6_2 = ipaddress.ip_address("2001:4860:4860:0:0:0:0:8844")
+
+    NAME_LENGTH_MIN = 1
+    NAME_LENGTH_MAX = 16
+
     def __init__(self, name):
-        self.__name = str(name)  # fixme utopia Наложить ограничения на имя
+        self.__name = str(name)
 
     def __str__(self):
         return self.__name
@@ -659,18 +684,38 @@ class NetworkInterface:
 
     @staticmethod
     def list():
-        return socket.if_nameindex()
+        return list(psutil.net_if_addrs().keys())
+
+    @staticmethod
+    def get_internet_if_strong():
+        result = NetworkInterface.get_internet_if()
+        if result is None:
+            raise Exception("Internet interface NOT FOUND")
+        return result
 
     @staticmethod
     def get_internet_if():
-        # fixme utopia Костыль
-        return NetworkInterface("wlp0s20f3")  # NetworkInterface("wlp9s0")
+        # https://unix.stackexchange.com/questions/473803/how-to-find-out-the-interface-which-is-being-used-for-internet
+
+        cmd_result = subprocess.run("ip route get {}".format(NetworkInterface.GOOGLE_PUBLIC_DNS_IPV4_1), shell=True,
+                                    capture_output=True, text=True)
+        if cmd_result.returncode:
+            raise Exception("Get internet network interface FAIL: {}".format(cmd_result))
+
+        regex = re.compile(fr".* dev (\S{{{NetworkInterface.NAME_LENGTH_MIN},{NetworkInterface.NAME_LENGTH_MAX}}}) .*",
+                           re.MULTILINE)
+        tmp = regex.findall(cmd_result.stdout)
+        if len(tmp) == 0:
+            return None
+
+        result = NetworkInterface(tmp[0])
+        if not result.exists():
+            return None
+
+        return result
 
     def exists(self):
-        for not_used, if_name in self.list():
-            if if_name == self.__name:
-                return True
-        return False
+        return self.__name in self.list()
 
     def is_wireless(self):
         # https://www.linux.org.ru/forum/general/11160638
@@ -712,8 +757,14 @@ class BridgeFirewall:
     # @details см. https://wiki.gentoo.org/wiki/QEMU/Bridge_with_Wifi_Routing и https://wiki.gentoo.org/wiki/QEMU/Options#Virtual_network_cable_.28TAP.29
     """
 
-    def __init__(self, bridge, internet_if):
-        self.__bridge_name = str(bridge)
+    def __init__(self, bridge_if, internet_if):
+        if bridge_if is None or not bridge_if.exists():
+            raise Exception("Bridge interface NOT FOUND")
+
+        if internet_if is None or not internet_if.exists():
+            raise Exception("Internet interface NOT FOUND")
+
+        self.__bridge_name = str(bridge_if)
         self.__internet_if_name = str(internet_if)
 
     def setup(self):
@@ -889,7 +940,7 @@ class VmRegistry:
 
     def create(self, name, size_in_gib=20):
         self.__load_registry()
-        self.__check_non_exist(name)
+        self.__check_non_exists(name)
         result = self.__build_meta_data(name)
         subprocess.run(self.__create_image_command_line(result, size_in_gib), shell=True)
         self.__add_to_registry(result)
@@ -907,7 +958,7 @@ class VmRegistry:
 
     def get_path_to_image_with_verifying(self, name):
         self.__load_registry()
-        self.__check_exist(name)
+        self.__check_exists(name)
         result = self.__get_meta_data(name).get_image_path()
         if os.path.exists(result) and os.path.isfile(result):
             return result
@@ -929,12 +980,12 @@ class VmRegistry:
     def __generate_random_mac_address(self):
         return randmac.RandMac()
 
-    def __check_exist(self, name):
+    def __check_exists(self, name):
         meta_data = self.__get_meta_data(name)
         if meta_data is None:
             raise Exception("VM with name \"{}\" not found".format(name))
 
-    def __check_non_exist(self, name):
+    def __check_non_exists(self, name):
         meta_data = self.__get_meta_data(name)
         if meta_data is not None:
             raise Exception("VM with name \"{}\" already exist ({})".format(name, meta_data))
@@ -1109,9 +1160,16 @@ class DnsDhcpProvider:
 
 class NetworkBridge:
     def __init__(self, name, bridge_ip_address_and_mask,
-                 dhcp_host_dir="./dhcp-hostsdir"):  # fixme utopia Взять названме с конфига (<open_vpn_server_name>-brigde)
+                 dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None):
         self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__bridge_ip_address_and_mask = ipaddress.ip_interface(bridge_ip_address_and_mask)
+
+        if internet_network_interface is not None:
+            self.__internet_network_interface = NetworkInterface(internet_network_interface)
+            print("Internet network interface SET MANUALLY: {}".format(self.__internet_network_interface))
+        else:
+            self.__internet_network_interface = None
+
         self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir)
         atexit.register(self.close)
 
@@ -1130,7 +1188,8 @@ class NetworkBridge:
 
             self.__setup_firewall()
             self.__setup_bridge_dns_dhcp()
-        except:
+        except Exception as ex:
+            print("Setup VM bridge FAIL: {}".format(ex))
             self.close()
 
     def close(self):
@@ -1152,12 +1211,15 @@ class NetworkBridge:
         subprocess.check_call("sysctl -w net.ipv4.ip_forward=1", shell=True)
 
     def __setup_firewall(self):
-        internet_if = NetworkInterface.get_internet_if()
-        BridgeFirewall(self.__interface, internet_if).setup()
+        if self.__internet_network_interface is None:
+            self.__internet_network_interface = NetworkInterface.get_internet_if()
+        BridgeFirewall(self.__interface, self.__internet_network_interface).setup()
 
     def __clear_firewall(self):
-        internet_if = NetworkInterface.get_internet_if()
-        BridgeFirewall(self.__interface, internet_if).clear_at_exit()
+        try:
+            BridgeFirewall(self.__interface, self.__internet_network_interface).clear_at_exit()
+        except Exception as ex:
+            print("[WARNING] Clear firewall FAIL: {}".format(ex))
 
     def __setup_bridge_dns_dhcp(self):
         self.__dns_dhcp_provider.start()
@@ -1181,7 +1243,7 @@ class TapName:
 
     def __init__(self):
         self.__index = TapName.INDEX_NOT_FOUND
-        for not_used, if_name in NetworkInterface.list():
+        for if_name in NetworkInterface.list():
             current_index = self.get_index_from_if_name(if_name)
             if current_index > self.__index:
                 self.__index = current_index
@@ -1375,7 +1437,7 @@ def main():
     if command == "config":
         if len(sys.argv) == 3:
             config_parameter_name = str(sys.argv[2])
-            print(OpenVpnConfig().get_config_parameter(config_parameter_name))
+            print(OpenVpnConfig().get_config_parameter_strong(config_parameter_name))
             return
         else:
             help_usage()
@@ -1404,6 +1466,7 @@ def main():
         print("XXX")
         print(NetworkInterface("lo").get_ipv4_interface_if())
         print(NetworkInterface("lo").get_ipv6_interface_if())
+        print(NetworkInterface.get_internet_if())
         # return
         # print(ResolvConf().get_nameserver_list())
         # ResolvConf().add_nameserver_if("172.20.0.1")
@@ -1417,7 +1480,7 @@ def main():
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
         # return
         network_bridge = NetworkBridge(vm_bridge_name, config.get_vm_bridge_ip_address_and_mask(),
-                                       config.get_dns_config_dir())
+                                       config.get_dns_config_dir(), config.get_internet_network_interface())
         # network_bridge.create()
         # time.sleep(30)
         # print("network_bridge.close()")
