@@ -966,11 +966,11 @@ class VmRegistry:
     # Инсталлируем ОС через VirtualMachine( VmRegistry().create( vm_name, size_in_gib ), path_to_iso_installer = "/path/to/os_installer.iso" )
     # Добавляем виртуалку в реестр при помощи
 
-    def create(self, name, volume_size_in_gib=20):
+    def create(self, name, image_size_in_gib=20):
         self.__load_registry()
         self.__check_non_exists(name)
         result = self.__build_meta_data(name)
-        subprocess.run(self.__create_image_command_line(result, volume_size_in_gib), shell=True)
+        subprocess.run(self.__create_image_command_line(result, image_size_in_gib), shell=True)
         self.__add_to_registry(result)
         self.__save_registry()
         return result
@@ -992,8 +992,8 @@ class VmRegistry:
             return result
         raise Exception("VM not found in \"{}\"".format(result))
 
-    def __create_image_command_line(self, meta_data, volume_size_in_gib):
-        return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), volume_size_in_gib)
+    def __create_image_command_line(self, meta_data, image_size_in_gib):
+        return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
 
     def __build_meta_data(self, name):
         return VmMetaData(name, self.__get_image_path(name), self.__generate_random_mac_address())
@@ -1496,13 +1496,13 @@ def main():
 
             name = str(sys.argv[2])
 
-            volume_size_in_gib = 20
+            image_size_in_gib = 20
             if len(sys.argv) >= 4:
-                volume_size_in_gib_as_string = sys.argv[3]
-                if volume_size_in_gib_as_string is not None:
-                    volume_size_in_gib = int(volume_size_in_gib_as_string)
+                image_size_in_gib_as_string = sys.argv[3]
+                if image_size_in_gib_as_string is not None:
+                    image_size_in_gib = int(image_size_in_gib_as_string)
 
-            print(VmRegistry(config.get_vm_registry_path()).create(name, volume_size_in_gib))
+            print(VmRegistry(config.get_vm_registry_path()).create(name, image_size_in_gib))
             return
         else:
             help_usage()
