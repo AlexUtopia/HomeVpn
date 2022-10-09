@@ -197,6 +197,8 @@ https://hackware.ru/?p=12588
 
 https://losst.ru/ustanovka-vnc-server-v-ubuntu-18-04
 
+https://losst.ru/avtozagruzka-linux
+
 ### 2.6.4 Настройка RDP сервера гостевой ОС
 
 Основополагающая [статья](https://habr.com/ru/company/ruvds/blog/512878/).

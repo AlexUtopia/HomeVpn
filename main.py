@@ -16,8 +16,6 @@ os.environ['XTABLES_LIBDIR'] = "/usr/lib/x86_64-linux-gnu/xtables/"
 
 import psutil
 import stun
-# import getpass
-# import tuntap
 import iptc
 import socket
 import platform
@@ -26,9 +24,9 @@ import platform
 # https://tproger.ru/translations/demystifying-decorators-in-python/
 
 
-class RealPath:
+class Path:
     def __init__(self, path):
-        self.__path = str(path)
+        self.__path = os.path.expanduser(os.path.expandvars(str(path)))
 
     def get(self):
         if os.path.isabs(self.__path):
@@ -36,6 +34,18 @@ class RealPath:
         this_script_dir = os.path.dirname(os.path.realpath(__file__))
         result = os.path.abspath(os.path.join(this_script_dir, self.__path))
         return result
+
+    def exists(self):
+        return os.path.exists(self.get())
+
+    def makedirs(self):
+        path = self.get()
+        if os.path.isfile(path):
+            raise Exception("Path \"{}\" is path to file".format(path))
+        if os.path.isdir(path):
+            # print("[WARNING] Path \"{}\" is path to exists directory".format(path))
+            return
+        os.makedirs(path)
 
     def __str__(self):
         return self.get()
@@ -46,15 +56,18 @@ class RealPath:
 
 class TextConfigReader:
     def __init__(self, config_file_path, encoding="utf-8"):
-        self.__config_file_path = str(config_file_path)
+        self.__config_file_path = Path(config_file_path)
         self.__encoding = str(encoding)
 
     def get(self):
         return self.__load_from_config()
 
+    def exists(self):
+        return self.__config_file_path.exists()
+
     def __load_from_config(self):
         result = ""
-        with open(self.__config_file_path, mode="rt", encoding=self.__encoding) as config_file:
+        with open(self.__config_file_path.get(), mode="rt", encoding=self.__encoding) as config_file:
             result += str(config_file.read())
         # print("Load from config: {}".format(result))
         return result
@@ -62,21 +75,19 @@ class TextConfigReader:
 
 class TextConfigWriter:
     def __init__(self, config_file_path, encoding="utf-8"):
-        self.__config_file_path = str(config_file_path)
+        self.__config_file_path = Path(config_file_path)
         self.__encoding = str(encoding)
 
     def set(self, data):
-        with open(self.__config_file_path, mode="wt", encoding=self.__encoding) as config_file:
+        self.__makedirs()
+
+        with open(self.__config_file_path.get(), mode="wt", encoding=self.__encoding) as config_file:
             config_file.write(str(data))
         return self.__config_file_path
 
-
-class JsonConfigReader:
-    def __init__(self, config_file_path, encoding="utf-8"):
-        self.__text_config_reader = TextConfigReader(config_file_path, encoding)
-
-    def get(self):
-        return json.loads(self.__text_config_reader.get())
+    def __makedirs(self):
+        config_file_dir = os.path.dirname(self.__config_file_path.get())
+        Path(config_file_dir).makedirs()
 
 
 class JsonConfigWriter:
@@ -87,8 +98,22 @@ class JsonConfigWriter:
         self.__text_config_writer.set(json.dumps(data))
 
 
+class JsonConfigReader:
+    def __init__(self, config_file_path, encoding="utf-8"):
+        self.__text_config_reader = TextConfigReader(config_file_path, encoding)
+        self.__json_config_writer = JsonConfigWriter(config_file_path, encoding)
+
+    def get(self):
+        return json.loads(self.__text_config_reader.get())
+
+    def get_or_create_if_non_exists(self, default_content_if_create="{}"):
+        if not self.__text_config_reader.exists():
+            self.__json_config_writer.set(default_content_if_create)
+        return self.get()
+
+
 class StunServerAddressList(JsonConfigReader):
-    def __init__(self, config_file_path=RealPath("stun-servers.config.json")):
+    def __init__(self, config_file_path="stun-servers.config.json"):
         super().__init__(config_file_path)
 
     pass
@@ -249,7 +274,7 @@ class OpenVpnClient:
 
 
 class TelegramBotConfig(JsonConfigReader):
-    def __init__(self, config_file_path=RealPath("telegram-bot.config.json")):
+    def __init__(self, config_file_path="telegram-bot.config.json"):
         super().__init__(config_file_path)
 
     pass
@@ -298,7 +323,7 @@ class TelegramClient:
 
 
 class OpenVpnConfig:
-    def __init__(self, open_vpn_config_path=RealPath("open-vpn.config.json")):
+    def __init__(self, open_vpn_config_path="open-vpn.config.json"):
         self.__config_reader = JsonConfigReader(open_vpn_config_path)
 
     def get_server_name(self):
@@ -330,6 +355,9 @@ class OpenVpnConfig:
 
     def get_vm_bridge_ip_address_and_mask(self):
         return ipaddress.ip_interface(self.get_config_parameter_strong("vm_bridge_ip_address_and_mask"))
+
+    def get_vm_registry_path(self):
+        return self.get_config_parameter_strong("vm_registry_path")
 
     def get_internet_network_interface(self):
         result = self.get_config_parameter("internet_network_interface")
@@ -399,7 +427,7 @@ class OpenVpnConfig:
 
 
 class OpenVpnClientConfig(OpenVpnConfig):
-    def __init__(self, user_name, open_vpn_config_path=RealPath("open-vpn.config.json")):
+    def __init__(self, user_name, open_vpn_config_path="open-vpn.config.json"):
         super().__init__(open_vpn_config_path)
         self.__user_name = user_name
 
@@ -490,8 +518,8 @@ class OpenVpnConfigKeyValue:
 
 
 class OpenVpnServerConfigGenerator:
-    def __init__(self, config_template_file_path=RealPath("open-vpn-server.config.template"),
-                 output_config_dir=RealPath(".")):
+    def __init__(self, config_template_file_path="open-vpn-server.config.template",
+                 output_config_dir="."):
         self.__config_template_reader = TextConfigReader(config_template_file_path)
         self.__key_value_config = OpenVpnConfigKeyValue()
         self.__open_vpn_config = OpenVpnConfig()
@@ -562,8 +590,8 @@ class OpenVpnServerConfigGenerator:
 
 class OpenVpnClientConfigGenerator:
     def __init__(self, ip_address_and_port, user_name,
-                 config_template_file_path=RealPath("open-vpn-client.config.template"),
-                 output_client_config_dir=RealPath(".")):
+                 config_template_file_path="open-vpn-client.config.template",
+                 output_client_config_dir="."):
         self.__config_template_reader = TextConfigReader(config_template_file_path)
         self.__key_value_config = OpenVpnConfigKeyValue()
         self.__open_vpn_client_config = OpenVpnClientConfig(user_name)
@@ -938,11 +966,11 @@ class VmRegistry:
     # Инсталлируем ОС через VirtualMachine( VmRegistry().create( vm_name, size_in_gib ), path_to_iso_installer = "/path/to/os_installer.iso" )
     # Добавляем виртуалку в реестр при помощи
 
-    def create(self, name, size_in_gib=20):
+    def create(self, name, volume_size_in_gib=20):
         self.__load_registry()
         self.__check_non_exists(name)
         result = self.__build_meta_data(name)
-        subprocess.run(self.__create_image_command_line(result, size_in_gib), shell=True)
+        subprocess.run(self.__create_image_command_line(result, volume_size_in_gib), shell=True)
         self.__add_to_registry(result)
         self.__save_registry()
         return result
@@ -964,8 +992,8 @@ class VmRegistry:
             return result
         raise Exception("VM not found in \"{}\"".format(result))
 
-    def __create_image_command_line(self, meta_data, size_in_gib):
-        return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), size_in_gib)
+    def __create_image_command_line(self, meta_data, volume_size_in_gib):
+        return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), volume_size_in_gib)
 
     def __build_meta_data(self, name):
         return VmMetaData(name, self.__get_image_path(name), self.__generate_random_mac_address())
@@ -1012,8 +1040,8 @@ class ResolvConf:
     __NAMESERVER = "nameserver"
 
     def __init__(self, resolv_conf_path="/etc/resolv.conf"):
-        self.__reader = TextConfigReader(RealPath(resolv_conf_path).get())
-        self.__writer = TextConfigWriter(RealPath(resolv_conf_path).get())
+        self.__reader = TextConfigReader(resolv_conf_path)
+        self.__writer = TextConfigWriter(resolv_conf_path)
         self.__content = str()
 
     def add_nameserver_if(self, nameserver_ip_address):
@@ -1071,7 +1099,7 @@ class DnsDhcpProvider:
 
     def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf()):
         self.__interface = interface
-        self.__dhcp_host_dir = RealPath(dhcp_host_dir).get()
+        self.__dhcp_host_dir = Path(dhcp_host_dir).get()
         self.__resolv_conf = resolv_conf
         self.__dnsmasq_command_line = str()
         self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
@@ -1457,6 +1485,24 @@ def main():
             my_ip_address_and_port = IpAddressAndPort(
                 TextConfigReader(open_vpn_config.get_my_current_ip_address_and_port()).get())
             print(OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate())
+            return
+        else:
+            help_usage()
+            return
+
+    elif command == "vm_create":
+        if len(sys.argv) >= 3:
+            config = OpenVpnConfig()
+
+            name = str(sys.argv[2])
+
+            volume_size_in_gib = 20
+            if len(sys.argv) >= 4:
+                volume_size_in_gib_as_string = sys.argv[3]
+                if volume_size_in_gib_as_string is not None:
+                    volume_size_in_gib = int(volume_size_in_gib_as_string)
+
+            print(VmRegistry(config.get_vm_registry_path()).create(name, volume_size_in_gib))
             return
         else:
             help_usage()

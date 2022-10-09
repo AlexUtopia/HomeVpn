@@ -12,7 +12,7 @@
   "watchdog_user_name": "watchdog",
   "my_current_ip_address_and_port": "./my_current_ip_address_and_port.txt",
   "vm_bridge_ip_address_and_mask": "172.20.0.5/16",
-  "vm_registry_path": "vm-registry.json",
+  "vm_registry_path": "./vm-registry.json",
   "dns_config_dir": "/opt/dhcp-hostsdir",
   "internet_network_interface": null
 }
