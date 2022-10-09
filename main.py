@@ -41,7 +41,7 @@ class Path:
     def makedirs(self):
         path = self.get()
         if os.path.isfile(path):
-            raise Exception("Path \"{}\" is path to file".format(path))
+            raise Exception("Path \"{}\" is path to file, but should be a directory path".format(path))
         if os.path.isdir(path):
             # print("[WARNING] Path \"{}\" is path to exists directory".format(path))
             return
@@ -894,7 +894,7 @@ class VmName:
 class VmMetaData:
     def __init__(self, name, image_path, mac_address):
         self.__name = VmName(name)
-        self.__image_path = str(image_path)
+        self.__image_path = Path(image_path)
         self.__mac_address = netaddr.EUI(str(mac_address))
 
     def __hash__(self):
@@ -929,10 +929,13 @@ class VmMetaData:
                                                      "mac_address": mac_address_as_string}})
 
     def get_name(self):
-        return self.__name
+        return str(self.__name)
 
     def get_image_path(self):
-        return self.__image_path
+        return str(self.__image_path)
+
+    def image_exists(self):
+        return self.__image_path.exists() and os.path.isfile(self.get_image_path())
 
     def get_mac_address(self):
         return self.__mac_address
@@ -961,7 +964,7 @@ class VmRegistry:
         self.__registry_reader = JsonConfigReader(vm_registry_config_path)
         self.__registry_writer = JsonConfigWriter(vm_registry_config_path)
         self.__registry_as_dict = dict()
-        self.__vm_dir_default = os.path.dirname(vm_registry_config_path)
+        self.__vm_dir_default = Path(os.path.dirname(vm_registry_config_path))
 
     # Инсталлируем ОС через VirtualMachine( VmRegistry().create( vm_name, size_in_gib ), path_to_iso_installer = "/path/to/os_installer.iso" )
     # Добавляем виртуалку в реестр при помощи
@@ -970,6 +973,9 @@ class VmRegistry:
         self.__load_registry()
         self.__check_non_exists(name)
         result = self.__build_meta_data(name)
+        if result.image_exists():
+            raise Exception("VM image \"{}\" EXISTS. Please change VM name or move/delete current image".format(
+                result.get_image_path()))
         subprocess.run(self.__create_image_command_line(result, image_size_in_gib), shell=True)
         self.__add_to_registry(result)
         self.__save_registry()
@@ -987,10 +993,10 @@ class VmRegistry:
     def get_path_to_image_with_verifying(self, name):
         self.__load_registry()
         self.__check_exists(name)
-        result = self.__get_meta_data(name).get_image_path()
-        if os.path.exists(result) and os.path.isfile(result):
-            return result
-        raise Exception("VM not found in \"{}\"".format(result))
+        meta_data = self.__get_meta_data(name)
+        if meta_data.image_exists():
+            return meta_data.get_image_path()
+        raise Exception("VM image \"{}\" NOT FOUND".format(meta_data.get_image_path()))
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
         return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
@@ -999,7 +1005,7 @@ class VmRegistry:
         return VmMetaData(name, self.__get_image_path(name), self.__generate_random_mac_address())
 
     def __get_image_path(self, name):
-        return os.path.join(self.__vm_dir_default, self.__get_image_filename(name))
+        return os.path.join(str(self.__vm_dir_default), self.__get_image_filename(name))
 
     def __get_image_filename(self, name):
         return "{}{}".format(VmName(name), self.__IMAGE_EXTENSION)
@@ -1028,7 +1034,7 @@ class VmRegistry:
         self.__registry_writer.set(self.__registry_as_dict)
 
     def __load_registry(self):
-        self.__registry_as_dict = self.__registry_reader.get()
+        self.__registry_as_dict = self.__registry_reader.get_or_create_if_non_exists()
 
 
 # https://man7.org/linux/man-pages/man5/resolv.conf.5.html
@@ -1099,7 +1105,7 @@ class DnsDhcpProvider:
 
     def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf()):
         self.__interface = interface
-        self.__dhcp_host_dir = Path(dhcp_host_dir).get()
+        self.__dhcp_host_dir = Path(dhcp_host_dir)
         self.__resolv_conf = resolv_conf
         self.__dnsmasq_command_line = str()
         self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
@@ -1134,13 +1140,8 @@ class DnsDhcpProvider:
         return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} {}".format(
             self.__interface, self.__dhcp_host_dir, self.__get_dhcp_range_parameter())
 
-    def __make_dhcp_host_dir(self):  # fixme utopia обобщить, os.makedirs() используется ещё в одном месте (RealPath?)
-        if os.path.exists(self.__dhcp_host_dir):
-            if not os.path.isdir(self.__dhcp_host_dir):
-                raise Exception(
-                    "\"{}\" is path to file, but should be a directory path")  # fixme utopia Надо дать пользователю рекомендацию что делать
-        else:
-            os.makedirs(self.__dhcp_host_dir)
+    def __make_dhcp_host_dir(self):
+        self.__dhcp_host_dir.makedirs()
 
     def __get_dhcp_host_file_path(self, vm_meta_data):
         return os.path.join(self.__dhcp_host_dir, self.__get_dhcp_host_file_name(vm_meta_data.get_name()))
