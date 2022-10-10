@@ -106,7 +106,7 @@ class JsonConfigReader:
     def get(self):
         return json.loads(self.__text_config_reader.get())
 
-    def get_or_create_if_non_exists(self, default_content_if_create="{}"):
+    def get_or_create_if_non_exists(self, default_content_if_create=dict()):
         if not self.__text_config_reader.exists():
             self.__json_config_writer.set(default_content_if_create)
         return self.get()
@@ -897,14 +897,11 @@ class VmMetaData:
         self.__image_path = Path(image_path)
         self.__mac_address = netaddr.EUI(str(mac_address))
 
-    def __hash__(self):
-        return self.__name.__hash__()
+    def __str__(self):
+        return str(self.to_dict())
 
-    def __eq__(self, other):
-        if other is VmMetaData:
-            return self.__name.__eq__(other.get_name())
-        else:
-            return self.__name.__eq__(VmName(other))
+    def __repr__(self):
+        return self.__str__()
 
     @staticmethod
     def from_dict(name, vm_registry_as_dict):
@@ -922,11 +919,14 @@ class VmMetaData:
         return result
 
     def append_to_dict_force(self, vm_registry_as_dict):
+        vm_registry_as_dict.update(self.to_dict())
+
+    def to_dict(self):
         name_as_string = str(self.get_name())
         image_path_as_string = str(self.get_image_path())
         mac_address_as_string = str(self.get_mac_address())
-        vm_registry_as_dict.update({name_as_string: {"image_path": image_path_as_string,
-                                                     "mac_address": mac_address_as_string}})
+        return {name_as_string: {"image_path": image_path_as_string,
+                                 "mac_address": mac_address_as_string}}
 
     def get_name(self):
         return str(self.__name)
@@ -974,9 +974,12 @@ class VmRegistry:
         self.__check_non_exists(name)
         result = self.__build_meta_data(name)
         if result.image_exists():
-            raise Exception("VM image \"{}\" EXISTS. Please change VM name or move/delete current image".format(
+            raise Exception("VM image \"{}\" EXISTS. Please change VM name or rename/move/delete current image".format(
                 result.get_image_path()))
-        subprocess.run(self.__create_image_command_line(result, image_size_in_gib), shell=True)
+
+        command_line = self.__create_image_command_line(result, image_size_in_gib)
+        print(command_line)
+        subprocess.check_call(command_line, shell=True)
         self.__add_to_registry(result)
         self.__save_registry()
         return result
@@ -992,17 +995,16 @@ class VmRegistry:
 
     def get_path_to_image_with_verifying(self, name):
         self.__load_registry()
-        self.__check_exists(name)
         meta_data = self.__get_meta_data(name)
-        if meta_data.image_exists():
+        if VmRegistry.__image_exists(meta_data):
             return meta_data.get_image_path()
-        raise Exception("VM image \"{}\" NOT FOUND".format(meta_data.get_image_path()))
+        raise Exception("VM image \"{}\" NOT FOUND".format(name))
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
-        return "qemu-img -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
+        return "qemu-img create -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
 
     def __build_meta_data(self, name):
-        return VmMetaData(name, self.__get_image_path(name), self.__generate_random_mac_address())
+        return VmMetaData(name, self.__get_image_path(name), VmRegistry.__generate_random_mac_address())
 
     def __get_image_path(self, name):
         return os.path.join(str(self.__vm_dir_default), self.__get_image_filename(name))
@@ -1011,18 +1013,17 @@ class VmRegistry:
         return "{}{}".format(VmName(name), self.__IMAGE_EXTENSION)
 
     @staticmethod
-    def __generate_random_mac_address(self):
+    def __generate_random_mac_address():
         return randmac.RandMac()
-
-    def __check_exists(self, name):
-        meta_data = self.__get_meta_data(name)
-        if meta_data is None:
-            raise Exception("VM with name \"{}\" not found".format(name))
 
     def __check_non_exists(self, name):
         meta_data = self.__get_meta_data(name)
-        if meta_data is not None:
+        if VmRegistry.__image_exists(meta_data):
             raise Exception("VM with name \"{}\" already exist ({})".format(name, meta_data))
+
+    @staticmethod
+    def __image_exists(meta_data):
+        return meta_data is not None and meta_data.image_exists()
 
     def __add_to_registry(self, meta_data):
         meta_data.append_to_dict_force(self.__registry_as_dict)
@@ -1503,7 +1504,7 @@ def main():
                 if image_size_in_gib_as_string is not None:
                     image_size_in_gib = int(image_size_in_gib_as_string)
 
-            print(VmRegistry(config.get_vm_registry_path()).create(name, image_size_in_gib))
+            print(VmRegistry(config.get_vm_registry_path()).create(name, image_size_in_gib).get_image_path())
             return
         else:
             help_usage()
