@@ -1,6 +1,7 @@
 import atexit
 import os.path
 import re
+import shlex
 import subprocess
 import json
 import ipaddress
@@ -987,18 +988,21 @@ class VmRegistry:
     def list(self):
         self.__load_registry()
         result = []
-        for name in self.__meta_data_dict:
+        for name in self.__registry_as_dict:
             meta_data = self.__get_meta_data(name)
             if meta_data is not None:
                 result.append(meta_data)
         return result
 
-    def get_path_to_image_with_verifying(self, name):
+    def get_with_verifying(self, name):
         self.__load_registry()
         meta_data = self.__get_meta_data(name)
         if VmRegistry.__image_exists(meta_data):
-            return meta_data.get_image_path()
+            return meta_data
         raise Exception("VM image \"{}\" NOT FOUND".format(name))
+
+    def get_path_to_image_with_verifying(self, name):
+        return self.get_with_verifying().get_image_path()
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
         return "qemu-img create -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
@@ -1138,14 +1142,14 @@ class DnsDhcpProvider:
             self.__build_dhcp_host_file_content(vm_meta_data))
 
     def __build_dnsmasq_command_line(self):
-        return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir={} {}".format(
+        return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir=\"{}\" {}".format(
             self.__interface, self.__dhcp_host_dir, self.__get_dhcp_range_parameter())
 
     def __make_dhcp_host_dir(self):
         self.__dhcp_host_dir.makedirs()
 
     def __get_dhcp_host_file_path(self, vm_meta_data):
-        return os.path.join(self.__dhcp_host_dir, self.__get_dhcp_host_file_name(vm_meta_data.get_name()))
+        return os.path.join(str(self.__dhcp_host_dir), self.__get_dhcp_host_file_name(vm_meta_data.get_name()))
 
     def __get_dhcp_host_file_name(self, name):
         return "{}{}".format(name, self.__HOST_EXTENSION)
@@ -1161,7 +1165,9 @@ class DnsDhcpProvider:
                 process.kill()
 
     def __compare_cmd_line(self, psutil_process_cmdline):
-        return " ".join(psutil_process_cmdline).endswith(self.__dnsmasq_command_line)
+        normalize_command_line = " ".join(shlex.split(self.__dnsmasq_command_line))
+        psutil_command_line = " ".join(psutil_process_cmdline)
+        return psutil_command_line.endswith(normalize_command_line)
 
     def __get_dhcp_range_parameter(self):
         ip_address_start, ip_address_end = self.__get_dhcp_range()
@@ -1243,6 +1249,7 @@ class NetworkBridge:
     def __setup_firewall(self):
         if self.__internet_network_interface is None:
             self.__internet_network_interface = NetworkInterface.get_internet_if()
+        print("Internet network interface: {}".format(self.__internet_network_interface))
         BridgeFirewall(self.__interface, self.__internet_network_interface).setup()
 
     def __clear_firewall(self):
@@ -1339,6 +1346,7 @@ class VirtualMachine:
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
+        self.__path_to_iso_installer = path_to_iso_installer
 
     def run(self):
         self.__network_bridge.create()
@@ -1350,7 +1358,7 @@ class VirtualMachine:
     def __command_line(self):
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
                               self.__network(),
-                              self.__other(), self.__disk()]
+                              self.__other(), self.__disk(), self.__iso_installer()]
         return " ".join(command_parts_list)
 
     @staticmethod
@@ -1379,7 +1387,12 @@ class VirtualMachine:
             tap_name, netdev_id, self.__vm_meta_data.get_mac_address_as_string())
 
     def __disk(self):
-        return "/opt/share/disk1.img"
+        return "\"{}\"".format(self.__vm_meta_data.get_image_path())
+
+    def __iso_installer(self):
+        if self.__path_to_iso_installer is None:
+            return ""
+        return "-cdrom \"{}\"".format(self.__path_to_iso_installer)
 
     def __other(self):
         # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
@@ -1445,6 +1458,10 @@ def help_usage():
         "check <none parameters>\n"
         "  or\n"
         "user_ovpn <user name>\n"
+        "  or\n"
+        "vm_create <vm name> <image size in gibibytes>\n"
+        "  or\n"
+        "vm_install <vm name> <path to iso disk with os distributive>\n"
         "\n"
         "\n"
         "  config - get config parameter value by name from open-vpn.config.json\n"
@@ -1455,7 +1472,12 @@ def help_usage():
         "  check - check you NAT type for udp hole punching\n"
         "\n"
         "  user_ovpn - generate openvpn client config file (*.ovpn) for specified user\n"
-        "")
+        "\n"
+        "  vm_create - create vm image with <vm name> and <image size in gibibytes>,"
+        "    default image size 20 GiB"
+        "\n"
+        "  vm_install - install os on vm image created by vm_create command"
+    )
 
 
 def main():
@@ -1505,6 +1527,26 @@ def main():
                     image_size_in_gib = int(image_size_in_gib_as_string)
 
             print(VmRegistry(config.get_vm_registry_path()).create(name, image_size_in_gib).get_image_path())
+            return
+        else:
+            help_usage()
+            return
+
+    elif command == "vm_install":
+        if len(sys.argv) >= 3:
+            vm_name = str(sys.argv[2])
+            path_to_os_iso_disk = Path(sys.argv[3])
+            if not path_to_os_iso_disk.exists():
+                raise Exception("VM installer \"{}\" NOT FOUND".format(path_to_os_iso_disk))
+
+            config = OpenVpnConfig()
+            network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
+                                           config.get_dns_config_dir(), config.get_internet_network_interface())
+
+            vm_registry = VmRegistry(config.get_vm_registry_path())
+            vm_meta_data = vm_registry.get_with_verifying(vm_name)
+            vm = VirtualMachine(network_bridge, vm_meta_data, path_to_os_iso_disk)
+            vm.run()
             return
         else:
             help_usage()
