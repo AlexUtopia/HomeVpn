@@ -1005,7 +1005,7 @@ class VmRegistry:
         return self.get_with_verifying().get_image_path()
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
-        return "qemu-img create -f {} {} {}".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
+        return "qemu-img create -f {} {} {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
 
     def __build_meta_data(self, name):
         return VmMetaData(name, self.__get_image_path(name), VmRegistry.__generate_random_mac_address())
