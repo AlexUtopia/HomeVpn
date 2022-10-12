@@ -1473,8 +1473,8 @@ def help_usage():
         "\n"
         "  user_ovpn - generate openvpn client config file (*.ovpn) for specified user\n"
         "\n"
-        "  vm_create - create vm image with <vm name> and <image size in gibibytes>,"
-        "    default image size 20 GiB"
+        "  vm_create - create vm image with <vm name> and <image size in gibibytes>,\n"
+        "    default image size 20 GiB\n"
         "\n"
         "  vm_install - install os on vm image created by vm_create command"
     )
