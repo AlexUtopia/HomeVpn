@@ -228,6 +228,19 @@ qemu-system-$(uname -m) -device virtio-vga-gl,help
 Доступные опции для виртуального дисплея sdl описаны [здесь](https://www.qemu.org/docs/master/system/invocation.html#hxtool-3).
 
 
+#### 2.6.2.2 Virtual GPU при помощи LibVF.IO 
+
+fixme utopia Попробовать
+
+https://arccompute.com/blog/libvfio-commodity-gpu-multiplexing/
+
+https://github.com/Arc-Compute/LibVF.IO/
+
+https://www.youtube.com/watch?v=wqUjukaTqEg
+
+https://www.youtube.com/watch?v=xbVKMQ1Rz2Y
+
+
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
 Основополагающая [статья](https://habr.com/ru/company/ruvds/blog/510860/).
