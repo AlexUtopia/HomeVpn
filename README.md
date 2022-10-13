@@ -61,7 +61,7 @@ dpkg -S $(which ip)
 
 export PYTHON_VERSION=3.10
 
-sudo apt-get install python${PYTHON_VERSION} openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base
+sudo apt-get install python${PYTHON_VERSION} openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base coreutils
 
 sudo python${PYTHON_VERSION} -m pip install pip --force-reinstall --ignore-installed
 
@@ -85,6 +85,8 @@ fixme utopia Что нужно установить для KVM?
 https://ubuntu.com/blog/kvm-hyphervisor
 
 procps - для утилиты sysctl которая используется для записи параметров ядра
+
+coreutils - содержит утилиту uname
 
 [Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
 
@@ -168,7 +170,15 @@ xtigervncviewer 127.0.0.1:2
 
 ```
 
-### 2.6.1 Настройка сетевого адаптера виртальной машины
+Посмотреть список доступных устройств можно так (см. описание опции [-device](https://www.qemu.org/docs/master/system/invocation.html#hxtool-0))
+
+```bash
+
+qemu-system-$(uname -m) -device help
+
+```
+
+### 2.6.1 Настройка сетевого адаптера виртуальной машины
 
 [Статья](http://sassan.me.uk/blog/qemu-and-openvpn-secure-and-convenient-remote-access-to-virtual-servers/) описывающая
 подключение виртуальных машин Qemu к OpnVpn (Routing or Bridging?).
@@ -187,7 +197,36 @@ https://wiki.gentoo.org/wiki/QEMU/Options#Virtual_network_cable_.28TAP.29
 Возможные варианты проброса видеокарты в гостевую ОС
 описаны [здесь](https://wiki.archlinux.org/title/QEMU/Guest_graphics_acceleration).
 
-fixme utopia Будем пробовать все подходы
+
+#### 2.6.2.1 Paravirtualization при помощи virtio и Mesa3G/VirGL
+
+Настройка параметров qemu описана [здесь](https://wiki.archlinux.org/title/QEMU#virtio).
+
+Технологии VirGL описана в [официальной доке](https://docs.mesa3d.org/drivers/virgl.html) на Mesa3D.
+
+Проверка возможности аппаратного кодирования/декодирования видео описана [здесь](https://wiki.archlinux.org/title/Hardware_video_acceleration_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)).
+
+Отмечу что тут речь идёт только лишь о возможности аппаратного ускорения OpenGL,
+при этом аппаратно ускорять кодирование/декодирование видео пока нельзя.
+На самом деле это полуправда, т.к. в [релиз 0.10.0](https://gitlab.freedesktop.org/virgl/virglrenderer/-/releases/virglrenderer-0.10.0)
+была добавлена эта возможность, но пакет [libvirglrenderer1](https://packages.ubuntu.com/search?searchon=sourcenames&keywords=virglrenderer)
+для Ubuntu ещё не обновился на минимально требуемую версию.
+Отсутствие аппаратного ускорения кодирования/декодирования видео может ухудшить возможности
+виртуальной машины стать полноценным мультимедийным сервером, к примеру, для использования
+в качестве Android TV приставки.
+Ручную сборку актуального пакета virglrenderer я пока не рассматриваю.
+
+
+Доступные опции для виртуальной видеокарты (vga) можно посмотреть так
+
+```bash
+
+qemu-system-$(uname -m) -device virtio-vga-gl,help
+
+```
+
+Доступные опции для виртуального дисплея sdl описаны [здесь](https://www.qemu.org/docs/master/system/invocation.html#hxtool-3).
+
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 

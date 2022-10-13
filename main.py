@@ -877,6 +877,7 @@ class BridgeFirewall:
 # https://en.wikipedia.org/wiki/Hostname
 # Название должно полностью подчиняться правилам формирования host имени
 # tolower case
+# без точек в имени dnsmasq их не понимает https://serverfault.com/a/229349
 class VmName:
     # https://stackoverflow.com/questions/106179/regular-expression-to-match-dns-hostname-or-ip-address
     __REGEX = ""
@@ -1005,7 +1006,7 @@ class VmRegistry:
         return self.get_with_verifying().get_image_path()
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
-        return "qemu-img create -f {} {} {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
+        return "qemu-img create -f {} \"{}\" {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
 
     def __build_meta_data(self, name):
         return VmMetaData(name, self.__get_image_path(name), VmRegistry.__generate_random_mac_address())
@@ -1462,6 +1463,8 @@ def help_usage():
         "vm_create <vm name> <image size in gibibytes>\n"
         "  or\n"
         "vm_install <vm name> <path to iso disk with os distributive>\n"
+        "  or\n"
+        "vm_run <vm name>\n"
         "\n"
         "\n"
         "  config - get config parameter value by name from open-vpn.config.json\n"
@@ -1476,7 +1479,9 @@ def help_usage():
         "  vm_create - create vm image with <vm name> and <image size in gibibytes>,\n"
         "    default image size 20 GiB\n"
         "\n"
-        "  vm_install - install os on vm image created by vm_create command"
+        "  vm_install - install os on vm image created by vm_create command\n"
+        "\n"
+        "  vm_run - run vn by name, see vm_create and vm_install commands\n"
     )
 
 
@@ -1546,6 +1551,23 @@ def main():
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
             vm = VirtualMachine(network_bridge, vm_meta_data, path_to_os_iso_disk)
+            vm.run()
+            return
+        else:
+            help_usage()
+            return
+
+    elif command == "vm_run":
+        if len(sys.argv) >= 2:
+            vm_name = str(sys.argv[2])
+
+            config = OpenVpnConfig()
+            network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
+                                           config.get_dns_config_dir(), config.get_internet_network_interface())
+
+            vm_registry = VmRegistry(config.get_vm_registry_path())
+            vm_meta_data = vm_registry.get_with_verifying(vm_name)
+            vm = VirtualMachine(network_bridge, vm_meta_data)
             vm.run()
             return
         else:
