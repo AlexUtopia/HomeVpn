@@ -276,6 +276,17 @@ https://setiwik.ru/kak-ustanovit-xrdp-na-ubuntu-20-04/
 
 https://www.avoiderrors.com/easily-remote-connect-to-linux-mint-20-2-from-any-os/
 
+### 2.6.4 Аппаратное ускорение OpenGL по SSH и VNC для гостевых ОС Linux
+
+https://virtualgl.org/
+
+https://www.turbovnc.org/
+
+https://wiki.archlinux.org/title/VirtualGL
+
+https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-turbovnc
+
+
 # 3 Инсталяция системы
 
 1. настроить домашний роутер fixme utopia
