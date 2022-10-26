@@ -240,6 +240,20 @@ https://www.youtube.com/watch?v=wqUjukaTqEg
 
 https://www.youtube.com/watch?v=xbVKMQ1Rz2Y
 
+Настроить виртуальные SR-IOV устройства по инструкции
+
+https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/virtualization_deployment_and_administration_guide/sect-pci_devices-pci_passthrough
+
+```bash
+
+cat /sys/class/graphics/fb0/device/sriov_totalvfs
+
+```
+
+Обзорная статья по linux sysfs
+
+https://man7.org/linux/man-pages/man5/sysfs.5.html
+
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
