@@ -254,6 +254,23 @@ cat /sys/class/graphics/fb0/device/sriov_totalvfs
 
 https://man7.org/linux/man-pages/man5/sysfs.5.html
 
+Проверить работоспособность vfio
+
+https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF
+
+Гайд по Single GPU Passthrough
+
+https://www.youtube.com/watch?v=hQL5h5GteTY&feature=youtu.be
+
+https://gitlab.com/risingprismtv/single-gpu-passthrough/-/wikis/home
+
+Linux vfio
+
+https://docs.kernel.org/driver-api/vfio.html
+
+https://askubuntu.com/questions/1247058/how-do-i-confirm-that-vfio-is-working-in-20-04
+https://superuser.com/questions/577307/how-to-get-a-list-of-active-drivers-that-are-statically-built-into-the-linux-ker
+
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
