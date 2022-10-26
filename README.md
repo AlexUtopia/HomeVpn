@@ -267,9 +267,20 @@ https://gitlab.com/risingprismtv/single-gpu-passthrough/-/wikis/home
 Linux vfio
 
 https://docs.kernel.org/driver-api/vfio.html
+https://www.ibm.com/docs/en/linux-on-systems?topic=through-pci
+https://www.reddit.com/r/VFIO/comments/nbdeov/when_to_use_vfiopcibind_vs_vfiopcinew_id/
+https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-bus-pci
+
+Проверка наличия builtin kernel module vfio
 
 https://askubuntu.com/questions/1247058/how-do-i-confirm-that-vfio-is-working-in-20-04
 https://superuser.com/questions/577307/how-to-get-a-list-of-active-drivers-that-are-statically-built-into-the-linux-ker
+
+```bash
+
+qemu-system-$(uname -m) -device vfio-pci,help
+
+```
 
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
