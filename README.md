@@ -240,6 +240,11 @@ https://www.youtube.com/watch?v=wqUjukaTqEg
 
 https://www.youtube.com/watch?v=xbVKMQ1Rz2Y
 
+Подробный обзор SR-IOV
+
+https://projectacrn.github.io/latest/tutorials/sriov_virtualization.html
+
+
 Настроить виртуальные SR-IOV устройства по инструкции
 
 https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/virtualization_deployment_and_administration_guide/sect-pci_devices-pci_passthrough
@@ -282,6 +287,29 @@ qemu-system-$(uname -m) -device vfio-pci,help
 
 ```
 
+Не получается активировать SR-IOV
+
+```bash
+
+sudo echo 3 > /sys/class/graphics/fb0/device/sriov_numvfs
+
+```
+
+https://www.reddit.com/r/VFIO/comments/twx11c/another_thread_about_sriov_on_intel_iris_xe_gpu/
+
+https://github.com/strongtz/i915-sriov-dkms
+
+У моего ядра (драйвер i915) нет поддержки SR-IOV - отсюда и не работает
+
+https://github.com/intel/linux-intel-lts/tree/lts-v5.15.49-adl-linux-220826T092047Z
+
+https://community.intel.com/t5/Graphics/SR-IOV-support-for-intel-Iris-Xe-Graphics-on-i7-1165G7/m-p/1294449/highlight/true#M98498
+
+```bash
+
+sudo apt-get install linux-source
+
+```
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
