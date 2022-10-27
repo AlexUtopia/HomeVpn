@@ -301,7 +301,7 @@ https://github.com/strongtz/i915-sriov-dkms
 
 У моего ядра (драйвер i915) нет поддержки SR-IOV - отсюда и не работает
 
-https://github.com/intel/linux-intel-lts/tree/lts-v5.15.49-adl-linux-220826T092047Z
+https://github.com/intel/linux-intel-lts/commit/daaac8806cd0e918ec4fe1883f4631ce9a9bc542
 
 https://community.intel.com/t5/Graphics/SR-IOV-support-for-intel-Iris-Xe-Graphics-on-i7-1165G7/m-p/1294449/highlight/true#M98498
 
