@@ -360,6 +360,9 @@ class OpenVpnConfig:
     def get_vm_registry_path(self):
         return self.get_config_parameter_strong("vm_registry_path")
 
+    def get_vm_dir(self):
+        return os.path.dirname(self.get_vm_registry_path())
+
     def get_internet_network_interface(self):
         result = self.get_config_parameter("internet_network_interface")
         if result is None:
@@ -368,6 +371,9 @@ class OpenVpnConfig:
 
     def get_dns_config_dir(self):
         return self.get_config_parameter_strong("dns_config_dir")
+
+    def get_virtio_win_drivers_url(self):
+        return self.get_config_parameter_strong("virtio_win_drivers_url")
 
     def get_server_log_path(self):
         return os.path.join(self.get_server_logs_dir(), "server.log")
@@ -1006,7 +1012,8 @@ class VmRegistry:
         return self.get_with_verifying().get_image_path()
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
-        return "qemu-img create -f {} \"{}\" {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(), image_size_in_gib)
+        return "qemu-img create -f {} \"{}\" {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(),
+                                                         image_size_in_gib)
 
     def __build_meta_data(self, name):
         return VmMetaData(name, self.__get_image_path(name), VmRegistry.__generate_random_mac_address())
@@ -1340,14 +1347,46 @@ class Tap:
         subprocess.check_call("ip tuntap del dev {} mode tap".format(self.__interface), shell=True)
 
 
+class Virtio:
+    __WIN_DRIVERS_FILENAME = "virtio-win-drivers.iso"
+
+    def __init__(self, project_config):
+        self.__project_config = project_config
+
+    def get_win_drivers(self):
+        win_drivers_iso_path = self.__get_win_drivers_iso_path()
+        if win_drivers_iso_path.exists():
+            print("Virtio win drivers was downloaded: \"{}\"".format(win_drivers_iso_path))
+            return win_drivers_iso_path
+
+        self.__download_win_drivers(win_drivers_iso_path)
+        return win_drivers_iso_path
+
+    def __get_win_drivers_iso_path(self):
+        return Path(os.path.join(self.__get_and_make_vm_dir(), Virtio.__WIN_DRIVERS_FILENAME))
+
+    def __get_and_make_vm_dir(self):
+        result = self.__project_config.get_vm_dir()
+        Path(result).makedirs()
+        return result
+
+    def __download_win_drivers(self, win_drivers_iso_path):
+        virtio_win_drivers_url = self.__project_config.get_virtio_win_drivers_url()
+
+        print("Virtio win drivers DOWNLOAD: {} --> \"{}\"".format(virtio_win_drivers_url, win_drivers_iso_path))
+        urllib.request.urlretrieve(virtio_win_drivers_url, str(win_drivers_iso_path))
+        print("Virtio win drivers DOWNLOAD: OK")
+
+
 class VirtualMachine:
     def __init__(self, network_bridge,
                  vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
-                 path_to_iso_installer=None):
+                 path_to_iso_installer=None, virtio=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
         self.__path_to_iso_installer = path_to_iso_installer
+        self.__virtio = virtio
 
     def run(self):
         self.__network_bridge.create()
@@ -1359,7 +1398,7 @@ class VirtualMachine:
     def __command_line(self):
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
                               self.__network(),
-                              self.__other(), self.__disk(), self.__iso_installer()]
+                              self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers()]
         return " ".join(command_parts_list)
 
     @staticmethod
@@ -1388,7 +1427,7 @@ class VirtualMachine:
             tap_name, netdev_id, self.__vm_meta_data.get_mac_address_as_string())
 
     def __disk(self):
-        return "\"{}\"".format(self.__vm_meta_data.get_image_path())
+        return "-drive file=\"{}\",media=disk,if=virtio".format(self.__vm_meta_data.get_image_path())
 
     def __iso_installer(self):
         if self.__path_to_iso_installer is None:
@@ -1402,7 +1441,12 @@ class VirtualMachine:
         # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
         # https://www.youtube.com/watch?v=ELbxhm1-rno
         # -full-screen
-        return "-smp 8,sockets=1,cores=4,threads=2,maxcpus=8 -usb -device usb-host,vendorid=0x8087,productid=0x0026 -vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on,window-close=on"
+        return "-smp 8,sockets=1,cores=4,threads=2,maxcpus=8 -usb -device usb-host,vendorid=0x8087,productid=0x0026 -vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on"
+
+    def __virtio_win_drivers(self):
+        if self.__virtio is None:
+            return ""
+        return "-drive file=\"{}\",media=cdrom,if=ide".format(self.__virtio.get_win_drivers())
 
 
 class Daemon:
@@ -1550,7 +1594,8 @@ def main():
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
-            vm = VirtualMachine(network_bridge, vm_meta_data, path_to_os_iso_disk)
+            virtio = Virtio(config)
+            vm = VirtualMachine(network_bridge, vm_meta_data, path_to_os_iso_disk, virtio=virtio)
             vm.run()
             return
         else:

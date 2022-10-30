@@ -228,7 +228,7 @@ qemu-system-$(uname -m) -device virtio-vga-gl,help
 Доступные опции для виртуального дисплея sdl описаны [здесь](https://www.qemu.org/docs/master/system/invocation.html#hxtool-3).
 
 
-#### 2.6.2.2 Virtual GPU при помощи LibVF.IO 
+#### 2.6.2.2 Virtual GPU при помощи LibVF.IO
 
 fixme utopia Попробовать
 
@@ -272,13 +272,17 @@ https://gitlab.com/risingprismtv/single-gpu-passthrough/-/wikis/home
 Linux vfio
 
 https://docs.kernel.org/driver-api/vfio.html
+
 https://www.ibm.com/docs/en/linux-on-systems?topic=through-pci
+
 https://www.reddit.com/r/VFIO/comments/nbdeov/when_to_use_vfiopcibind_vs_vfiopcinew_id/
+
 https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-bus-pci
 
 Проверка наличия builtin kernel module vfio
 
 https://askubuntu.com/questions/1247058/how-do-i-confirm-that-vfio-is-working-in-20-04
+
 https://superuser.com/questions/577307/how-to-get-a-list-of-active-drivers-that-are-statically-built-into-the-linux-ker
 
 ```bash
@@ -299,19 +303,35 @@ https://www.reddit.com/r/VFIO/comments/twx11c/another_thread_about_sriov_on_inte
 
 https://github.com/strongtz/i915-sriov-dkms
 
-У моего ядра (драйвер i915) нет поддержки SR-IOV - отсюда и не работает
-
+У моего ядра (драйвер GPU i915) нет поддержки SR-IOV - отсюда и не работает
 
 https://github.com/intel/linux-intel-lts/tree/lts-v5.15.49-adl-linux-220826T092047Z
+
 https://github.com/intel/linux-intel-lts/commit/daaac8806cd0e918ec4fe1883f4631ce9a9bc542
 
 https://community.intel.com/t5/Graphics/SR-IOV-support-for-intel-Iris-Xe-Graphics-on-i7-1165G7/m-p/1294449/highlight/true#M98498
+
+https://github.com/intel/linux-intel-lts/issues/33#issuecomment-1176996341
 
 ```bash
 
 sudo apt-get install linux-source
 
 ```
+
+#### 2.6.2.3 Virtual GPU при помощи GVT-g
+
+Основополагающая [статья](https://wiki.archlinux.org/title/Intel_GVT-g).
+Подробное руководство по настройке GVT-g с [хабра](https://habr.com/ru/post/437270/).
+[Руководство с linux.org.ru](https://www.linux.org.ru/gallery/screenshots/16793722).
+Поддерживаемые GVT-g [GPU](https://open-iov.org/index.php/GPU_Support).
+
+GVT-g не поддерживается для Tiget Lake процессоров Intel
+
+https://github.com/intel/gvt-linux/issues/174#issuecomment-1288728895
+
+GVT-g попробовать на ноутбуке Галины (Intel N4120 (UHD Graphics 600))
+
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
@@ -444,3 +464,11 @@ fixme utopia Описать содержимое open-vpn.config.json
 
 1. Следить за температорой видеокарты для виртуальной машины
 2. Описать как запустить игры на виртуальной машине с проброшенной видеокартой (Windows)
+
+
+Установка Win
+
+https://wiki.archlinux.org/title/QEMU#Preparing_a_Windows_guest
+
+https://devsday.ru/blog/details/10111
+https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
