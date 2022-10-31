@@ -332,6 +332,33 @@ https://github.com/intel/gvt-linux/issues/174#issuecomment-1288728895
 
 GVT-g попробовать на ноутбуке Галины (Intel N4120 (UHD Graphics 600))
 
+https://www.youtube.com/watch?v=RbLN7kZiAQ0
+
+
+#### 2.6.2.4 Virtual GPU при помощи GVT-d
+
+https://projectacrn.github.io/latest/tutorials/gpu-passthru.html
+
+https://www.ibm.com/docs/en/linux-on-systems?topic=through-pci
+
+https://github.com/cy4n1c/single-intel-gpu-passthrough
+
+Build-in kernel module нельзя загружать/выгружать, только конфигурировать через параметры загрузки ядра
+(/etc/default/grub GRUB_CMDLINE_LINUX).
+Команды modprobe, insmod, rmmod, modinfo, lsmod для таких модулей не работают.
+
+https://www.xmodulo.com/find-information-builtin-kernel-modules-linux.html
+
+Удалось добиться захвата gpu драйвером vfio-pci, осталось только пробросить gpu в виртуальную машину.
+Попробовать проброс видео в BIOS и UEFI режиме.
+После изменения конфига загрузки запустить
+
+```bash
+
+sudo update-grub
+
+```
+
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
@@ -472,3 +499,8 @@ https://wiki.archlinux.org/title/QEMU#Preparing_a_Windows_guest
 
 https://devsday.ru/blog/details/10111
 https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
+
+
+Установка новой версии ядра linux (Ubuntu)
+
+https://linuxhint.com/install-upgrade-latest-kernel-ubuntu-22-04/

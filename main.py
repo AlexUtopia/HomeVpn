@@ -1441,7 +1441,7 @@ class VirtualMachine:
         # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
         # https://www.youtube.com/watch?v=ELbxhm1-rno
         # -full-screen
-        return "-smp 8,sockets=1,cores=4,threads=2,maxcpus=8 -usb -device usb-host,vendorid=0x8087,productid=0x0026 -vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on"
+        return "-smp 8,sockets=1,cores=4,threads=2,maxcpus=8 -usb -device usb-host,vendorid=0x10d7,productid=0xb012 -vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on"
 
     def __virtio_win_drivers(self):
         if self.__virtio is None:
