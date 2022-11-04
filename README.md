@@ -541,7 +541,20 @@ https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
  - используется неактуальное ядро linux 4.19
 
 
-### 7.3.3 Android Studio emulator
+### 7.3.3 LineageOS
+
+[Вики](https://ru.wikipedia.org/wiki/LineageOS) про LineageOS.
+
+Плюсы
+ - бесплатная свободно распространяемая версия Android для большого круга платформ
+ - доступен Android 11 и 12
+
+Минусы
+ - для emulator необходимо [собрать ОС](https://wiki.lineageos.org/emulator)
+ - Google Play Services необходимо устанавливать вручную по [инструкции](https://wiki.lineageos.org/gapps)
+
+
+### 7.3.4 Android Studio emulator
 
 Скачать Android Studio и запустить актуальные версии Android в emulator (под капотом модифицированный qemu 2.12.0)
 
@@ -573,7 +586,7 @@ https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
  - непонятна возможность проброса PCI устройства (нас интересует GPU)
 
 
-### 7.3.4 Android Studio AVD over actual qemu
+### 7.3.5 Android Studio AVD by actual qemu
 
 Нахожусь в процессе изысканий, с первой попытки не заработало.
 Пытаюсь запустить Android TV 12.
@@ -662,7 +675,7 @@ https://elixir.bootlin.com/linux/v5.10.66/source
 https://stackoverflow.com/questions/65415511/android-kernel-build-flow-with-gki-introduced-from-android-11
 
 Плюсы
- - все те же самые плюсы, что и у метода 7.3.3
+ - все те же самые плюсы, что и у метода 7.3.4
  - независимость от emulator
  - для поддержки необходимого спектра реальных устройств нужно [пересобрать](https://source.android.com/docs/setup/build/building-kernels) целевое ядро linux (добавить intel GPU driver i915)
 
