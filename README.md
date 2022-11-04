@@ -674,6 +674,8 @@ https://elixir.bootlin.com/linux/v5.10.66/source
 
 https://stackoverflow.com/questions/65415511/android-kernel-build-flow-with-gki-introduced-from-android-11
 
+https://www.kernel.org/doc/html/v5.10/admin-guide/kernel-parameters.html
+
 Плюсы
  - все те же самые плюсы, что и у метода 7.3.4
  - независимость от emulator
