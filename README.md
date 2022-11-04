@@ -489,11 +489,13 @@ fixme utopia Описать содержимое open-vpn.config.json
 
 # 6 Хотелки
 
-1. Следить за температорой видеокарты для виртуальной машины
+1. Следить за температурой видеокарты для виртуальной машины
 2. Описать как запустить игры на виртуальной машине с проброшенной видеокартой (Windows)
 
 
-Установка Win
+# 7 Установка операционных систем
+
+## 7.1 Windows
 
 https://wiki.archlinux.org/title/QEMU#Preparing_a_Windows_guest
 
@@ -501,6 +503,169 @@ https://devsday.ru/blog/details/10111
 https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
 
 
-Установка новой версии ядра linux (Ubuntu)
+## 7.2 Linux (Ubuntu)
 
-https://linuxhint.com/install-upgrade-latest-kernel-ubuntu-22-04/
+### 7.2.1 Установка новой версии ядра linux
+
+Инструкцию см. [здесь](https://linuxhint.com/install-upgrade-latest-kernel-ubuntu-22-04/)
+
+
+## 7.3 Android
+
+### 7.3.1 BlissOS
+
+Официальный [сайт](https://blissos.org/).
+Скачать iso образы можно [здесь](https://blissos.org/index.html#download).
+
+Плюсы
+ - бесплатная свободно распространяемая версия Android для x86 платформы
+ - доступен Android 11 и 12 (альфа)
+ - актуальное ядро linux 5.4, возможно пробросить PCI устройство
+ - доступна GMS сборка где присутствуют Google Play Services
+
+Минусы
+ - надо тестировать, пока не обнаружил
+
+
+### 7.3.2 Android-x86
+
+Официальный [сайт](https://www.android-x86.org/).
+Скачать iso образы можно [здесь](https://sourceforge.net/projects/android-x86/files/).
+
+Плюсы
+ - бесплатная свободно распространяемая версия Android для x86 платформы
+ - вроде как для Android-x86 9 [присутствуют Google Play Services](https://www.youtube.com/watch?v=uYVlVLC660M)
+
+Минусы
+ - проект плохо развивается, в актуальной разработке Android [8.1](https://www.android-x86.org/releases/releasenote-8-1-r6.html) и [9](https://www.android-x86.org/releases/releasenote-9-0-r2.html)
+ - используется неактуальное ядро linux 4.19
+
+
+### 7.3.3 Android Studio emulator
+
+Скачать Android Studio и запустить актуальные версии Android в emulator (под капотом модифицированный qemu 2.12.0)
+
+```bash
+
+~/Android/Sdk/emulator/emulator -qemu -version
+
+```
+
+Запустить AVD через командную строку можно так
+
+```bash
+
+~/Android/Sdk/emulator/emulator -avd <название AVD>
+
+```
+
+Подробней про параметры командной строки эмулятора см. [здесь](https://developer.android.com/studio/run/emulator-commandline).
+
+Плюсы
+ - всегда актуальная и работоспособная версия Android от Google
+ - большая вариативность версий и классов Android
+ - наличие Google Play Services
+
+Минусы
+ - запускается только под emulator и никак больше
+ - завязка на emulator который использует неактуальную версию qemu (2.12.0)
+ - непонятна возможность настройки emulator под нужны проекта HomeVpn
+ - непонятна возможность проброса PCI устройства (нас интересует GPU)
+
+
+### 7.3.4 Android Studio AVD over actual qemu
+
+Нахожусь в процессе изысканий, с первой попытки не заработало.
+Пытаюсь запустить Android TV 12.
+
+```bash
+
+export AVD_DIR=~/Android/Sdk/system-images/android-31/android-tv/x86
+
+sudo qemu-system-$(uname -m) -enable-kvm -m 1024 -kernel ${AVD_DIR}/kernel-ranchu-64 -initrd ${AVD_DIR}/ramdisk.img -append "console=ttyS0 panic=100 module_blacklist=cfg80211,btusb,btrtl,btintel,ac97_bus" -nographic -cpu host
+
+```
+
+При помощи опции ядра module_blacklist отключил все модули ядра что пытались загрузиться.
+
+Падает процесс init. В интернете однозначного рецепта что делать нет.
+
+```
+[    0.666946] Run /init as init process
+[    0.669645] init: init first stage started!
+[    0.672207] init: Loading module /lib/modules/ac97_bus.ko with args ''
+[    0.674006] Module ac97_bus is blacklisted
+[    0.675100] init: Failed to insmod '/lib/modules/ac97_bus.ko' with args '': Operation not permitted
+[    0.677603] init: LoadWithAliases was unable to load ac97_bus
+[    0.679455] init: Copied ramdisk prop to /second_stage_resources/system/etc/ramdisk/build.prop
+[    0.681917] init: [libfs_mgr]ReadFstabFromDt(): failed to read fstab from dt
+[    0.683885] init: [libfs_mgr]ReadDefaultFstab(): failed to find device default fstab
+[    0.685984] init: Failed to create FirstStageMount failed to read default fstab for first stage mount
+[    0.688377] init: Failed to mount required partitions early ...
+[    0.689874] Kernel panic - not syncing: Attempted to kill init! exitcode=0x00007f00
+[    0.691629] CPU: 0 PID: 1 Comm: init Not tainted 5.10.66-android12-9-00022-g2d6a43c0364d-ab7992900 #1
+[    0.693765] Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS 1.10.2-1ubuntu1 04/01/2014
+[    0.695783] Call Trace:
+[    0.696371]  panic+0x125/0x40b
+[    0.697043]  do_exit+0xb9c/0xc20
+[    0.697694]  ? __ia32_sys_wait4.cfi_jt+0x8/0x8
+[    0.698603]  do_group_exit+0xd0/0xe0
+[    0.699304]  ? __ia32_sys_wait4.cfi_jt+0x8/0x8
+[    0.699918]  __do_sys_exit_group+0xf/0x10
+[    0.700535]  __se_sys_exit_group+0x9/0x10
+[    0.701628]  __ia32_sys_exit_group+0xc/0x10
+[    0.702662]  __do_fast_syscall_32+0xab/0xe0
+[    0.703590]  do_fast_syscall_32+0x32/0x70
+[    0.704627]  do_SYSENTER_32+0x1b/0x20
+[    0.705600]  entry_SYSENTER_compat_after_hwframe+0x4d/0x5f
+[    0.707074] RIP: 0023:0xf7f23509
+[    0.707933] Code: b8 01 10 06 03 74 b4 01 10 07 03 74 b0 01 10 08 03 74 d8 01 00 00 00 00 00 00 00 00 00 00 00 00 00 51 52 55 89 e5 0f 34 cd 80 <5d> 5a 59 c3 90 90 90 90 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00
+[    0.712929] RSP: 002b:00000000ffbbb7a4 EFLAGS: 00000282 ORIG_RAX: 00000000000000fc
+[    0.714930] RAX: ffffffffffffffda RBX: 000000000000007f RCX: 0000000000000001
+[    0.716819] RDX: 0000000000000006 RSI: 0000000000000001 RDI: 0000000000000001
+[    0.718621] RBP: 00000000ffbbb898 R08: 0000000000000000 R09: 0000000000000000
+[    0.720326] R10: 0000000000000000 R11: 0000000000000000 R12: 0000000000000000
+[    0.721960] R13: 0000000000000000 R14: 0000000000000000 R15: 0000000000000000
+[    0.723610] Kernel Offset: 0x18a00000 from 0xffffffff81000000 (relocation range: 0xffffffff80000000-0xffffffffbfffffff)
+[    0.726070] Rebooting in 100 seconds..
+```
+
+Нужно попробовать получить root для AVD и посмотреть как выглядит загрузка linux на emulator (dmesg).
+Мне не нравится содержимое ramdisk.img - там пустые папки.  
+
+```bash
+
+export ANDROID_SDK=~/Android/Sdk
+${ANDROID_SDK}/platform-tools/adb shell
+generic_x86:/ $ dmesg
+
+```
+
+Получить root для AVD можно [так](https://github.com/newbit1/rootAVD).
+
+Прочие полезные статьи по ручной загрузке linux для qemu
+
+http://nickdesaulniers.github.io/blog/2018/10/24/booting-a-custom-linux-kernel-in-qemu-and-debugging-it-with-gdb/
+
+https://fadeevab.com/how-to-setup-qemu-output-to-console-and-automate-using-shell-script/
+
+https://qemu.readthedocs.io/en/latest/about/removed-features.html
+
+https://source.android.com/docs/core/architecture/kernel/mounting-partitions-early
+
+https://source.android.com/docs/core/architecture/kernel/generic-kernel-image
+
+https://developer.android.com/studio/run/emulator-acceleration
+
+https://elixir.bootlin.com/linux/v5.10.66/source
+
+https://stackoverflow.com/questions/65415511/android-kernel-build-flow-with-gki-introduced-from-android-11
+
+Плюсы
+ - все те же самые плюсы, что и у метода 7.3.3
+ - независимость от emulator
+ - для поддержки необходимого спектра реальных устройств нужно [пересобрать](https://source.android.com/docs/setup/build/building-kernels) целевое ядро linux (добавить intel GPU driver i915)
+
+Минусы
+ - очень сложно разобраться что к чему даже при наличии опыта
+ - работает только через qemu (для проекта HomeVpn минусом не является)
