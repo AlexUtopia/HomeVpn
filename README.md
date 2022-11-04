@@ -198,7 +198,7 @@ https://wiki.gentoo.org/wiki/QEMU/Options#Virtual_network_cable_.28TAP.29
 описаны [здесь](https://wiki.archlinux.org/title/QEMU/Guest_graphics_acceleration).
 
 
-#### 2.6.2.1 Paravirtualization при помощи virtio и Mesa3G/VirGL
+#### 2.6.2.1 Paravirtualization при помощи virtio и Mesa3D/VirGL
 
 Настройка параметров qemu описана [здесь](https://wiki.archlinux.org/title/QEMU#virtio).
 
