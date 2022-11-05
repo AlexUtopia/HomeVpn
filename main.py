@@ -369,6 +369,30 @@ class OpenVpnConfig:
             return result
         return NetworkInterface(result)
 
+    @staticmethod
+    def get_internet_network_interface(internet_network_interface_from_config):
+        if internet_network_interface_from_config is None:
+            result = NetworkInterface.get_internet_if()
+            print("Internet network interface: {}".format(result))
+            return result
+        print("Internet network interface SET MANUALLY: {}".format(internet_network_interface_from_config))
+        return NetworkInterface(internet_network_interface_from_config)
+
+    def get_local_network_interface(self):
+        result = self.get_config_parameter("local_network_interface")
+        if result is None:
+            return result
+        return NetworkInterface(result)
+
+    @staticmethod
+    def get_local_network_interface(internet_network_interface_from_config):
+        if internet_network_interface_from_config is None:
+            result = NetworkInterface.get_internet_if()
+            print("Local network interface: {}".format(result))
+            return result
+        print("Local network interface SET MANUALLY: {}".format(internet_network_interface_from_config))
+        return NetworkInterface(internet_network_interface_from_config)
+
     def get_dns_config_dir(self):
         return self.get_config_parameter_strong("dns_config_dir")
 
@@ -900,10 +924,11 @@ class VmName:
 
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
 class VmMetaData:
-    def __init__(self, name, image_path, mac_address):
+    def __init__(self, name, image_path, mac_address, ssh_input_port=None):
         self.__name = VmName(name)
         self.__image_path = Path(image_path)
         self.__mac_address = netaddr.EUI(str(mac_address))
+        self.__ssh_input_port = ssh_input_port
 
     def __str__(self):
         return str(self.to_dict())
@@ -952,6 +977,24 @@ class VmMetaData:
         result = self.__mac_address
         result.dialect = netaddr.mac_unix_expanded
         return str(result)
+
+    def get_hostname(self):
+        return self.get_name()
+
+    ## Получить IP адрес запущенной виртуальной машины
+    # @warning IP адрес виртуальной машине раздаётся через DHCP, поэтому до запуска виртуальной машины понять её IP адрес нельзя
+    # @return IP адрес запущенной виртуальной машины или исключение, если не удалось получить результат
+    def get_ip_address_strong(self):
+        return ipaddress.ip_address(socket.gethostbyname(self.get_hostname()))
+
+    def get_ip_address(self):
+        try:
+            return self.get_ip_address_strong()
+        except Exception:
+            return None
+
+    def get_ssh_input_port(self):
+        return self.__ssh_input_port
 
 
 class VmRegistry:
@@ -1494,6 +1537,117 @@ class Daemon:
         time.sleep(self.SLEEP_AFTER_SERVER_START_SEC)
 
 
+class TcpPort:
+    TCP_PORT_MIN = 1
+    TCP_PORT_MAX = 65535
+
+    SSH_PORT_DEFAULT = 22
+    RDP_PORT_DEFAULT = 3389
+    VNC_BASE_PORT_NUMBER = 5900
+
+    def __init__(self, port):
+        if TcpPort.is_valid(port):
+            raise Exception("TCP port FAIL: {}".format(port))
+        self.__port = int(port)
+
+    def __str__(self):
+        return str(self.__port)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __int__(self):
+        return int(self.__port)
+
+    def is_ssh(self):
+        return int(self) == TcpPort.SSH_PORT_DEFAULT
+
+    def is_rdp(self):
+        return int(self) == TcpPort.RDP_PORT_DEFAULT
+
+    def is_vnc_base(self):
+        return int(self) == TcpPort.VNC_BASE_PORT_NUMBER
+
+    @staticmethod
+    def is_valid(port):
+        try:
+            if port is None:
+                return False
+
+            port_as_int = int(port)
+            if port_as_int < TcpPort.TCP_PORT_MIN:
+                return False
+            if port_as_int > TcpPort.TCP_PORT_MAX:
+                return False
+
+            return True
+        except Exception:
+            return False
+
+
+class VmTcpForwarding:
+    def __init__(self, vm_meta_data, local_network_if, input_port, output_port):
+        self.__vm_meta_data = VmMetaData(vm_meta_data)
+        self.__local_network_if = NetworkInterface(local_network_if)
+        self.__input_port = input_port
+        self.__output_port = TcpPort(output_port)
+        atexit.register(self.clear_at_exit)
+
+    def add(self):
+        if not self.__is_valid_input_port():
+            print("TCP port forwarding DISCARDED")
+            return
+        self.__iptables_rule()
+
+    def clear(self):
+        if not self.__is_valid_input_port():
+            return
+        self.__iptables_rule(clear=True)
+
+    def clear_at_exit(self):
+        try:
+            self.clear()
+        except Exception:
+            return
+
+    def __is_valid_input_port(self):
+        return TcpPort.is_valid(self.__input_port)
+
+    def __iptables_rule(self, clear=False):
+        # sudo iptables -t nat -A PREROUTING -i {self.__local_network_if} -p tcp --dport {self.__input_port} -j DNAT --to {self.__vm_metadata.get_ip_address()}:{self.__output_port}
+
+        table = iptc.Table(iptc.Table.NAT)
+        chain = iptc.Chain(table, "PREROUTING")
+
+        rule = iptc.Rule()
+        rule.in_interface = str(self.__local_network_if)
+
+        match = iptc.Match(rule, "tcp")
+        match.dport = str(self.__input_port)
+        rule.add_match(match)
+
+        target = iptc.Target(rule, "DNAT")
+        target.to = str(self.__get_vm_destination_ip_address_and_port())
+        rule.target = target
+
+        if clear:
+            chain.delete_rule(rule)
+        else:
+            chain.insert_rule(rule)
+        table.commit()
+
+    def __get_vm_destination_ip_address_and_port(self):
+        return IpAddressAndPort(self.__vm_meta_data.get_ip_address_strong(), self.__output_port)
+
+
+class VmSshForwarding(VmTcpForwarding):
+    def __init__(self, vm_meta_data, local_network_if, input_port):
+        super().__init__(vm_meta_data=vm_meta_data, local_network_if=local_network_if, input_port=input_port,
+                         output_port=TcpPort.SSH_PORT_DEFAULT)
+
+    pass
+
+
 def help_usage():
     print(
         "config <config-parameter-name>\n"
@@ -1612,9 +1766,35 @@ def main():
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
+
+            local_network_interface = config.get_local_network_interface(config.get_local_network_interface())
+            VmSshForwarding(vm_meta_data, local_network_interface, vm_meta_data.get_ssh_input_port()).add()
+
             vm = VirtualMachine(network_bridge, vm_meta_data)
             vm.run()
             return
+        else:
+            help_usage()
+            return
+
+    elif command == "vm_ssh_config":
+        if len(sys.argv) >= 2:
+            vm_name = str(sys.argv[2])
+            project_config = OpenVpnConfig()
+            vm_registry = VmRegistry(project_config.get_vm_registry_path())
+            vm_metadata = vm_registry.get_with_verifying(vm_name)
+            local_network_interface = project_config.get_local_network_interface(
+                project_config.get_local_network_interface())
+
+            ssh_input_port_from_user = intput(
+                "Enter vm \"{}\" SSH port [{}-{}]: ".format(vm_metadata.get_name(), TcpPort.TCP_PORT_MIN,
+                                                            TcpPort.TCP_PORT_MAX))
+            if not TcpPort.is_valid(ssh_input_port_from_user):
+                print("INVALID!!! reexecute command")
+
+            VmSshForwarding(vm_metadata, local_network_interface, ssh_input_port_from_user).add()
+
+            print("Save SSH port to vm config? [y/n]") # fixme utopia Допилить
         else:
             help_usage()
             return

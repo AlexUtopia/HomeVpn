@@ -15,5 +15,6 @@
   "vm_registry_path": "./vm/registry.json",
   "dns_config_dir": "/opt/dhcp-hostsdir",
   "internet_network_interface": null,
+  "local_network_interface": null,
   "virtio_win_drivers_url": "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 }
