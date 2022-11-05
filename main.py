@@ -1597,6 +1597,9 @@ class VmTcpForwarding:
         if not self.__is_valid_input_port():
             print("TCP port forwarding DISCARDED")
             return
+        print("TCP port forwarding for vm \"{}\": {}:{} --> {}".format(self.__vm_meta_data.get_name(),
+                                                                       self.__local_network_if,
+                                                                       self.__get_vm_destination_ip_address_and_port))
         self.__iptables_rule()
 
     def clear(self):
@@ -1794,7 +1797,7 @@ def main():
 
             VmSshForwarding(vm_metadata, local_network_interface, ssh_input_port_from_user).add()
 
-            print("Save SSH port to vm config? [y/n]") # fixme utopia Допилить
+            print("Save SSH port to vm config? [y/n]")  # fixme utopia Допилить
         else:
             help_usage()
             return
