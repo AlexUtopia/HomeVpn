@@ -370,7 +370,7 @@ class OpenVpnConfig:
         return NetworkInterface(result)
 
     @staticmethod
-    def get_internet_network_interface(internet_network_interface_from_config):
+    def get_or_default_internet_network_interface(internet_network_interface_from_config):
         if internet_network_interface_from_config is None:
             result = NetworkInterface.get_internet_if()
             print("Internet network interface: {}".format(result))
@@ -385,13 +385,13 @@ class OpenVpnConfig:
         return NetworkInterface(result)
 
     @staticmethod
-    def get_local_network_interface(internet_network_interface_from_config):
-        if internet_network_interface_from_config is None:
+    def get_or_default_local_network_interface(local_network_interface):
+        if local_network_interface is None:
             result = NetworkInterface.get_internet_if()
             print("Local network interface: {}".format(result))
             return result
-        print("Local network interface SET MANUALLY: {}".format(internet_network_interface_from_config))
-        return NetworkInterface(internet_network_interface_from_config)
+        print("Local network interface SET MANUALLY: {}".format(local_network_interface))
+        return NetworkInterface(local_network_interface)
 
     def get_dns_config_dir(self):
         return self.get_config_parameter_strong("dns_config_dir")
@@ -1052,7 +1052,7 @@ class VmRegistry:
         raise Exception("VM image \"{}\" NOT FOUND".format(name))
 
     def get_path_to_image_with_verifying(self, name):
-        return self.get_with_verifying().get_image_path()
+        return self.get_with_verifying(name).get_image_path()
 
     def __create_image_command_line(self, meta_data, image_size_in_gib):
         return "qemu-img create -f {} \"{}\" {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(),
@@ -1546,7 +1546,7 @@ class TcpPort:
     VNC_BASE_PORT_NUMBER = 5900
 
     def __init__(self, port):
-        if TcpPort.is_valid(port):
+        if not TcpPort.is_valid(port):
             raise Exception("TCP port FAIL: {}".format(port))
         self.__port = int(port)
 
@@ -1587,7 +1587,7 @@ class TcpPort:
 
 class VmTcpForwarding:
     def __init__(self, vm_meta_data, local_network_if, input_port, output_port):
-        self.__vm_meta_data = VmMetaData(vm_meta_data)
+        self.__vm_meta_data = vm_meta_data
         self.__local_network_if = NetworkInterface(local_network_if)
         self.__input_port = input_port
         self.__output_port = TcpPort(output_port)
@@ -1598,8 +1598,8 @@ class VmTcpForwarding:
             print("TCP port forwarding DISCARDED")
             return
         print("TCP port forwarding for vm \"{}\": {}:{} --> {}".format(self.__vm_meta_data.get_name(),
-                                                                       self.__local_network_if,
-                                                                       self.__get_vm_destination_ip_address_and_port))
+                                                                       self.__local_network_if, self.__input_port,
+                                                                       self.__get_vm_destination_ip_address_and_port()))
         self.__iptables_rule()
 
     def clear(self):
@@ -1618,6 +1618,9 @@ class VmTcpForwarding:
 
     def __iptables_rule(self, clear=False):
         # sudo iptables -t nat -A PREROUTING -i {self.__local_network_if} -p tcp --dport {self.__input_port} -j DNAT --to {self.__vm_metadata.get_ip_address()}:{self.__output_port}
+
+        # Живой пример
+        # sudo iptables -t nat -A PREROUTING -i wlp0s20f3 -p tcp --dport 2222 -j DNAT --to 172.20.47.124:22
 
         table = iptc.Table(iptc.Table.NAT)
         chain = iptc.Chain(table, "PREROUTING")
@@ -1747,7 +1750,8 @@ def main():
 
             config = OpenVpnConfig()
             network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(), config.get_internet_network_interface())
+                                           config.get_dns_config_dir(),
+                                           config.get_or_default_internet_network_interface())
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
@@ -1770,8 +1774,10 @@ def main():
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
 
-            local_network_interface = config.get_local_network_interface(config.get_local_network_interface())
-            VmSshForwarding(vm_meta_data, local_network_interface, vm_meta_data.get_ssh_input_port()).add()
+            local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
+                config.get_local_network_interface())
+            # Запустить в отдельном потоке
+            # VmSshForwarding(vm_meta_data, local_network_interface, vm_meta_data.get_ssh_input_port()).add()
 
             vm = VirtualMachine(network_bridge, vm_meta_data)
             vm.run()
@@ -1786,10 +1792,10 @@ def main():
             project_config = OpenVpnConfig()
             vm_registry = VmRegistry(project_config.get_vm_registry_path())
             vm_metadata = vm_registry.get_with_verifying(vm_name)
-            local_network_interface = project_config.get_local_network_interface(
+            local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
                 project_config.get_local_network_interface())
 
-            ssh_input_port_from_user = intput(
+            ssh_input_port_from_user = input(
                 "Enter vm \"{}\" SSH port [{}-{}]: ".format(vm_metadata.get_name(), TcpPort.TCP_PORT_MIN,
                                                             TcpPort.TCP_PORT_MAX))
             if not TcpPort.is_valid(ssh_input_port_from_user):
@@ -1820,7 +1826,7 @@ def main():
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
         # return
         network_bridge = NetworkBridge(vm_bridge_name, config.get_vm_bridge_ip_address_and_mask(),
-                                       config.get_dns_config_dir(), config.get_internet_network_interface())
+                                       config.get_dns_config_dir(), config.get_or_default_internet_network_interface())
         # network_bridge.create()
         # time.sleep(30)
         # print("network_bridge.close()")
