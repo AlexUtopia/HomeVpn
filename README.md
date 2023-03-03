@@ -406,6 +406,11 @@ https://wiki.archlinux.org/title/VirtualGL
 https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-turbovnc
 
 
+### 2.6.5 SSH
+
+https://www.simplified.guide/ssh/x11-forwarding-as-root
+
+
 # 3 Инсталяция системы
 
 1. настроить домашний роутер fixme utopia
@@ -502,6 +507,10 @@ https://wiki.archlinux.org/title/QEMU#Preparing_a_Windows_guest
 https://devsday.ru/blog/details/10111
 https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
 
+### 7.1.1 Разрешить ICMP пакеты
+
+https://www.howtogeek.com/howto/windows-vista/allow-pings-icmp-echo-request-through-your-windows-vista-firewall/
+
 
 ## 7.2 Linux (Ubuntu)
 
@@ -525,6 +534,8 @@ https://github.com/virtio-win/kvm-guest-drivers-windows/issues/785
 
 Минусы
  - надо тестировать, пока не обнаружил
+
+https://docs.blissos.org/install-bliss-os/install-in-a-virtual-machine/install-in-qemu
 
 
 ### 7.3.2 Android-x86

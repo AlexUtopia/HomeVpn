@@ -925,12 +925,14 @@ class VmName:
 
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
 class VmMetaData:
-    def __init__(self, name, image_path, mac_address, ssh_forward_port=None):
+    def __init__(self, name, image_path, mac_address, ssh_forward_port=None, rdp_forward_port=None):
         self.__name = VmName(name)
         self.__image_path = Path(image_path)
         self.__mac_address = netaddr.EUI(str(mac_address))
         self.__ssh_forward_port = None
         self.set_ssh_forward_port(ssh_forward_port)
+        self.__rdp_forward_port = None
+        self.set_rdp_forward_port(rdp_forward_port)
 
     def __str__(self):
         return str(self.to_dict())
@@ -945,7 +947,8 @@ class VmMetaData:
         if meta_data_as_dict is None:
             return None
         return VmMetaData(name_filtered_as_string, meta_data_as_dict.get("image_path"),
-                          meta_data_as_dict.get("mac_address"), meta_data_as_dict.get("ssh_forward_port"))
+                          meta_data_as_dict.get("mac_address"), meta_data_as_dict.get("ssh_forward_port"),
+                          meta_data_as_dict.get("rdp_forward_port"))
 
     @staticmethod
     def from_dict_strong(name, vm_registry_as_dict):
@@ -966,6 +969,9 @@ class VmMetaData:
 
         if self.__ssh_forward_port is not None:
             result[name_as_string].update({"ssh_forward_port": int(self.__ssh_forward_port)})
+
+        if self.__rdp_forward_port is not None:
+            result[name_as_string].update({"rdp_forward_port": int(self.__rdp_forward_port)})
 
         return result
 
@@ -1009,6 +1015,15 @@ class VmMetaData:
             self.__ssh_forward_port = None
         else:
             self.__ssh_forward_port = TcpPort(ssh_forward_port)
+
+    def get_rdp_forward_port(self):
+        return self.__rdp_forward_port
+
+    def set_rdp_forward_port(self, rdp_forward_port):
+        if rdp_forward_port is None:
+            self.__rdp_forward_port = None
+        else:
+            self.__rdp_forward_port = TcpPort(rdp_forward_port)
 
 
 class VmRegistry:
@@ -1073,6 +1088,12 @@ class VmRegistry:
     def set_ssh_forward_port(self, name, ssh_forward_port):
         meta_data = self.get_with_verifying(name)
         meta_data.set_ssh_forward_port(ssh_forward_port)
+        self.__add_to_registry(meta_data)
+        self.__save_registry()
+
+    def set_rdp_forward_port(self, name, rdp_forward_port):
+        meta_data = self.get_with_verifying(name)
+        meta_data.set_rdp_forward_port(rdp_forward_port)
         self.__add_to_registry(meta_data)
         self.__save_registry()
 
@@ -1463,7 +1484,8 @@ class VirtualMachine:
     def __command_line(self):
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
                               self.__network(),
-                              self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers()]
+                              self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
+                              self.__cpu(), self.__gpu(), self.__usb()]
         return " ".join(command_parts_list)
 
     @staticmethod
@@ -1476,7 +1498,7 @@ class VirtualMachine:
 
     @staticmethod
     def __ram_size():  # fixme utopia Использовать psutil
-        return "-m 4096"
+        return "-m 16384"
 
     def __network(self):
         self.__tap.create()
@@ -1506,7 +1528,39 @@ class VirtualMachine:
         # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
         # https://www.youtube.com/watch?v=ELbxhm1-rno
         # -full-screen
-        return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8 -usb -device usb-host,vendorid=0x10d7,productid=0xb012 -vnc 127.0.0.1:2 -device virtio-vga-gl -display sdl,gl=on"
+        # -device virtio-vga-gl -display sdl,gl=on
+        # /usr/share/ovmf/OVMF.fd
+        return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
+
+    def __cpu(self):
+        return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8"
+
+    def __gpu(self):
+        # return "-vga std -display gtk"
+
+        #return "-device virtio-vga-gl -display sdl,gl=on"
+
+        # return "-nographic"
+
+        # https://www.reddit.com/r/VFIO/comments/cktnhv/bar_0_cant_reserve/
+        # https://listman.redhat.com/archives/vfio-users/2016-March/msg00088.html
+        # ,display=auto,multifunction=on,x-vga=on,
+        # x-igd-opregion=on,
+        return "-vga none -device vfio-pci,host=00:02.0,romfile=\"/home/utopia/Загрузки/Release/i915ovmf.rom\""
+
+    def __usb(self):
+        usb_device_array = [
+            (0x045e, 0x00db),  # Клавиатура Microsoft # Natural Ergonomic Keyboard 4000 v 1.0
+            (0x0bda, 0x8771),  # USB-Bluetooth 5.0 адаптер Ugreen # CM390
+            (0x046d, 0xc05b)  # Мышка Logitec # B110
+        ]
+
+        result = []
+
+        for vid, pid in usb_device_array:
+            result.append("-usb -device usb-host,vendorid=0x{:04X},productid=0x{:04X}".format(vid, pid))
+
+        return " ".join(result)
 
     def __virtio_win_drivers(self):
         if self.__virtio is None:
@@ -1694,6 +1748,14 @@ class VmSshForwarding(VmTcpForwarding):
     pass
 
 
+class VmRdpForwarding(VmTcpForwarding):
+    def __init__(self, vm_meta_data, local_network_if, input_port):
+        super().__init__(vm_meta_data=vm_meta_data, local_network_if=local_network_if, input_port=input_port,
+                         output_port=TcpPort.RDP_PORT_DEFAULT)
+
+    pass
+
+
 def help_usage():
     print(
         "config <config-parameter-name>\n"
@@ -1789,9 +1851,12 @@ def main():
                 raise Exception("VM installer \"{}\" NOT FOUND".format(path_to_os_iso_disk))
 
             config = OpenVpnConfig()
+
+            local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
+                config.get_local_network_interface())
+
             network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(),
-                                           config.get_or_default_internet_network_interface())
+                                           config.get_dns_config_dir(), local_network_interface)
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
@@ -1819,12 +1884,15 @@ def main():
 
             vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
                                                 vm_meta_data.get_ssh_forward_port())
-            ssh_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry()))
-            ssh_forwarding_thread.start()
+            vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
+                                                vm_meta_data.get_rdp_forward_port())
+            tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
+                                                                     vm_rdp_forwarding.add_with_retry()))
+            tcp_forwarding_thread.start()
 
             vm = VirtualMachine(network_bridge, vm_meta_data)
             vm.run()
-            ssh_forwarding_thread.join()
+            tcp_forwarding_thread.join()
             return
         else:
             help_usage()
@@ -1844,6 +1912,24 @@ def main():
                 print("INVALID!!! reexecute command")
 
             vm_registry.set_ssh_forward_port(vm_name, ssh_input_port_from_user)
+        else:
+            help_usage()
+            return
+
+    elif command == "vm_rdp_fwd":
+        if len(sys.argv) >= 2:
+            vm_name = str(sys.argv[2])
+            project_config = OpenVpnConfig()
+            vm_registry = VmRegistry(project_config.get_vm_registry_path())
+            vm_metadata = vm_registry.get_with_verifying(vm_name)
+
+            ssh_input_port_from_user = input(
+                "Enter vm \"{}\" SSH port [{}-{}]: ".format(vm_metadata.get_name(), TcpPort.TCP_PORT_MIN,
+                                                            TcpPort.TCP_PORT_MAX))
+            if not TcpPort.is_valid(ssh_input_port_from_user):
+                print("INVALID!!! reexecute command")
+
+            vm_registry.set_rdp_forward_port(vm_name, ssh_input_port_from_user)
         else:
             help_usage()
             return
