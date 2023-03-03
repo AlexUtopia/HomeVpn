@@ -575,7 +575,9 @@ class OpenVpnServerConfigGenerator:
         self.__add_server_cert()
         self.__add_server_key()
         self.__add_server_log()
-        self.__add_client_route_to_vm_bridge_network()
+        # fixme utopia Если сетка виртуальных машин не настроена, не готовить конфиг?
+        #  Или исключение от openvpn сервера обработать более корректно?
+        # self.__add_client_route_to_vm_bridge_network()
 
     def __parse_template(self):
         regex = re.compile(r"^[ \t]*([a-z\-_0-9]+)[ \t]*(.*)\n", re.MULTILINE)
@@ -663,7 +665,7 @@ class OpenVpnClientConfigGenerator:
         self.__key_value_config.add("remote", self.__ip_address_and_port.get_ip_address())
 
     def __add_port(self):
-        self.__key_value_config.add("port", self.__ip_address_and_port.get_port())
+        self.__key_value_config.add("rport", self.__ip_address_and_port.get_port())
 
     def __add_key_direction(self):
         self.__key_value_config.add("key-direction", 1)
