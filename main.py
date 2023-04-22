@@ -1540,7 +1540,7 @@ class VirtualMachine:
     def __gpu(self):
         # return "-vga std -display gtk"
 
-        #return "-device virtio-vga-gl -display sdl,gl=on"
+        # return "-device virtio-vga-gl -display sdl,gl=on"
 
         # return "-nographic"
 
@@ -1756,6 +1756,371 @@ class VmRdpForwarding(VmTcpForwarding):
                          output_port=TcpPort.RDP_PORT_DEFAULT)
 
     pass
+
+
+class RegexConstants:
+    INT64_DECIMAL_DIGITS_COUNT = 19
+    CAPTURE_ALL = fr"(.*)"
+    SPACE_SYMBOLS = fr"[\t ]"
+    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{SPACE_SYMBOLS}*"
+    SPACE_SYMBOLS_ONE_OR_MORE = fr"{SPACE_SYMBOLS}+"
+    INT64_INTEGER_WITHOUT_SING = fr"[0-9]{{1,{INT64_DECIMAL_DIGITS_COUNT}}}"
+    INT64_INTEGER = fr"{INT64_INTEGER_WITHOUT_SING}|\+{INT64_INTEGER_WITHOUT_SING}|-{INT64_INTEGER_WITHOUT_SING}"
+
+
+class EscapeLiteral:
+    __ESCAPE = [("\\\\", "\\"), ("\\\"", "\""), ("\\\'", "'"), ("\\\n", ""), ("\\\r", ""), ("\\\r\n", ""),
+                ("\\\n\r", "")]
+
+    def __init__(self, target_string):
+        self.__target_string = target_string
+
+    def escape(self):
+        result = ""
+        for escape_literal, replace_literal in self.__ESCAPE:
+            result = self.__target_string.replace(escape_literal, replace_literal)
+        return result
+
+
+class BoolFromString:
+    __BOOL_AS_STRING = {"yes": True, "true": True, "1": True, "no": False, "false": False, "0": False}
+
+    def __init__(self, target_string):
+        self.__target_string = target_string
+
+    def get(self, default_value=False):
+        result = self.get_or_none()
+        if result is not None:
+            return result
+
+        return default_value
+
+    def is_bool(self):
+        return self.get_or_none() is not None
+
+    def get_or_none(self):
+        target_string_trimmed = self.__target_string.strip().lower()
+        return self.__BOOL_AS_STRING.get(target_string_trimmed, None)
+
+
+class IntFromString:
+    __DECIMAL_BASE = 10
+    __HEXADECIMAL_BASE = 16
+    __BINARY_BASE = 2
+    __OCTAL_BASE = 8
+
+    def __init__(self, target_string):
+        self.__target_string = target_string
+
+    def get(self):
+        return self.as_int()
+
+    def is_int(self):
+        return self.as_int() is not None
+
+    def as_int(self):
+        result = self.as_decimal_int()
+        if result is not None:
+            return result
+
+        result = self.as_hexadecimal_int()
+        if result is not None:
+            return result
+
+        result = self.as_binary_int()
+        if result is not None:
+            return result
+
+        return self.as_octal_int()
+
+    def is_decimal_int(self):
+        return self.as_decimal_int() is not None
+
+    def as_decimal_int(self):
+        try:
+            return int(self.__target_string, self.__DECIMAL_BASE)
+        except:
+            return None
+
+    def is_hexadecimal_int(self):
+        return self.as_hexadecimal_int() is not None
+
+    def as_hexadecimal_int(self):
+        try:
+            return int(self.__target_string, self.__HEXADECIMAL_BASE)
+        except:
+            return None
+
+    def is_binary_int(self):
+        return self.as_binary_int() is not None
+
+    def as_binary_int(self):
+        try:
+            return int(self.__target_string, self.__BINARY_BASE)
+        except:
+            return None
+
+    def is_octal_int(self):
+        return self.as_octal_int() is not None
+
+    def as_octal_int(self):
+        try:
+            return int(self.__target_string, self.__OCTAL_BASE)
+        except:
+            return None
+
+
+class FloatFromString:
+    def __init__(self, target_string):
+        self.__target_string = target_string
+
+    def get(self):
+        return self.as_float()
+
+    def is_float(self):
+        return self.as_float() is not None
+
+    def as_float(self):
+        try:
+            return float(self.__target_string)
+        except:
+            return None
+
+
+class NumberFromString:
+    def __init__(self, target_string):
+        self.__int_from_string = IntFromString(target_string)
+        self.__float_from_string = FloatFromString(target_string)
+
+    def is_number(self):
+        return self.get() is not None
+
+    def get(self):
+        result = self.__int_from_string.get()
+        if result is not None:
+            return result
+
+        return self.__float_from_string.get()
+
+
+class StringFromString:
+    __REGEX_STRING_DOUBLE_QUOTES = fr"^\"{RegexConstants.CAPTURE_ALL}\""
+    __REGEX_STRING_SINGLE_QUOTES = fr"^'{RegexConstants.CAPTURE_ALL}'"
+    __REGEX = fr"{__REGEX_STRING_DOUBLE_QUOTES}|{__REGEX_STRING_SINGLE_QUOTES}|{RegexConstants.CAPTURE_ALL}"
+
+    def __init__(self, target_string):
+        self.__target_string = target_string
+
+    def get(self):
+        regex = re.compile(self.__REGEX)
+        result = regex.search(self.__target_string).group(0)
+        return EscapeLiteral(result).escape()
+
+
+class FromString:
+    def get(self, target_string):
+        value_as_string = StringFromString(target_string).get()
+        if value_as_string is not str:
+            return value_as_string
+
+        result = NumberFromString(value_as_string).get()
+        if result is not None:
+            return result
+
+        result = BoolFromString(value_as_string).get()
+        if result is not None:
+            return result
+
+        return value_as_string
+
+
+class ConfigParameterNameParser:
+    __NAME_LENGTH_MAX = 64
+
+    def get_regex(self):
+        return fr"^([a-zA-Z_][\w]{{0,{self.__NAME_LENGTH_MAX - 1}}})"
+
+    def get_regex_for_name(self, name):
+        return fr"^{name}"
+
+
+class ConfigNameValueDelimiterParser:
+    def get_regex(self):
+        return fr"="
+
+
+class ConfigParameterValueParser:
+    __DOUBLE_QUOTE = "\""
+    __SINGLE_QUOTE = "'"
+    __BACK_SLASH_ESCAPE = fr"\\"
+    __DOUBLE_QUOTE_ESCAPE = fr"{__BACK_SLASH_ESCAPE}{__DOUBLE_QUOTE}"
+    __SINGLE_QUOTE_ESCAPE = fr"{__BACK_SLASH_ESCAPE}{__SINGLE_QUOTE}"
+
+    def get_regex(self, with_capture=True):
+        regex_with_double_quote = self.__get_regex_with_quotes(self.__DOUBLE_QUOTE, self.__DOUBLE_QUOTE_ESCAPE,
+                                                               with_capture)
+        regex_with_single_quote = self.__get_regex_with_quotes(self.__SINGLE_QUOTE, self.__SINGLE_QUOTE_ESCAPE,
+                                                               with_capture)
+        regex_simple = self.__get_regex_simple(with_capture)
+        return fr"{regex_with_double_quote}|{regex_with_single_quote}|{regex_simple}"
+
+    def __get_regex_with_quotes(self, quote, quote_escape, with_capture):
+        begin_mark = quote
+        end_mark = quote
+        unacceptable_symbols = quote
+        escape = quote_escape
+        return self.__get_regex_template(begin_mark, end_mark, unacceptable_symbols, escape, with_capture)
+
+    def __get_regex_simple(self, with_capture):
+        begin_mark = ""
+        end_mark = ""
+        unacceptable_symbols = fr"\s{self.__DOUBLE_QUOTE}{self.__SINGLE_QUOTE}"
+        escape = fr"{self.__DOUBLE_QUOTE_ESCAPE}|{self.__SINGLE_QUOTE_ESCAPE}"
+        return self.__get_regex_template(begin_mark, end_mark, unacceptable_symbols, escape, with_capture)
+
+    def __get_regex_template(self, begin_mark, end_mark, unacceptable_symbols, escape, with_capture):
+        back_slash_escape = self.__BACK_SLASH_ESCAPE
+
+        begin_capture = ""
+        end_capture = ""
+        if bool(with_capture):
+            begin_capture = "("
+            end_capture = ")"
+        return rf"{begin_capture}{begin_mark}(?:[^{unacceptable_symbols}]*(?:{back_slash_escape}|{escape})*)*{end_mark}{end_capture}{RegexConstants.SPACE_SYMBOLS}*$"
+
+
+class ConfigParser:
+    def __init__(self, name_parser=ConfigParameterNameParser(), delimiter_parser=ConfigNameValueDelimiterParser(),
+                 value_parser=ConfigParameterValueParser(), from_string=FromString()):
+        self.__name_parser = name_parser
+        self.__delimiter_parser = delimiter_parser
+        self.__value_parser = value_parser
+        self.__from_string = from_string
+
+    def get_value(self, name, content):
+        return self.__from_string.get(self.get_value_as_is(name, content))
+
+    def get_value_as_is(self, name, content):
+        regex = re.compile(self.get_regex_for_search_value_by_name(name), re.MULTILINE)
+        regex_result = regex.search(content)
+        if regex_result is None:
+            return None
+
+        return regex_result.group(0)
+
+    def find_all(self, content):
+        regex = re.compile(self.get_regex(), re.MULTILINE)
+        tmp = regex.findall(content)
+
+        result = dict()
+        for name, value in tmp:
+            result.update({name: self.__from_string.get(value)})
+        return result
+
+    def remove_by_name(self, name, content):
+        empty_line = ""
+        regex = re.compile(self.get_regex_for_remove_by_name(name), re.MULTILINE)
+        content = regex.sub(empty_line, content)
+
+    def add_or_update(self, name, content):
+        print(name)
+
+    def get_regex(self):
+        return self.__get_regex_template(self.__name_parser.get_regex())
+
+    def get_regex_for_search_value_by_name(self, name):
+        return self.__get_regex_template(self.__name_parser.get_regex_for_name(name))
+
+    def get_regex_for_remove_by_name(self, name):
+        result = self.__get_regex_template(self.__name_parser.get_regex_for_name(name), with_value_capture=False)
+        return fr"({result})"
+
+    def __get_regex_template(self, name_template, with_value_capture=True):
+        return fr"{name_template}{self.__delimiter_parser.get_regex()}{self.__value_parser.get_regex(with_value_capture)}"
+
+
+# ^([a-zA-Z_][\w]*)="([\s\S]*[^\\])"[\t ]*$|^([a-zA-Z_][\w]*)='([\s\S]*[^\\])'[\t ]*$|^([a-zA-Z_][\w]*)=([^"\t ].*)$
+# ^([a-zA-Z_][\w]*)="([\s\S]*?[^\\])"|^([a-zA-Z_][\w]*)='([\s\S]*?[^\\])'|^([a-zA-Z_][\w]*)=([^"\t ].*)$
+# ^([a-zA-Z_][\w]*)="((?:[^"]*(?:\\|\\")*)*)"[\t ]*$
+# str.replace(r"\\", "")
+# str.replace(r"\\"", "")
+# str.replace(r"\\r", "")
+# str.replace(r"\\r\n", "")
+# str.replace(r"\\n\r", "")
+# str.replace(r"\\n", "")
+
+# https://regex101.com/r/Dr9Dyt/1
+# Проблема https://regex101.com/r/rdVI51/1
+# https://regex101.com/r/YMUFSJ/1
+# https://regex101.com/r/3PLIai/1
+class ShellConfig:
+    __SPACE_SYMBOLS = "[\t ]"
+    __SPACE_SYMBOLS_ZERO_OR_MORE = f"{__SPACE_SYMBOLS}*"
+    __SPACE_SYMBOLS_ONE_OR_MORE = f"{__SPACE_SYMBOLS}+"
+
+    __REGEX_NAME = r"([a-zA-Z_][a-zA-Z0-9_]*)"
+    __REGEX = rf"^{RegexConstants.SPACE_SYMBOLS_ZERO_OR_MORE}({__REGEX_NAME}){RegexConstants.SPACE_SYMBOLS_ZERO_OR_MORE}={RegexConstants.SPACE_SYMBOLS_ZERO_OR_MORE}(.*)"
+    __REGEX_STRING_DOUBLE_QUOTES = r"^\"(.*)\""
+    __REGEX_STRING_SINGLE_QUOTES = r"^'(.*)'"
+
+    def __init__(self, path):
+        self.__reader = TextConfigReader(path)
+        self.__writer = TextConfigWriter(path)
+        self.__escape_literal = escape_literal
+        self.__bool_from_string = bool_from_string
+        self.__content = str()
+
+    def get_value_as_is(self, parameter_name):
+        print(parameter_name)
+
+    def get_value_as_bool(self, parameter_name):
+        print(parameter_name)
+
+    def get_value_as_bool_or(self, parameter_name, default_value=False):
+        print(parameter_name)
+
+    def get_value_as_string(self, parameter_name):
+        print(parameter_name)
+
+    def get_value_as_int(self, parameter_name):
+        print(parameter_name)
+
+    def add_or_update(self):
+        print("")
+
+    def get_all(self):
+        self.__load()
+        regex = re.compile(self.__REGEX, re.MULTILINE)
+        tmp = regex.findall(self.__content)
+
+        result = dict()
+        for name, value in tmp:
+            result.update({name: FromString(value).get()})
+        return result
+
+    def __load(self):
+        self.__content = self.__reader.get()
+
+    def __save(self):
+        self.__writer.set(self.__content)
+
+    def __get_value(self, raw_string_value):
+        if self.__is_bool(raw_string_value):
+            return self.__bool_from_string.get(raw_string_value)
+        else if self.__is_bool(raw_string_value):
+            return
+
+    def __is_bool(self, raw_string_value):
+        return self.__bool_from_string.is_bool(raw_string_value)
+
+    def __is_integer(self, raw_string_value):
+        return raw_string_value.trim().isdigit()
+
+
+# https://habr.com/ru/articles/658463/
+class TransmissionDaemon:
+    def __init__(self):
+        print("")
 
 
 def help_usage():
