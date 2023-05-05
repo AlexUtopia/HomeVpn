@@ -77,6 +77,8 @@ sudo pip${PYTHON_VERSION} install 'randmac==0.1' --force-reinstall --ignore-inst
 
 sudo pip${PYTHON_VERSION} install 'transmission-rpc==4.2.0' --force-reinstall --ignore-installed
 
+sudo pip${PYTHON_VERSION} install 'packaging==23.1' --force-reinstall --ignore-installed
+
 ```
 
 dnsmasq-base - dns/dhcp сервер использумый для раздачи ip адресов внутри сетевого моста к которому привязаны виртуальные машины

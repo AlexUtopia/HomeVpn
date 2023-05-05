@@ -1904,16 +1904,22 @@ class NumberFromString:
 
 
 class StringFromString:
-    __REGEX_STRING_DOUBLE_QUOTES = fr"^\"{RegexConstants.CAPTURE_ALL}\""
-    __REGEX_STRING_SINGLE_QUOTES = fr"^'{RegexConstants.CAPTURE_ALL}'"
-    __REGEX = fr"{__REGEX_STRING_DOUBLE_QUOTES}|{__REGEX_STRING_SINGLE_QUOTES}|{RegexConstants.CAPTURE_ALL}"
+    __REGEX_STRING_ANY_CHARS = fr"[\S\s]"
+    __REGEX_STRING_DOUBLE_QUOTES = fr'^"{__REGEX_STRING_ANY_CHARS}"$'
+    __REGEX_STRING_SINGLE_QUOTES = fr"^'{__REGEX_STRING_ANY_CHARS}'$"
+    __REGEX_STRING_DEFAULT = fr"^{__REGEX_STRING_ANY_CHARS}$"
+    __REGEX = fr"{__REGEX_STRING_DOUBLE_QUOTES}|{__REGEX_STRING_SINGLE_QUOTES}|{__REGEX_STRING_DEFAULT}"
 
     def __init__(self, target_string):
         self.__target_string = target_string
 
     def get(self):
         regex = re.compile(self.__REGEX)
-        result = regex.search(self.__target_string).group(0)
+        match = regex.search(self.__target_string)
+        if match is None:
+            return ""
+
+        result = match.group(0)
         return EscapeLiteral(result).escape()
 
 
@@ -2022,7 +2028,7 @@ class ConfigParser:
         regex = re.compile(self.get_regex_for_remove_by_name(name), re.MULTILINE)
         content = regex.sub(empty_line, content)
 
-    def add_or_update(self, name, content):
+    def add_or_update(self, name, content, with_quotes=True):
         print(name)
 
     def get_regex(self):
@@ -2117,10 +2123,147 @@ class ShellConfig:
         return raw_string_value.trim().isdigit()
 
 
+# linux cmd / msys2-win / linux-wine cmd
+class WindowsCommandLine:
+    def get_command_line(self, cmd):
+        return cmd
+
+
+class LinuxCommandLine:
+    def get_command_line(self, cmd):
+        return cmd
+
+
+# https://stackoverflow.com/questions/26809898/invoke-msys2-shell-from-command-prompt-or-powershell
+# https://stackoverflow.com/questions/1681208/python-platform-independent-way-to-modify-path-environment-variable
+class Msys2CommandLine:
+    MSYS2_DIR = fr"C:\msys64"
+    MSYS2_BIN_DIR = fr"{MSYS2_DIR}\usr\bin"
+    MSYS2_BASH = fr"{MSYS2_BIN_DIR}\bash.exe"
+
+    def get_command_line(self, cmd):
+        self.__setup_path()
+        return fr"{self.MSYS2_BASH} -c \"{cmd}\""
+
+    def __setup_path(self):
+        print("fixme")
+
+
+class CommandLineExecutor:
+    def __init__(self, command_line):
+        self.__command_line = command_line
+
+    def run(self, cmd):
+        subprocess.check_call(self.__command_line.get_command_line(cmd), shell=True)
+
+
+# https://www.blog.pythonlibrary.org/2010/03/03/finding-installed-software-using-python/
+
+class WindowsInstallerInnoSetup:
+    def __init__(self):
+        print("")
+
+
+class WindowsInstallerMsi:
+    def __init__(self):
+        print("")
+
+
+# inherit from interface PaketManagerInstaller
+# Ubuntu / LinuxMint / Debian
+# https://stackoverflow.com/questions/57610644/linux-package-management-with-python
+class AptPackageManagerInstaller:
+    def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLine())):
+        self.__package_name = package_name
+        self.__command_line_executor = command_line_executor
+
+    def is_installed(self):
+        return False
+
+    def install_from_file(self, path_to_installer_file):
+        print("")
+
+    def install(self):
+        print("")
+
+    def uninstall(self):
+        print("")
+
+
+# inherit from interface PaketManagerInstallers
+# CentOs
+class YumPaketManagerInstaller:
+    def __init__(self):
+        print("")
+
+
+# inherit from interface PaketManagerInstallers
+# ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
+class PackmanPaketManagerInstaller:
+    def __init__(self):
+        print("")
+
+
+# Если скачивает torrent, то закачивает торрент при помощи transmission
+# (использовать https://pypi.org/project/python-magic/ для определения типа скачанного файла)
+class Downloader:
+    def __init__(self):
+        print("")
+
+
 # https://habr.com/ru/articles/658463/
 class TransmissionDaemon:
     def __init__(self):
         print("")
+
+
+class PackageName:
+    def __init__(self):
+        print("")
+
+    def get_name(self):
+        return ""
+
+    def get_os(self):
+        return ""
+
+
+class PackageAction:
+    def __init__(self):
+        print("")
+
+    # winetrics + wine 32|64
+    def install(self):
+        if self.__is_packet_manager():
+            if os == "Windows" and current_os == "Windows":
+                PackmanPaketManagerInstaller(Msys2CommandLineForInstaller()).install(packet)
+            if os == "Windows" and current_os == "Linux":
+                PackmanPaketManagerInstaller(WineCommandLineForInstaller(Msys2CommandLineForInstaller())).install(
+                    packet)
+            if os == "Ubuntu" and current_os == "Ubuntu":
+                AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install(packet)
+        else if self.__is_download_and_install():
+            download()  # if download_file is torrent --> dowload_torrent
+            # if download archive (zip / tar / rar) --> unpack_archive to tmp folder
+            if downloaded_file == "exe"  # inno setup installer
+                if os == "Windows" and current_os == "Windows":
+                    WindowsInstallerInnoSetup(WindowsCommandLineForInstaller()).install(custom_command_line)
+                if os == "Windows" and current_os == "Linux":
+                    WindowsInstallerInnoSetup(WineCommandLineForInstaller()).install(custom_command_line)
+            if downloaded_file == "msi"  # inno setup installer
+                if os == "Windows" and current_os == "Windows":
+                    WindowsInstallerMsi(WindowsCommandLineForInstaller()).install(custom_command_line)
+                if os == "Windows" and current_os == "Linux":
+                    WindowsInstallerMsi(WineCommandLineForInstaller()).install(custom_command_line)
+            if downloaded_file == "deb":
+                if os == "Ubuntu" and current_os == "Ubuntu":
+                    AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
+            if downloaded_file == "rpm":
+                if os == "CentOs" and current_os == "CentOs":
+                    AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
+
+
+class InstallCommandLine:
 
 
 def help_usage():

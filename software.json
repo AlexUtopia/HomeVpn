@@ -1,0 +1,97 @@
+https://stackoverflow.com/questions/10937350/how-to-check-type-of-files-without-extensions
+https://stackoverflow.com/questions/43580/how-to-find-the-mime-type-of-a-file-in-python
+https://ru.wikipedia.org/wiki/%D0%A1%D0%BF%D0%B8%D1%81%D0%BE%D0%BA_MIME-%D1%82%D0%B8%D0%BF%D0%BE%D0%B2
+https://www.digipres.org/formats/mime-types/
+https://github.com/ahupp/python-magic
+
+/etc/mime.types
+
+
+enum Type
+{
+   TORRENT,
+   INNO_SETUP_EXE,
+   MSI
+}
+
+{
+   "DownloadDir": "~/Загрузки",
+   "DeleteAfterDownload": (Bool),
+   "Proxy":
+   {
+      ...
+   },
+   "InnoSetupDefaultCommandLine": 
+   
+}
+
+
+https://github.com/doitsujin/dxvk
+https://source.winehq.org/git/vkd3d.git/
+https://github.com/HansKristian-Work/vkd3d-proton
+Обновить WineD3D через копипасту из директории пакета
+https://wiki.winehq.org/Wine_User%27s_Guide
+
+Winertrics качает оригинальные win dll
+
+https://wiki.archlinux.org/title/wine
+
+https://wiki.archlinux.org/title/wine
+
+{
+   "Graph": (enum DXVK / WineD3D / VKD3D / VKD3D_Proton / )
+}
+
+
+{
+  "Stalker | windows":
+  {
+     "DownloadUrl": (URI) // Можно указать локальный путь
+     "InstallCommandLine": (Optional<String>),
+     "Comment": (Optional<String>),
+     "Wine": 32,
+     "Winetrics": (String)
+  }
+}
+
+https://stackoverflow.com/questions/57610644/linux-package-management-with-python
+
+https://habr.com/ru/articles/341764/
+
+https://www.youtube.com/watch?v=48JPfxnPcow&ab_channel=Senjosei
+https://www.qemu.org/2017/11/22/haxm-usage-windows/
+{
+   "qemu | linux":
+     {
+        ""
+     },
+   "qemu | Ubuntu":
+     {
+        "PackageManager": "native",
+        "Package": "qemu"
+     },
+   "qemu | windows":
+     {
+        "InstallBefore": ["msys2", "haxm"],
+        "PackageManager": "packman",
+        "Package": "mingw-w64-qemu",
+        "Comment": "https://packages.msys2.org/base/mingw-w64-qemu"
+     }
+
+   "msys2 | windows":
+   {
+     "DownloadUrl": (URI)
+     "InstallCommandLine": (Optional<String>)
+   }
+
+   "haxm | windows":
+   {
+     "DownloadUrl": "https://www.qemu.org/2017/11/22/haxm-usage-windows/",
+     "InstallCommandLine": (Optional<String>)
+   }
+
+   "wine | Ubuntu":
+   {
+
+   }
+}
