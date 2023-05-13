@@ -11,9 +11,12 @@ import sys
 import urllib.request
 import urllib.parse
 import netaddr
+import os_release
 import randmac
 
 # fixme utopia Исправление для iptc который неадекватно работает на Ubuntu 22.04
+import semantic_version
+
 os.environ['XTABLES_LIBDIR'] = "/usr/lib/x86_64-linux-gnu/xtables/"
 
 import psutil
@@ -2123,30 +2126,136 @@ class ShellConfig:
         return raw_string_value.trim().isdigit()
 
 
-# linux cmd / msys2-win / linux-wine cmd
-class WindowsCommandLine:
+# https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
+# https://stackoverflow.com/a/43512141
+# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
+class CurrentOs:
+    @staticmethod
+    def is_windows(self):
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('win')
+
+    @staticmethod
+    def is_msys(self):
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('msys')
+
+    @staticmethod
+    def is_linux(self):
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('linux')
+
+    @staticmethod
+    def is_termux(self):
+        # https://termux.dev/en/
+        return self.is_android()
+
+    @staticmethod
+    def is_android(self):
+        try:
+            cmd_result = subprocess.run("uname -o", shell=True, capture_output=True, text=True)
+            if cmd_result.returncode:
+                return False
+            return cmd_result.stdout.lower().startswith("android")
+        except Exception:
+            return False
+
+    @staticmethod
+    def get_linux_kernel_version(self):
+        # https://docs.python.org/3/library/os.html#os.uname
+        return semantic_version.Version(platform.release())
+
+    @staticmethod
+    def get_windows_version(self):
+        os_version_info_ex = sys.getwindowsversion()
+        # fixme utopia Добавить информацию про wProductType
+        return semantic_version.Version(major=os_version_info_ex.major, minor=os_version_info_ex.minor,
+                                        build=os_version_info_ex.build)
+
+    @staticmethod
+    def get_linux_distro_name(self):
+        # https://pypi.org/project/os-release/
+        # https://www.freedesktop.org/software/systemd/man/os-release.html
+        return os_release.id()
+
+    @staticmethod
+    def get_linux_distro_version(self):
+        # https://pypi.org/project/os-release/
+        # https://www.freedesktop.org/software/systemd/man/os-release.html
+        return semantic_version.Version(version_string=os_release.version_id())
+
+    @staticmethod
+    def is32bit(self):
+        return not self.is64bit()
+
+    @staticmethod
+    def is64bit(self):
+        # https://www.fastwebhost.in/blog/how-to-find-if-linux-is-running-on-32-bit-or-64-bit/
+        # https://wiki.termux.com/wiki/FAQ
+        return platform.architecture()[0] == "64bit"
+
+
+class OsNameAndVersion:
+    def __init__(self, name_and_version):
+        self.__name_and_version = name_and_version
+
+    def is_windows(self):
+        return self.__name_and_version.lower().startswith('win')
+
+    def is_linux(self):
+        return self.__name_and_version.lower().startswith('linux')
+
+    def compare(self):
+        return CurrentOs.
+
+
+# Изменить версию win для wine https://forum.winehq.org/viewtopic.php?t=14589
+
+class WindowsCommandLineWrapper:
     def get_command_line(self, cmd):
         return cmd
 
 
-class LinuxCommandLine:
+class LinuxCommandLineWrapper:
     def get_command_line(self, cmd):
         return cmd
 
 
 # https://stackoverflow.com/questions/26809898/invoke-msys2-shell-from-command-prompt-or-powershell
 # https://stackoverflow.com/questions/1681208/python-platform-independent-way-to-modify-path-environment-variable
-class Msys2CommandLine:
-    MSYS2_DIR = fr"C:\msys64"
-    MSYS2_BIN_DIR = fr"{MSYS2_DIR}\usr\bin"
-    MSYS2_BASH = fr"{MSYS2_BIN_DIR}\bash.exe"
+class Msys2CommandLineWrapper:
+    MSYS2_DIR_DEFAULT = fr"C:\msys64"
+
+    def __init__(self, msys2_dir=MSYS2_DIR_DEFAULT):
+        self.__msys2_dir = msys2_dir
 
     def get_command_line(self, cmd):
+        # fixme utopia Экранирование для cmd (shlex?)
+        # https://docs.python.org/3/library/shlex.html#shlex.quote
+        # https://stackoverflow.com/questions/33560364/python-windows-parsing-command-lines-with-shlex
         self.__setup_path()
-        return fr"{self.MSYS2_BASH} -c \"{cmd}\""
+        return fr'"{self.__get_msys2_bash_path()}" -c "{cmd}"'
 
     def __setup_path(self):
         print("fixme")
+
+    def __get_msys2_bash_path(self):
+        return fr"{self.__get_msys2_bin_dir()}\bash.exe"
+
+    def __get_msys2_bin_dir(self):
+        return fr"{self.__msys2_dir}\usr\bin"
+
+
+# wine cmd /C ""notepad" "привет мир \'.txt""
+# Файлы в win не могут содержать двоичные кавычки в названии
+# fixme utopia Проверить экранирование одинарной кавычки на винде
+# fixme utopia Использовать WindowsCommandLineWrapper?
+class WineCommandLineWrapper:
+    WINE = "wine"
+
+    def get_command_line(self, cmd):
+        # fixme utopia Экранирование для cmd (shlex?)
+        return fr'"{self.WINE}" cmd /C "{cmd}"'
 
 
 class CommandLineExecutor:
@@ -2170,10 +2279,12 @@ class WindowsInstallerMsi:
 
 
 # inherit from interface PaketManagerInstaller
-# Ubuntu / LinuxMint / Debian
+# Ubuntu / LinuxMint / Debian / termux
 # https://stackoverflow.com/questions/57610644/linux-package-management-with-python
+# https://habr.com/ru/articles/683716/
+# https://askubuntu.com/a/548087
 class AptPackageManagerInstaller:
-    def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLine())):
+    def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLineWrapper())):
         self.__package_name = package_name
         self.__command_line_executor = command_line_executor
 
@@ -2189,18 +2300,52 @@ class AptPackageManagerInstaller:
     def uninstall(self):
         print("")
 
+    def add_ppa(self):
+        print("")
+
+
+# https://phoenixnap.com/kb/install-rpm-packages-on-ubuntu
+class RmpForUbuntuPackageManagerInstaller:
+    def __init__(self):
+        print("")
+
 
 # inherit from interface PaketManagerInstallers
 # CentOs
-class YumPaketManagerInstaller:
+class YumPackageManagerInstaller:
     def __init__(self):
         print("")
 
 
 # inherit from interface PaketManagerInstallers
 # ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
-class PackmanPaketManagerInstaller:
+class PackmanPackageManagerInstaller:
     def __init__(self):
+        print("")
+
+    def is_installed(self):
+        return False
+
+    def install_from_file(self, path_to_installer_file):
+        print("")
+
+    def install(self):
+        print("")
+
+    def uninstall(self):
+        print("")
+
+    # https://wiki.archlinux.org/title/wine
+    def enable_multilib(self):
+        print("")
+
+
+# fedora / centos / rhel
+class DnfPackageManagerInstaller:
+    def __init__(self):
+        print("")
+
+    def add_repo(self):
         print("")
 
 
@@ -2234,6 +2379,8 @@ class PackageAction:
 
     # winetrics + wine 32|64
     def install(self):
+        # dependency installer
+
         if self.__is_packet_manager():
             if os == "Windows" and current_os == "Windows":
                 PackmanPaketManagerInstaller(Msys2CommandLineForInstaller()).install(packet)
@@ -2260,10 +2407,15 @@ class PackageAction:
                     AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
             if downloaded_file == "rpm":
                 if os == "CentOs" and current_os == "CentOs":
-                    AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
+                    YumPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
+
+    def __packet_manager(self):
+        if
 
 
 class InstallCommandLine:
+    def __init__(self):
+        print("")
 
 
 def help_usage():

@@ -7,6 +7,17 @@
 3. Аккумулировать и распределить (внутрисетевые) вычислительные мощности VPN (CPU, RAM, HDD/SSD, GPU) всем клиентам
 4. Снизить затраты на наличное оборудование (за счёт снижения требований к этому оборудованию) всех клиентов VPN
 5. Снизить затраты на администрирвоание наличного парка оборудования
+6. Поддерживаемые платформы
+ - LinuxMint 19.3 / Ubuntu 18.04 / Debian ???
+ - ArchLinux (проверить)
+ - CentOs (проверить на рабочей тачке)
+ - Fedora
+ - Windows 7+
+ - Android/termux
+ - Windows/msys2
+7. Версия python 3.8+
+
+https://pkgs.org/
 
 # 2 Реализация
 
@@ -77,7 +88,9 @@ sudo pip${PYTHON_VERSION} install 'randmac==0.1' --force-reinstall --ignore-inst
 
 sudo pip${PYTHON_VERSION} install 'transmission-rpc==4.2.0' --force-reinstall --ignore-installed
 
-sudo pip${PYTHON_VERSION} install 'packaging==23.1' --force-reinstall --ignore-installed
+sudo pip${PYTHON_VERSION} install 'semantic_version==2.10.0' --force-reinstall --ignore-installed
+
+sudo pip${PYTHON_VERSION} install 'os-release==1.0.1' --force-reinstall --ignore-installed
 
 ```
 
