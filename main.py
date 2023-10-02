@@ -14,6 +14,8 @@ import netaddr
 import os_release
 import randmac
 
+import requests
+
 # fixme utopia Исправление для iptc который неадекватно работает на Ubuntu 22.04
 import semantic_version
 
@@ -39,6 +41,12 @@ class Path:
         this_script_dir = os.path.dirname(os.path.realpath(__file__))
         result = os.path.abspath(os.path.join(this_script_dir, self.__path))
         return result
+
+    def get_filename(self):
+        path = self.get()
+        if os.path.isfile(path):
+            return os.path.basename(path)
+        return ""
 
     def exists(self):
         return os.path.exists(self.get())
@@ -292,17 +300,31 @@ class TelegramClient:
         self.__config = TelegramBotConfig().get()
 
     def send_message(self, message):
-        with urllib.request.urlopen(self.__get_send_message_url(), self.__get_data(message)) as f:
+        with urllib.request.urlopen(self.__get_send_message_url(), data=self.__get_data(message)) as f:
             print("Telegram send message: {}".format(f.read().decode(self.ENCODING)))
+
+    # https://core.telegram.org/bots/api#senddocument
+    def send_file(self, file_path):
+        _file_path = Path(file_path)
+        files = {'document': (_file_path.get_filename(), open(_file_path.get(), 'rb'), "multipart/form-data")}
+        response = requests.post(self.__get_send_document_url(), data={"chat_id": self.__config["chat_id"]}, files=files)
+        print("Telegram send document: {}".format(response.content))
 
     def __get_send_message_url(self):
         return self.__get_url("sendMessage")
 
+    def __get_send_document_url(self):
+        return self.__get_url("sendDocument")
+
     def __get_url(self, command):
         return "https://api.telegram.org/bot{}/{}".format(self.__config["bot_token"], command)
 
-    def __get_data(self, message):
-        data = urllib.parse.urlencode({"chat_id": self.__config["chat_id"], "text": message})
+    def __get_data(self, message=None):
+        body = {"chat_id": self.__config["chat_id"]}
+        if message is not None:
+            body.update({"text": str(message)})
+
+        data = urllib.parse.urlencode(body)
         return data.encode(self.ENCODING)
 
 
@@ -580,7 +602,8 @@ class OpenVpnServerConfigGenerator:
         self.__add_server_log()
         # fixme utopia Если сетка виртуальных машин не настроена, не готовить конфиг?
         #  Или исключение от openvpn сервера обработать более корректно?
-        # self.__add_client_route_to_vm_bridge_network()
+        self.__add_client_route_to_vm_bridge_network()
+        #self.__add_dns_for_vm_bridge_network()
 
     def __parse_template(self):
         regex = re.compile(r"^[ \t]*([a-z\-_0-9]+)[ \t]*(.*)\n", re.MULTILINE)
@@ -622,7 +645,11 @@ class OpenVpnServerConfigGenerator:
 
     def __add_client_route_to_vm_bridge_network(self):
         ip_network = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().network
-        self.__key_value_config.add("push", "route {} {}".format(ip_network.network_address, ip_network.netmask))
+        self.__key_value_config.add_default("push", "\"route {} {}\"".format(ip_network.network_address, ip_network.netmask))
+
+    def __add_dns_for_vm_bridge_network(self):
+        ip = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().ip
+        self.__key_value_config.add_default("push", "\"dhcp-option DNS {}\"".format(ip))
 
 
 class OpenVpnClientConfigGenerator:
@@ -1535,7 +1562,9 @@ class VirtualMachine:
         # -full-screen
         # -device virtio-vga-gl -display sdl,gl=on
         # /usr/share/ovmf/OVMF.fd
-        return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
+        #return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
+        #return "-vnc 127.0.0.1:2 -soundhw hda"
+        return "-vnc 127.0.0.1:2"
 
     def __cpu(self):
         return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8"
@@ -1551,13 +1580,16 @@ class VirtualMachine:
         # https://listman.redhat.com/archives/vfio-users/2016-March/msg00088.html
         # ,display=auto,multifunction=on,x-vga=on,
         # x-igd-opregion=on,
-        return "-vga none -device vfio-pci,host=00:02.0,romfile=\"/home/utopia/Загрузки/Release/i915ovmf.rom\""
+        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
+        return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3"
+        #return "-device virtio-vga-gl -display sdl,gl=on"
 
     def __usb(self):
         usb_device_array = [
             (0x045e, 0x00db),  # Клавиатура Microsoft # Natural Ergonomic Keyboard 4000 v 1.0
             (0x0bda, 0x8771),  # USB-Bluetooth 5.0 адаптер Ugreen # CM390
-            (0x046d, 0xc05b)  # Мышка Logitec # B110
+            (0x046d, 0xc05b),  # Мышка Logitec # B110
+            (0x258a, 0x0302)   # Клавиатура с тачпадом Harper # KBT-330
         ]
 
         result = []
@@ -1591,9 +1623,9 @@ class Daemon:
 
             self.__init()
 
-            TelegramClient().send_message(
-                "Хорошего дня, лови новые параметры подключения\nIP Address: {}\nPort: {}".format(
-                    my_ip_address_and_port.get_ip_address(), my_ip_address_and_port.get_port()))
+            user_name = "utopia"
+            user_ovpn_file_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate()
+            TelegramClient().send_file(user_ovpn_file_path)
 
             watchdog_user_name = self.__open_vpn_config.get_watchdog_user_name()
             watchdog_user_config_path = OpenVpnClientConfigGenerator(my_ip_address_and_port,
@@ -2116,8 +2148,8 @@ class ShellConfig:
     def __get_value(self, raw_string_value):
         if self.__is_bool(raw_string_value):
             return self.__bool_from_string.get(raw_string_value)
-        else if self.__is_bool(raw_string_value):
-            return
+        else:
+            return None
 
     def __is_bool(self, raw_string_value):
         return self.__bool_from_string.is_bool(raw_string_value)
@@ -2206,7 +2238,7 @@ class OsNameAndVersion:
         return self.__name_and_version.lower().startswith('linux')
 
     def compare(self):
-        return CurrentOs.
+        return False
 
 
 # Изменить версию win для wine https://forum.winehq.org/viewtopic.php?t=14589
@@ -2389,15 +2421,15 @@ class PackageAction:
                     packet)
             if os == "Ubuntu" and current_os == "Ubuntu":
                 AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install(packet)
-        else if self.__is_download_and_install():
+        elif self.__is_download_and_install():
             download()  # if download_file is torrent --> dowload_torrent
             # if download archive (zip / tar / rar) --> unpack_archive to tmp folder
-            if downloaded_file == "exe"  # inno setup installer
+            if downloaded_file == "exe":  # inno setup installer
                 if os == "Windows" and current_os == "Windows":
                     WindowsInstallerInnoSetup(WindowsCommandLineForInstaller()).install(custom_command_line)
                 if os == "Windows" and current_os == "Linux":
                     WindowsInstallerInnoSetup(WineCommandLineForInstaller()).install(custom_command_line)
-            if downloaded_file == "msi"  # inno setup installer
+            if downloaded_file == "msi":  # inno setup installer
                 if os == "Windows" and current_os == "Windows":
                     WindowsInstallerMsi(WindowsCommandLineForInstaller()).install(custom_command_line)
                 if os == "Windows" and current_os == "Linux":
@@ -2410,7 +2442,10 @@ class PackageAction:
                     YumPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
 
     def __packet_manager(self):
-        if
+        return False
+
+    def __is_download_and_install(self):
+        return False
 
 
 class InstallCommandLine:
@@ -2598,6 +2633,25 @@ def main():
 
     elif command == "test":
         print("XXX")
+
+        user_name = "utopia"
+        open_vpn_config = OpenVpnConfig()
+        my_ip_address_and_port = IpAddressAndPort(
+            TextConfigReader(open_vpn_config.get_my_current_ip_address_and_port()).get())
+        file_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate()
+
+        TelegramClient().send_file(file_path)
+
+        return
+
+        filename = "gitconfig.txt"
+        up = {'document': (filename, open("/home/utopia/.gitconfig", 'rb'), "multipart/form-data")}
+        site = "https://api.telegram.org/bot5296572881:AAFkHMbDlDvpWR2mEC3p2q0sb8ycOxbQmnI/sendDocument"
+        request = requests.post(site, files=up, data={ "chat_id": "-687389280" })
+
+        print(request.content)
+
+        return
         print(NetworkInterface("lo").get_ipv4_interface_if())
         print(NetworkInterface("lo").get_ipv6_interface_if())
         print(NetworkInterface.get_internet_if())
