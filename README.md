@@ -72,7 +72,7 @@ dpkg -S $(which ip)
 
 export PYTHON_VERSION=3.10
 
-sudo apt-get install python${PYTHON_VERSION} openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base coreutils
+sudo apt-get install python${PYTHON_VERSION} openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base coreutils -y
 
 sudo python${PYTHON_VERSION} -m pip install pip --force-reinstall --ignore-installed
 
@@ -375,6 +375,10 @@ https://www.xmodulo.com/find-information-builtin-kernel-modules-linux.html
 sudo update-grub
 
 ```
+
+https://pve.proxmox.com/wiki/PCI_Passthrough
+
+https://superuser.com/questions/1350451/isolate-single-device-into-separate-iommu-group-for-pci-passthrough
 
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС

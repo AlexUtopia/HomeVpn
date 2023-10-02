@@ -602,8 +602,10 @@ class OpenVpnServerConfigGenerator:
         self.__add_server_log()
         # fixme utopia Если сетка виртуальных машин не настроена, не готовить конфиг?
         #  Или исключение от openvpn сервера обработать более корректно?
+        # https://openvpn.net/community-resources/ethernet-bridging/
+        # https://qna.habr.com/q/276200
         self.__add_client_route_to_vm_bridge_network()
-        #self.__add_dns_for_vm_bridge_network()
+        self.__add_dns_for_vm_bridge_network()
 
     def __parse_template(self):
         regex = re.compile(r"^[ \t]*([a-z\-_0-9]+)[ \t]*(.*)\n", re.MULTILINE)
@@ -646,6 +648,7 @@ class OpenVpnServerConfigGenerator:
     def __add_client_route_to_vm_bridge_network(self):
         ip_network = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().network
         self.__key_value_config.add_default("push", "\"route {} {}\"".format(ip_network.network_address, ip_network.netmask))
+        #self.__key_value_config.add_default("route", "{} {}".format(ip_network.network_address, ip_network.netmask))
 
     def __add_dns_for_vm_bridge_network(self):
         ip = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().ip
@@ -1636,7 +1639,9 @@ class Daemon:
 
             try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
                 # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
-                OpenVpnClient(watchdog_user_config_path).run()
+                # OpenVpnClient(watchdog_user_config_path).run()
+                print("watchdog disable!")
+                time.sleep(99999)
             except Exception as ex:
                 print("Try udp hole punching and RECONNECT: {}".format(ex))
 
