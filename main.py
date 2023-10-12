@@ -1520,7 +1520,7 @@ class VirtualMachine:
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
                               self.__network(),
                               self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
-                              self.__cpu(), self.__gpu(), self.__usb()]
+                              self.__cpu(), self.__gpu(), self.__usb(), self.__monitor()]
         return " ".join(command_parts_list)
 
     @staticmethod
@@ -1567,13 +1567,23 @@ class VirtualMachine:
         # /usr/share/ovmf/OVMF.fd
         #return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
         #return "-vnc 127.0.0.1:2 -soundhw hda"
+        #return "-vnc 127.0.0.1:2 -machine q35"
         return "-vnc 127.0.0.1:2"
+
+    def __monitor(self):
+        # fixme utopia config monitor port
+        # https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor
+        return "-monitor telnet:127.0.0.1:55555,server,nowait;"
+
 
     def __cpu(self):
         return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8"
 
     def __gpu(self):
-        # return "-vga std -display gtk"
+        #return "-vga std -display gtk"
+
+        return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
+        #return "-vga none -device vfio-pci,host=00:1f.3"
 
         # return "-device virtio-vga-gl -display sdl,gl=on"
 
@@ -1584,7 +1594,10 @@ class VirtualMachine:
         # ,display=auto,multifunction=on,x-vga=on,
         # x-igd-opregion=on,
         #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
-        return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3"
+        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3"
+        #return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
+        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
+        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
         #return "-device virtio-vga-gl -display sdl,gl=on"
 
     def __usb(self):
@@ -1631,15 +1644,15 @@ class Daemon:
             TelegramClient().send_file(user_ovpn_file_path)
 
             watchdog_user_name = self.__open_vpn_config.get_watchdog_user_name()
-            watchdog_user_config_path = OpenVpnClientConfigGenerator(my_ip_address_and_port,
-                                                                     watchdog_user_name).generate()
+            watchdog_user_config_path = "/data2/utopia/src/HomeVpn/client-watchdog.ovpn" #OpenVpnClientConfigGenerator(my_ip_address_and_port,
+                                        #                             watchdog_user_name).generate()
 
             # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
             #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
 
             try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
                 # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
-                # OpenVpnClient(watchdog_user_config_path).run()
+                #OpenVpnClient(watchdog_user_config_path).run()
                 print("watchdog disable!")
                 time.sleep(99999)
             except Exception as ex:
@@ -1704,7 +1717,7 @@ class TcpPort:
 
 
 class VmTcpForwarding:
-    RETRY_COUNT = 4
+    RETRY_COUNT = 40
 
     def __init__(self, vm_meta_data, local_network_if, input_port, output_port):
         self.__vm_meta_data = vm_meta_data

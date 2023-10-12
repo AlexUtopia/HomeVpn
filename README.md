@@ -380,6 +380,12 @@ https://pve.proxmox.com/wiki/PCI_Passthrough
 
 https://superuser.com/questions/1350451/isolate-single-device-into-separate-iommu-group-for-pci-passthrough
 
+http://vfio.blogspot.com/2016/07/intel-graphics-assignment.html
+
+https://ctf.re//windows/kernel/pcie/tutorial/2023/02/14/pcie-part-1/
+
+https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
+
 
 ### 2.6.3 Настройка VNC сервера гостевой ОС
 
@@ -429,7 +435,11 @@ https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-t
 
 ### 2.6.5 SSH
 
+Заполучить возможность запускать графические приложения от имени суперпользователя
+
 https://www.simplified.guide/ssh/x11-forwarding-as-root
+
+
 
 
 # 3 Инсталяция системы
