@@ -72,7 +72,7 @@ dpkg -S $(which ip)
 
 export PYTHON_VERSION=3.10
 
-sudo apt-get install python${PYTHON_VERSION} openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base coreutils -y
+sudo apt-get install python${PYTHON_VERSION} git openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base coreutils -y
 
 sudo python${PYTHON_VERSION} -m pip install pip --force-reinstall --ignore-installed
 
