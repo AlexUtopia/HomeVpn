@@ -4,6 +4,7 @@ PYTHON_VERSION_MIN="3.8"
 
 PYTHON_VERSION="3.10"
 
+# fixme utopia Выделить минимально необходимый набор пакетов для запуска системы, набор пакетов разработчика и полный
 # fixme utopia Проверка минимальной версии питона
 # fixme utopia Настройка VNC сервера + демонизация (для linux и termux)
 
@@ -18,6 +19,8 @@ IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетев�
 COREUTILS_PACKAGE="coreutils" # Утилита uname
 AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
 
+#libvirglrenderer1
+
 LINUX_PYTHON3_PACKAGE="python3"
 LINUX_PYTHON3_PIP_PACKAGE="python3-pip"
 LINUX_PYTHON3_VENV_PACKAGE="python3-venv"
@@ -27,6 +30,7 @@ LINUX_VNC_SERVER_PACKAGE="tightvncserver"
 LINUX_DNSMASQ_PACKAGE="dnsmasq-base" # DNS/DHCP сервер для сетевых адаптеров виртуальных машин qemu
 LINUX_QEMU_SYSTEM_PACKAGE="qemu qemu-system qemu-kvm"
 LINUX_AUXILIARY_UTILITIES="cpu-checker util-linux pciutils usbutils lshw" # Утилиты kvm-ok, lscpu, lspci, lsusb, lshw
+LINUX_SYSTEMD_PACKAGE="systemd" # Утилита systemctl
 
 TERMUX_PYTHON3_PACKAGE="python"
 TERMUX_PYTHON3_PIP_PACKAGE="python-pip"
@@ -37,6 +41,8 @@ TERMUX_VNC_SERVER_PACKAGE="tigervnc"
 TERMUX_DNSMASQ_PACKAGE=""
 TERMUX_QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
 TERMUX_AUXILIARY_UTILITIES="util-linux pciutils" # Утилиты lscpu, lspci
+
+#virglrenderer / virglrenderer-android
 
 PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1"
 
@@ -81,7 +87,7 @@ function setup_sshd() {
     if [ "${SSHD_IS_RUNNING,,}" = "active" ]; then
       return 0
     fi
-    sudo systemctl enable sshd
+    sudo systemctl enable sshd || return $?
     return 0
 }
 
