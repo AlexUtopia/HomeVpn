@@ -13,9 +13,13 @@ function is_termux() {
     return 0
 }
 
-# fixme utopia Выделить минимально необходимый набор пакетов для запуска системы, набор пакетов разработчика и полный
 # fixme utopia Проверка минимальной версии питона
-# fixme utopia Настройка VNC сервера + демонизация (для linux и termux)
+
+
+RUN_WITH_ADMIN_RIGHTS="sudo"
+if is_termux; then
+    RUN_WITH_ADMIN_RIGHTS=""
+fi
 
 ### Minimal packages begin
 
@@ -125,19 +129,19 @@ function get_system_name() {
 }
 
 function install_packages() {
-    sudo apt install ${1} -y || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} apt install ${1} -y || return $?
     return 0
 }
 
 function update_pip() {
-    sudo python3 -m pip install pip --force-reinstall --ignore-installed || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} python3 -m pip install pip --force-reinstall --ignore-installed || return $?
     return 0
 }
 
 function install_pip_packages() {
     for pip_package in ${1}
     do
-      sudo pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
+      ${RUN_WITH_ADMIN_RIGHTS} pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
     done
     return 0
 }
@@ -148,7 +152,7 @@ function setup_sshd() {
     if [ "${SSHD_IS_RUNNING,,}" = "active" ]; then
       return 0
     fi
-    sudo systemctl enable sshd || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} systemctl enable sshd || return $?
     return 0
 }
 
