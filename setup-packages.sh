@@ -3,8 +3,9 @@
 #set -x # Раскомментировать для отладки
 
 PYTHON_VERSION_MIN="3.8"
-
 PYTHON_VERSION="3.10"
+
+
 
 function is_termux() {
     if [[ -z "${TERMUX_VERSION}" ]]; then
@@ -20,6 +21,13 @@ RUN_WITH_ADMIN_RIGHTS="sudo"
 if is_termux; then
     RUN_WITH_ADMIN_RIGHTS=""
 fi
+
+TERMUX_ROOT=""
+if is_termux; then
+    TERMUX_ROOT="${PREFIX}/.."
+fi
+
+MKDIR="mkdir -p"
 
 ### Minimal packages begin
 
@@ -67,14 +75,14 @@ if is_termux; then
 fi
 
 VNC_CLIENT_PACKAGE="tigervnc-viewer"
-VNC_SERVER_PACKAGE="tightvncserver"
+VNC_SERVER_PACKAGE="tigervnc-standalone-server tigervnc-xorg-extension"
 if is_termux; then
     VNC_SERVER_PACKAGE="tigervnc"
 fi
 
-AUXILIARY_UTILITIES="cpu-checker util-linux pciutils usbutils lshw" # Утилиты kvm-ok, lscpu, lspci, lsusb, lshw
+AUXILIARY_UTILITIES="htop cpu-checker util-linux pciutils usbutils lshw" # Утилиты htop kvm-ok, lscpu, lspci, lsusb, lshw
 if is_termux; then
-    AUXILIARY_UTILITIES="util-linux pciutils"
+    AUXILIARY_UTILITIES="htop util-linux pciutils"
 fi
 
 TELNET_CLIENT_PACKAGE="putty" # Для подключения к qemu monitor
@@ -116,6 +124,11 @@ if is_termux; then
     QT_CREATOR_PACKAGE="qt-creator"
 fi
 
+LIBREOFFICE_PACKAGE="libreoffice"
+if is_termux; then
+    LIBREOFFICE_PACKAGE=""
+fi
+
 FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${XFCE4_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE}"
 ### Full packages end
 
@@ -146,13 +159,30 @@ function install_pip_packages() {
     return 0
 }
 
-function setup_sshd() {
-    local SSHD_IS_RUNNING=$(systemctl is-active sshd)
-
+function is_service_active() {
+    local SSHD_IS_RUNNING=$(systemctl is-active "${1}")
     if [ "${SSHD_IS_RUNNING,,}" = "active" ]; then
       return 0
     fi
-    ${RUN_WITH_ADMIN_RIGHTS} systemctl enable sshd || return $?
+    return 1
+}
+
+function service_enable() {
+    ${RUN_WITH_ADMIN_RIGHTS} systemctl enable "${1}" || return $?
+    return 0
+}
+
+function service_disable() {
+    ${RUN_WITH_ADMIN_RIGHTS} systemctl disable "${1}" || return $?
+    return 0
+}
+
+function setup_sshd() {
+    local SSHD="sshd"
+    if is_service_active "${SSHD}"; then
+      return 0
+    fi
+    service_enable "${SSHD}" || return $?
     return 0
 }
 
@@ -171,8 +201,62 @@ function install_rdp_client() {
     return 0
 }
 
+function install_wine() {
+    # https://wiki.winehq.org/Ubuntu
+    return 0
+}
+
+function write_smbd_config() {
+    local SMB_SHARE_DIRECTORY_PATH="${TERMUX_ROOT}/share"
+    if [[ -n "${1}" ]]; then
+        SMB_SHARE_DIRECTORY_PATH="${1}"
+    fi
+
+    local SMBD_CONFIG_FILE_PATH="${TERMUX_ROOT}/etc/samba/smb.conf"
+
+    local SMB_PORTS=""
+    if is_termux; then
+        SMB_PORTS="smb ports = 1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
+    fi
+
+    ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "${SMB_SHARE_DIRECTORY_PATH}" || return $?
+
+    ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "$(dirname "${SMBD_CONFIG_FILE_PATH}")" || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} echo > "
+[global]
+workgroup = WORKGROUP
+security = user
+map to guest = bad user
+wins support = no
+dns proxy = no
+${SMB_PORTS}
+
+[public]
+path = \"${SMB_SHARE_DIRECTORY_PATH}\"
+guest ok = yes
+force user = nobody
+browsable = yes
+writable = yes
+" || return $?
+}
+
 function setup_smbd() {
-    # fixme utopia Реализовать, см. пример конфига в телеграмме
+    # https://ubuntu.com/tutorials/install-and-configure-samba#1-overview
+    local SMBD="smbd"
+
+    if is_service_active "${SMBD}"; then
+      service_disable "${SMBD}" || return $?
+    fi
+
+    write_smbd_config || return $?
+
+    service_enable "${SMBD}" || return $?
+
+    # https://www.samba.org/~tpot/articles/firewall.html
+    # https://ixnfo.com/iptables-pravila-dlya-samba.html
+    # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
+    # https://entnet.ru/server/domain/ustanovka-i-nastrojka-samba-server.html
+    # fixme utopia Дописать, отладить
     return 0
 }
 
@@ -201,3 +285,5 @@ setup_sshd || exit $?
 setup_smbd || exit $?
 
 setup_vnc_server || exit $?
+
+}
