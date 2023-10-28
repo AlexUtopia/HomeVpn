@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x # Раскомментировать для отладки
+#set -x # Раскомментировать для отладки
 
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
@@ -328,21 +328,21 @@ function make_smbd_config() {
     local SMBD_CONFIG_FILE_DIR_PATH
     SMBD_CONFIG_FILE_DIR_PATH=$(dirname "${SMBD_CONFIG_FILE_PATH}") || return $?
 
+    local SMBD_CONFIG_FILE_NAME
+    SMBD_CONFIG_FILE_NAME=$(basename "${SMBD_CONFIG_FILE_PATH}") || return $?
+
     ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SHARE_DIRECTORY_PATH}" || return $?
     ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
 
     if [ -f "${SMBD_CONFIG_FILE_PATH}" ]; then
-        echo "smbd config file exist (${SMBD_CONFIG_FILE_PATH}), rewrite? (y/n)"
-        select yn in "Yes" "No"; do
-            case $yn in
-                Yes ) break;;
-                No ) return 1;;
-            esac
-        done
+        local CURRENT_DATE_TIME
+        CURRENT_DATE_TIME=$(date +%Y-%m-%dT%H_%M_%S_%N%z) || return $?
+        local OLD_SMBD_CONFIG_FILE_DIR_PATH="${SMBD_CONFIG_FILE_DIR_PATH}/unused_since_${CURRENT_DATE_TIME}_${SMBD_CONFIG_FILE_NAME}"
+        echo "smbd config file exist (${SMBD_CONFIG_FILE_PATH}), rename to ${OLD_SMBD_CONFIG_FILE_DIR_PATH}"
+        sudo mv "${SMBD_CONFIG_FILE_PATH}" ${OLD_SMBD_CONFIG_FILE_DIR_PATH}
     fi
 
-    ${RUN_WITH_ADMIN_RIGHTS} echo "
-[global]
+    ${RUN_WITH_ADMIN_RIGHTS} ${SHELL} -c "echo '[global]
 workgroup = WORKGROUP
 security = user
 map to guest = bad user
@@ -356,7 +356,7 @@ guest ok = yes
 force user = nobody
 browsable = yes
 writable = yes
-" > "${SMBD_CONFIG_FILE_PATH}" || return $?
+' > \"${SMBD_CONFIG_FILE_PATH}\"" || return $?
     return 0
 }
 
