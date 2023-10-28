@@ -5,27 +5,6 @@ set -x # Раскомментировать для отладки
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
 
-
-function get_smbd_config_file_path() {
-    local SMDB_BUILD_OPTIONS=smbd -X
-    echo $?
-    if [$? ne 0]; then
-        return $?
-    fi
-
-    local SMDB_CONFIG_FILE_PATH=$(echo "${SMDB_BUILD_OPTIONS}" | sed -EnXX 's/^[\t ]*CONFIGFILE:[\t ]+(.*)$/\1/p') # https://stackoverflow.com/a/43997253
-    if [[$? ]]; then
-        return $?
-    fi
-    echo "${SMDB_CONFIG_FILE_PATH}"
-    return 0
-}
-
-get_smbd_config_file_path
-
-exit
-
-
 function is_termux() {
     if [[ -n "${TERMUX_VERSION}" ]]; then
         return 0
@@ -43,14 +22,15 @@ fi
 
 TERMUX_ROOT=""
 if is_termux; then
-    TERMUX_ROOT="${PREFIX}/.."
+    TERMUX_ROOT="${PREFIX}"
 fi
+
 
 MKDIR="mkdir -p"
 
-SMB_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
+SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
-    SMB_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
+    SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
 fi
 
 ### Minimal packages begin
@@ -195,10 +175,8 @@ function install_pip_packages() {
 ### System services begin
 
 function systemd_is_service_active() {
-    local SERVICE_IS_RUNNING=$(systemctl is-active "${1}")
-    if ! $?; then
-        return $?
-    fi
+    local SERVICE_IS_RUNNING
+    SERVICE_IS_RUNNING=$(systemctl is-active "${1}") || return $?
 
     if [ "${SERVICE_IS_RUNNING,,}" = "active" ]; then
         return 0
@@ -218,10 +196,8 @@ function systemd_service_disable() {
 
 function termux_is_service_active() {
     # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
-    local SERVICE_IS_RUNNING=$(sv status "${1}")
-    if ! $?; then
-        return $?
-    fi
+    local SERVICE_IS_RUNNING
+    SERVICE_IS_RUNNING=$(sv status "${1}") || return $?
 
     if [[ "${SERVICE_IS_RUNNING}" = "run: "* ]]; then # https://stackoverflow.com/a/229606
         return 0
@@ -328,35 +304,43 @@ function install_wine() {
     return 0
 }
 
-#function get_smbd_config_file_path() {
-#    local SMDB_BUILD_OPTIONS=$(smbd -b)
-#    if ! $?; then
-#        return $?
-#    fi
-#
-#    local SMDB_CONFIG_FILE_PATH=echo "${SMDB_BUILD_OPTIONS}" | sed -En 's/^[\t ]*CONFIGFILE:[\t ]+(.*)$/\1/p' # https://stackoverflow.com/a/43997253
-#    if ! $?; then
-#        return $?
-#    fi
-#
-#    echo "${SMDB_CONFIG_FILE_PATH}"
-#    return 0
-#}
+function get_smbd_config_file_path() {
+    local SMBD_BUILD_OPTIONS
+    SMBD_BUILD_OPTIONS=$(smbd -b) || return $?
 
-function write_smbd_config() {
+    local SMBD_CONFIG_FILE_PATH
+    SMBD_CONFIG_FILE_PATH=$(echo "${SMBD_BUILD_OPTIONS}" | sed -En 's/^[\t ]*CONFIGFILE:[\t ]+(.*)$/\1/p') || return $? # https://stackoverflow.com/a/43997253
+
+    echo "${SMBD_CONFIG_FILE_PATH}"
+    return 0
+}
+
+function make_smbd_config() {
     # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
-    local SMB_SHARE_DIRECTORY_PATH="${TERMUX_ROOT}/share"
+    local SHARE_DIRECTORY_PATH="${TERMUX_ROOT}/share"
     if [[ -n "${1}" ]]; then
-        SMB_SHARE_DIRECTORY_PATH="${1}"
+        SHARE_DIRECTORY_PATH="${1}"
     fi
 
-    local SMBD_CONFIG_FILE_PATH="${TERMUX_ROOT}/etc/samba/smb.conf"
+    local SMBD_CONFIG_FILE_PATH
+    SMBD_CONFIG_FILE_PATH=$(get_smbd_config_file_path) || return $?
 
-    ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "${SMB_SHARE_DIRECTORY_PATH}" || return $?
+    local SMBD_CONFIG_FILE_DIR_PATH
+    SMBD_CONFIG_FILE_DIR_PATH=$(dirname "${SMBD_CONFIG_FILE_PATH}") || return $?
 
-    local SMBD_CONFIG_FILE_DIR_PATH="$(dirname "${SMBD_CONFIG_FILE_PATH}")"
+    ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SHARE_DIRECTORY_PATH}" || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
 
-    ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
+    if [ -f "${SMBD_CONFIG_FILE_PATH}" ]; then
+        echo "smbd config file exist (${SMBD_CONFIG_FILE_PATH}), rewrite? (y/n)"
+        select yn in "Yes" "No"; do
+            case $yn in
+                Yes ) break;;
+                No ) return 1;;
+            esac
+        done
+    fi
+
     ${RUN_WITH_ADMIN_RIGHTS} echo "
 [global]
 workgroup = WORKGROUP
@@ -364,10 +348,10 @@ security = user
 map to guest = bad user
 wins support = no
 dns proxy = no
-smb ports = ${SMB_TCP_PORTS}
+smb ports = ${SMBD_TCP_PORTS}
 
 [public]
-path = \"${SMB_SHARE_DIRECTORY_PATH}\"
+path = \"${SHARE_DIRECTORY_PATH}\"
 guest ok = yes
 force user = nobody
 browsable = yes
@@ -384,7 +368,7 @@ function setup_smbd() {
       service_disable "${SMBD}" || return $?
     fi
 
-    write_smbd_config || return $?
+    make_smbd_config || return $?
 
     service_enable "${SMBD}" || return $?
 
@@ -406,20 +390,18 @@ function setup_vnc_server() {
     return 0
 }
 
-install_packages "${DEV_PACKAGES}" || exit $?
+#install_packages "${DEV_PACKAGES}" || exit $?
 
-update_pip || exit $?
+#update_pip || exit $?
 
-install_pip_packages "${PIP_PACKAGES}" || exit $?
+#install_pip_packages "${PIP_PACKAGES}" || exit $?
 
-install_rdp_client || exit $?
+#install_rdp_client || exit $?
 
-install_pycharm || exit $?
+#install_pycharm || exit $?
 
-setup_sshd || exit $?
+#setup_sshd || exit $?
 
 setup_smbd || exit $?
 
-setup_vnc_server || exit $?
-
-}
+#setup_vnc_server || exit $?
