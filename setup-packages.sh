@@ -1,17 +1,36 @@
 #!/bin/bash
 
-#set -x # Раскомментировать для отладки
+set -x # Раскомментировать для отладки
 
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
 
 
+function get_smbd_config_file_path() {
+    local SMDB_BUILD_OPTIONS=smbd -X
+    echo $?
+    if [$? ne 0]; then
+        return $?
+    fi
+
+    local SMDB_CONFIG_FILE_PATH=$(echo "${SMDB_BUILD_OPTIONS}" | sed -EnXX 's/^[\t ]*CONFIGFILE:[\t ]+(.*)$/\1/p') # https://stackoverflow.com/a/43997253
+    if [[$? ]]; then
+        return $?
+    fi
+    echo "${SMDB_CONFIG_FILE_PATH}"
+    return 0
+}
+
+get_smbd_config_file_path
+
+exit
+
 
 function is_termux() {
-    if [[ -z "${TERMUX_VERSION}" ]]; then
-        return 1
+    if [[ -n "${TERMUX_VERSION}" ]]; then
+        return 0
     fi
-    return 0
+    return 1
 }
 
 # fixme utopia Проверка минимальной версии питона
@@ -29,6 +48,11 @@ fi
 
 MKDIR="mkdir -p"
 
+SMB_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
+if is_termux; then
+    SMB_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
+fi
+
 ### Minimal packages begin
 
 OPEN_VPN_PACKAGE="openvpn"
@@ -37,7 +61,7 @@ TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname
+COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -91,7 +115,7 @@ SAMBA_PACKAGE="samba"
 
 SYSTEMD_PACKAGE="systemd" # Утилита systemctl
 if is_termux; then
-    SYSTEMD_PACKAGE=""
+    SYSTEMD_PACKAGE="termux-services"
 fi
 
 DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${SSH_SERVER_PACKAGE} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE}"
@@ -141,10 +165,19 @@ function get_system_name() {
     echo "${SYSTEM_NAME,,}"
 }
 
+### System package manager begin
+
 function install_packages() {
     ${RUN_WITH_ADMIN_RIGHTS} apt install ${1} -y || return $?
     return 0
 }
+
+function is_package_installed() {
+    apt -L ${1}
+    return $?
+}
+
+### System package manager end
 
 function update_pip() {
     ${RUN_WITH_ADMIN_RIGHTS} python3 -m pip install pip --force-reinstall --ignore-installed || return $?
@@ -159,23 +192,112 @@ function install_pip_packages() {
     return 0
 }
 
-function is_service_active() {
-    local SSHD_IS_RUNNING=$(systemctl is-active "${1}")
-    if [ "${SSHD_IS_RUNNING,,}" = "active" ]; then
-      return 0
+### System services begin
+
+function systemd_is_service_active() {
+    local SERVICE_IS_RUNNING=$(systemctl is-active "${1}")
+    if ! $?; then
+        return $?
+    fi
+
+    if [ "${SERVICE_IS_RUNNING,,}" = "active" ]; then
+        return 0
     fi
     return 1
 }
 
+function systemd_service_enable() {
+    ${RUN_WITH_ADMIN_RIGHTS} systemctl enable "${1}"
+    return $?
+}
+
+function systemd_service_disable() {
+    ${RUN_WITH_ADMIN_RIGHTS} systemctl disable "${1}"
+    return $?
+}
+
+function termux_is_service_active() {
+    # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
+    local SERVICE_IS_RUNNING=$(sv status "${1}")
+    if ! $?; then
+        return $?
+    fi
+
+    if [[ "${SERVICE_IS_RUNNING}" = "run: "* ]]; then # https://stackoverflow.com/a/229606
+        return 0
+    fi
+    return 1
+}
+
+function termux_service_enable() {
+    ${RUN_WITH_ADMIN_RIGHTS} sv-enable "${1}"
+    return $?
+}
+
+function termux_service_disable() {
+    ${RUN_WITH_ADMIN_RIGHTS} sv-disable "${1}"
+    return $?
+}
+
+function is_service_active() {
+    if is_termux; then
+        termux_is_service_active "${1}"
+        return $?
+    fi
+
+    systemd_is_service_active "${1}"
+    return $?
+}
+
 function service_enable() {
-    ${RUN_WITH_ADMIN_RIGHTS} systemctl enable "${1}" || return $?
-    return 0
+    if is_termux; then
+        termux_service_enable "${1}"
+        return $?
+    fi
+
+    systemd_service_enable "${1}"
+    return $?
 }
 
 function service_disable() {
-    ${RUN_WITH_ADMIN_RIGHTS} systemctl disable "${1}" || return $?
+    if is_termux; then
+        termux_service_disable "${1}"
+        return $?
+    fi
+
+    systemd_service_disable "${1}"
+    return $?
+}
+
+### System services end
+
+
+### System firewall begin
+# https://selectel.ru/blog/setup-iptables-linux/
+# https://losst.pro/kak-sohranit-pravila-iptables
+
+function firewall_accept_tcp_traffic_for_ports() {
+    if [[ -z "${1}" ]]; then
+        echo "TCP port not specified"
+        return 1
+    fi
+
+    iptables -A INPUT -p tcp --dport ${1} -j ACCEPT || return $?
     return 0
 }
+
+function firewall_accept_udp_traffic_for_ports() {
+    if [[ -z "${1}" ]]; then
+        echo "UDP port not specified"
+        return 1
+    fi
+
+    iptables -A INPUT -p udp --dport ${1} -j ACCEPT || return $?
+    return 0
+}
+
+### System firewall end
+
 
 function setup_sshd() {
     local SSHD="sshd"
@@ -206,7 +328,23 @@ function install_wine() {
     return 0
 }
 
+#function get_smbd_config_file_path() {
+#    local SMDB_BUILD_OPTIONS=$(smbd -b)
+#    if ! $?; then
+#        return $?
+#    fi
+#
+#    local SMDB_CONFIG_FILE_PATH=echo "${SMDB_BUILD_OPTIONS}" | sed -En 's/^[\t ]*CONFIGFILE:[\t ]+(.*)$/\1/p' # https://stackoverflow.com/a/43997253
+#    if ! $?; then
+#        return $?
+#    fi
+#
+#    echo "${SMDB_CONFIG_FILE_PATH}"
+#    return 0
+#}
+
 function write_smbd_config() {
+    # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
     local SMB_SHARE_DIRECTORY_PATH="${TERMUX_ROOT}/share"
     if [[ -n "${1}" ]]; then
         SMB_SHARE_DIRECTORY_PATH="${1}"
@@ -214,22 +352,19 @@ function write_smbd_config() {
 
     local SMBD_CONFIG_FILE_PATH="${TERMUX_ROOT}/etc/samba/smb.conf"
 
-    local SMB_PORTS=""
-    if is_termux; then
-        SMB_PORTS="smb ports = 1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
-    fi
-
     ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "${SMB_SHARE_DIRECTORY_PATH}" || return $?
 
-    ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "$(dirname "${SMBD_CONFIG_FILE_PATH}")" || return $?
-    ${RUN_WITH_ADMIN_RIGHTS} echo > "
+    local SMBD_CONFIG_FILE_DIR_PATH="$(dirname "${SMBD_CONFIG_FILE_PATH}")"
+
+    ${RUN_WITH_ADMIN_RIGHTS} "${MKDIR}" "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} echo "
 [global]
 workgroup = WORKGROUP
 security = user
 map to guest = bad user
 wins support = no
 dns proxy = no
-${SMB_PORTS}
+smb ports = ${SMB_TCP_PORTS}
 
 [public]
 path = \"${SMB_SHARE_DIRECTORY_PATH}\"
@@ -237,7 +372,8 @@ guest ok = yes
 force user = nobody
 browsable = yes
 writable = yes
-" || return $?
+" > "${SMBD_CONFIG_FILE_PATH}" || return $?
+    return 0
 }
 
 function setup_smbd() {
