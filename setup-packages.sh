@@ -8,7 +8,7 @@ PYTHON_VERSION="3.10"
 # su: termux-tools / util-linux
 # sudo: tsu / sudo
 # https://github.com/termux/termux-tools/blob/master/scripts/su.in
-function is_admin_right_available() {
+function is_admin_rights_available() {
 
     return 0
 }
