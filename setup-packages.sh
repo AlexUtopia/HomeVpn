@@ -5,6 +5,14 @@
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
 
+# su: termux-tools / util-linux
+# sudo: tsu / sudo
+# https://github.com/termux/termux-tools/blob/master/scripts/su.in
+function is_admin_right_available() {
+
+    return 0
+}
+
 function is_termux() {
     if [[ -n "${TERMUX_VERSION}" ]]; then
         return 0
@@ -41,7 +49,7 @@ TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo
+COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -146,6 +154,12 @@ function get_system_name() {
 }
 
 ### System package manager begin
+
+function package_manager_update_and_upgrade() {
+    ${RUN_WITH_ADMIN_RIGHTS} apt update || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} apt upgrade -y || return $?
+    return 0
+}
 
 function install_packages() {
     ${RUN_WITH_ADMIN_RIGHTS} apt install ${1} -y || return $?
@@ -389,6 +403,8 @@ function setup_vnc_server() {
     #cinnamon-session-cinnamon
     return 0
 }
+
+package_manager_update_and_upgrade || exit $?
 
 #install_packages "${DEV_PACKAGES}" || exit $?
 
