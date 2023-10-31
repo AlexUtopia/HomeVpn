@@ -36,6 +36,13 @@ fi
 
 MKDIR="mkdir -p"
 
+
+SAMBA_PUBLIC_DIRECTORY_PATH="/share"
+SAMBA_USERNAME="samba_user_for_home_vpn"
+if is_termux; then
+    SAMBA_PUBLIC_DIRECTORY_PATH="${TERMUX_ROOT}/share"
+fi
+
 SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
     SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
@@ -49,7 +56,7 @@ TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv
+COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -106,7 +113,12 @@ if is_termux; then
     SYSTEMD_PACKAGE="termux-services"
 fi
 
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${SSH_SERVER_PACKAGE} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE}"
+PASSWD_PACKAGE="passwd" # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
+if is_termux; then
+    PASSWD_PACKAGE=""
+fi
+
+DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${SSH_SERVER_PACKAGE} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
 ### Development packages end
 
 
@@ -329,12 +341,26 @@ function get_smbd_config_file_path() {
     return 0
 }
 
+function make_samba_user_and_assign_rights() {
+    if ! is_termux; then
+        # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
+        local SAMBASHARE_GROUP="sambashare"
+        ${RUN_WITH_ADMIN_RIGHTS} useradd "${SAMBA_USERNAME}" || return $?
+        ${RUN_WITH_ADMIN_RIGHTS} usermod -a -G "${SAMBASHARE_GROUP}" "${SAMBA_USERNAME}" || return $?
+        ${RUN_WITH_ADMIN_RIGHTS} usermod -a -G "${SAMBASHARE_GROUP}" "${USER}" || return $?
+        return 0
+    fi
+    return 0
+}
+
+function make_samba_public_directory() {
+    ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} chmod -R 777 "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    return 0
+}
+
 function make_smbd_config() {
     # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
-    local SHARE_DIRECTORY_PATH="${TERMUX_ROOT}/share"
-    if [[ -n "${1}" ]]; then
-        SHARE_DIRECTORY_PATH="${1}"
-    fi
 
     local SMBD_CONFIG_FILE_PATH
     SMBD_CONFIG_FILE_PATH=$(get_smbd_config_file_path) || return $?
@@ -345,7 +371,6 @@ function make_smbd_config() {
     local SMBD_CONFIG_FILE_NAME
     SMBD_CONFIG_FILE_NAME=$(basename "${SMBD_CONFIG_FILE_PATH}") || return $?
 
-    ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SHARE_DIRECTORY_PATH}" || return $?
     ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
 
     if [ -f "${SMBD_CONFIG_FILE_PATH}" ]; then
@@ -365,9 +390,9 @@ dns proxy = no
 smb ports = ${SMBD_TCP_PORTS}
 
 [public]
-path = \"${SHARE_DIRECTORY_PATH}\"
+path = \"${SAMBA_PUBLIC_DIRECTORY_PATH}\"
 guest ok = yes
-force user = nobody
+force user = ${SAMBA_USERNAME}
 browsable = yes
 writable = yes
 ' > \"${SMBD_CONFIG_FILE_PATH}\"" || return $?
@@ -382,6 +407,8 @@ function setup_smbd() {
       service_disable "${SMBD}" || return $?
     fi
 
+    make_samba_user_and_assign_rights || return $?
+    make_samba_public_directory || return $?
     make_smbd_config || return $?
 
     service_enable "${SMBD}" || return $?
@@ -390,7 +417,6 @@ function setup_smbd() {
     # https://ixnfo.com/iptables-pravila-dlya-samba.html
     # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
     # https://entnet.ru/server/domain/ustanovka-i-nastrojka-samba-server.html
-    # fixme utopia Дописать, отладить
     return 0
 }
 
