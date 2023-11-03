@@ -348,10 +348,32 @@ function install_pycharm() {
     return 0
 }
 
+function termux_install_rdp_client() {
+    install_packages "freerdp"
+    return $?
+}
+
 function install_rdp_client() {
+    if is_termux; then
+        termux_install_rdp_client || return $?
+        return 0
+    fi
+
+    # 0) naming for package *.source file
+    # 1) check *.sources file in /etc/apt/sources.list.d/
+    # 2) download key
+    # 3) gpg --dearmor key if need (/etc/apt/keyrings) [gnupg package]
+    # 4) make *.sources file in /etc/apt/sources.list.d/
+    # 5) apt update
+    # 6) install_packages
+
+    # https://interface31.ru/tech_it/2022/09/apt-key-is-deprecated-ili-upravlenie-klyuchami-v-sovremennyh-vypuskah-debian-i-ubunt.html
+    # https://habr.com/en/articles/683716/
+
     # https://pub.freerdp.com/releases/
     # https://github.com/FreeRDP/FreeRDP
     # fixme utopia Реализовать
+    # https://ci.freerdp.com/job/freerdp-nightly-binaries/
     # echo "FreeRDP installed to <directory>, see https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface"
     return 0
 }
