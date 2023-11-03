@@ -56,7 +56,7 @@ TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups
+COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -301,6 +301,37 @@ function firewall_accept_udp_traffic_for_ports() {
 ### System firewall end
 
 
+### User API begin
+
+function user_add() {
+    ${RUN_WITH_ADMIN_RIGHTS} useradd "${1}"
+    return $?
+}
+
+function user_is_available() {
+    id "${1}"
+    return $?
+}
+
+function user_add_to_group() {
+    ${RUN_WITH_ADMIN_RIGHTS} usermod -a -G "${2}" "${1}"
+    return $?
+}
+
+function user_is_added_to_group() {
+    local USER_GROUP_NAME_LIST
+    USER_GROUP_NAME_LIST=$(id "${1}" -G -n) || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
+    for USER_GROUP_NAME in USER_GROUP_NAME_LIST
+    do
+      if [ "${USER_GROUP_NAME}" = "${2}" ]; then
+          return 0
+      fi
+    done
+    return 1
+}
+
+### User API end
+
 function setup_sshd() {
     local SSHD="sshd"
     if is_service_active "${SSHD}"; then
@@ -345,9 +376,14 @@ function make_samba_user_and_assign_rights() {
     if ! is_termux; then
         # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
         local SAMBASHARE_GROUP="sambashare"
-        ${RUN_WITH_ADMIN_RIGHTS} useradd "${SAMBA_USERNAME}" || return $?
-        ${RUN_WITH_ADMIN_RIGHTS} usermod -a -G "${SAMBASHARE_GROUP}" "${SAMBA_USERNAME}" || return $?
-        ${RUN_WITH_ADMIN_RIGHTS} usermod -a -G "${SAMBASHARE_GROUP}" "${USER}" || return $?
+
+        if ! user_is_available "${SAMBA_USERNAME}"; then
+            user_add "${SAMBA_USERNAME}" || return $?
+        fi
+
+        if ! user_is_added_to_group "${SAMBA_USERNAME}" "${SAMBASHARE_GROUP}"; then
+            user_add_to_group "${SAMBA_USERNAME}" "${SAMBASHARE_GROUP}" || return $?
+        fi
         return 0
     fi
     return 0
@@ -355,7 +391,7 @@ function make_samba_user_and_assign_rights() {
 
 function make_samba_public_directory() {
     ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
-    ${RUN_WITH_ADMIN_RIGHTS} chmod -R 777 "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    ${RUN_WITH_ADMIN_RIGHTS} chmod 0777 "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
     return 0
 }
 
@@ -381,6 +417,7 @@ function make_smbd_config() {
         sudo mv "${SMBD_CONFIG_FILE_PATH}" ${OLD_SMBD_CONFIG_FILE_DIR_PATH}
     fi
 
+    # https://www.samba.org/samba/docs/using_samba/ch08.html#samba2-CHP-8-TABLE-2
     ${RUN_WITH_ADMIN_RIGHTS} ${SHELL} -c "echo '[global]
 workgroup = WORKGROUP
 security = user
@@ -388,11 +425,12 @@ map to guest = bad user
 wins support = no
 dns proxy = no
 smb ports = ${SMBD_TCP_PORTS}
+inherit permissions = yes
 
 [public]
 path = \"${SAMBA_PUBLIC_DIRECTORY_PATH}\"
 guest ok = yes
-force user = ${SAMBA_USERNAME}
+force user = nobody
 browsable = yes
 writable = yes
 ' > \"${SMBD_CONFIG_FILE_PATH}\"" || return $?
@@ -403,15 +441,17 @@ function setup_smbd() {
     # https://ubuntu.com/tutorials/install-and-configure-samba#1-overview
     local SMBD="smbd"
 
-    if is_service_active "${SMBD}"; then
-      service_disable "${SMBD}" || return $?
-    fi
+    service_disable "${SMBD}" || return $?
 
-    make_samba_user_and_assign_rights || return $?
+    # make_samba_user_and_assign_rights || return $?
     make_samba_public_directory || return $?
     make_smbd_config || return $?
 
     service_enable "${SMBD}" || return $?
+
+    if ! is_service_active "${SMBD}"; then
+      echo "FATAL: ${SMBD} not started"
+    fi
 
     # https://www.samba.org/~tpot/articles/firewall.html
     # https://ixnfo.com/iptables-pravila-dlya-samba.html
@@ -430,7 +470,7 @@ function setup_vnc_server() {
     return 0
 }
 
-package_manager_update_and_upgrade || exit $?
+#package_manager_update_and_upgrade || exit $?
 
 #install_packages "${DEV_PACKAGES}" || exit $?
 
