@@ -34,7 +34,7 @@ if is_termux; then
 fi
 
 
-MKDIR="mkdir -p"
+MKDIR="mkdir -p" # fixme utopia to function
 
 
 SAMBA_PUBLIC_DIRECTORY_PATH="/share"
@@ -49,6 +49,8 @@ if is_termux; then
 fi
 
 ### Minimal packages begin
+
+# fixme utopia file, gpg, which (package)
 
 OPEN_VPN_PACKAGE="openvpn"
 WGET_PACKAGE="wget"
@@ -185,7 +187,8 @@ function get_file_name_from_url() {
 ## @param URL для скачивания
 ## @param Директория куда будет скачан файл по URL
 ## @retval 0 если успешно
-function download_file() {
+function download_file_to_directory() {
+    # fixme utopia make directory
     pushd "${2}" || return $?
     wget "${1}" || return $?
     popd || return $?
