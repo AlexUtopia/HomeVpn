@@ -165,7 +165,96 @@ function get_system_name() {
     echo "${SYSTEM_NAME,,}"
 }
 
+
+### Download API begin
+
+## @fn get_file_name_from_url()
+## @brief Получить имя файла из URL
+## @param URL для скачивания
+## @retval 0 если успешно
+## @return Имя файла из URL
+function get_file_name_from_url() {
+    local RESULT
+    RESULT=$(basename "${1}") || return $?
+    echo "${RESULT}"
+    return 0
+}
+
+## @fn download_file()
+## @brief Скачать файл в директорию
+## @param URL для скачивания
+## @param Директория куда будет скачан файл по URL
+## @retval 0 если успешно
+function download_file() {
+    pushd "${2}" || return $?
+    wget "${1}" || return $?
+    popd || return $?
+    return 0
+}
+
+### Download API end
+
+
 ### System package manager begin
+
+## @fn is_executable_available()
+## @brief Проверить существует ли целевой исполняемый файл
+## @details https://stackoverflow.com/a/26759734
+## @param Имя исполняемого файла, можно с полный путь до исполняемого файла
+## @retval 0 если целевой исполняемый файл существует; 1 - не существует
+function is_executable_available() {
+    local TARGET_EXECUTABLE_PATH
+    TARGET_EXECUTABLE_PATH=$(command -v "${1}") || return $?
+    if [[ -x "${TARGET_EXECUTABLE_PATH}" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+## @fn package_manager_is_apt()
+## @brief Проверить существует ли пакетный менеджер apt
+## @details Debian, Ubuntu, Linux Mint, termux
+## @retval 0 пакетный менеджер apt существует; 1 - не существует
+function package_manager_is_apt() {
+    is_executable_available "apt"
+    return $?
+}
+
+## @fn package_manager_is_pacman()
+## @brief Проверить существует ли пакетный менеджер pacman
+## @details Arch Linux, MinGW
+## @retval 0 пакетный менеджер pacman существует; 1 - не существует
+function package_manager_is_pacman() {
+    is_executable_available "pacman"
+    return $?
+}
+
+## @fn package_manager_is_yum()
+## @brief Проверить существует ли пакетный менеджер yum
+## @details RHEL, Fedora, CentOS
+## @retval 0 пакетный менеджер yum существует; 1 - не существует
+function package_manager_is_yum() {
+    is_executable_available "yum"
+    return $?
+}
+
+## @fn package_manager_is_dnf()
+## @brief Проверить существует ли пакетный менеджер dnf
+## @details Fedora
+## @retval 0 пакетный менеджер dnf существует; 1 - не существует
+function package_manager_is_dnf() {
+    is_executable_available "dnf"
+    return $?
+}
+
+## @fn package_manager_is_zypper()
+## @brief Проверить существует ли пакетный менеджер zypper
+## @details openSUSE
+## @retval 0 пакетный менеджер zypper существует; 1 - не существует
+function package_manager_is_zypper() {
+    is_executable_available "zypper"
+    return $?
+}
 
 function package_manager_update_and_upgrade() {
     ${RUN_WITH_ADMIN_RIGHTS} apt update || return $?
@@ -278,7 +367,7 @@ function service_disable() {
 # https://selectel.ru/blog/setup-iptables-linux/
 # https://losst.pro/kak-sohranit-pravila-iptables
 
-function firewall_accept_tcp_traffic_for_ports() {
+function firewall_accept_tcp_traffic_for_port() {
     if [[ -z "${1}" ]]; then
         echo "TCP port not specified"
         return 1
@@ -288,7 +377,7 @@ function firewall_accept_tcp_traffic_for_ports() {
     return 0
 }
 
-function firewall_accept_udp_traffic_for_ports() {
+function firewall_accept_udp_traffic_for_port() {
     if [[ -z "${1}" ]]; then
         echo "UDP port not specified"
         return 1
@@ -331,6 +420,7 @@ function user_is_added_to_group() {
 }
 
 ### User API end
+
 
 function setup_sshd() {
     local SSHD="sshd"
