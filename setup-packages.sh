@@ -50,7 +50,7 @@ fi
 
 ### Minimal packages begin
 
-# fixme utopia file, gpg, which (package)
+# fixme utopia file, gpg, which, lsb-release (package)
 
 OPEN_VPN_PACKAGE="openvpn"
 WGET_PACKAGE="wget"
@@ -163,10 +163,16 @@ PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0
 
 
 function get_system_name() {
-    SYSTEM_NAME=`uname -o`
-    echo "${SYSTEM_NAME,,}"
+    local RESULT
+    RESULT=$(uname -o) || return $?
+    echo "${RESULT,,}"
+    return 0
 }
 
+function make_dirs() {
+    mkdir -p "${1}"
+    return $?
+}
 
 ### Download API begin
 
@@ -258,6 +264,87 @@ function package_manager_is_zypper() {
     is_executable_available "zypper"
     return $?
 }
+
+function get_linux_distro_codename() {
+   local RESULT
+   RESULT=$(lsb_release -c -s)
+   if $?; then
+       echo "${RESULT},,"
+       return 0
+   fi
+   echo ""
+   return 0
+}
+
+function get_linux_mint_underlying_ubuntu_codename_or_normal_codename() {
+
+    return 0
+}
+
+function dpkg_get_main_architecture() {
+   local RESULT
+   RESULT=$(dpkg --print-architecture) || return $?
+   echo "${RESULT}"
+   return 0
+}
+
+## @fn apt_add_sources()
+## @brief Добавить source файл в формате deb822 для apt
+## @details https://wiki.debian.org/ArchitectureSpecificsMemo
+## @param Путь куда сформировать *.source файл
+## @param URIs параметр (обязательный)
+## @param Suites параметр (обязательный)
+## @param Components параметр (обязательный)
+## @param Signed-By параметр (не обязательный)
+## @param Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
+## @param Types параметр (не обязательный, будет "deb")
+## @retval 0 - успешное выполнение
+function apt_create_sources() {
+   local TARGET_SOURCES_FILE_PATH="${1}"
+   local URIS="${2}"
+   local SUITES="${3}"
+   local COMPONENTS="${4}"
+
+   local SIGNED_BY="${5}"
+   local SIGNED_BY_PATH=""
+   if [[ -n "${SIGNED_BY}" ]]; then
+       SIGNED_BY_PATH="Signed-By: \"${SIGNED_BY}\""
+   fi
+
+   local ARCHITECTURES="${6}"
+   if [[ -z "${ARCHITECTURES}" ]]; then
+       ARCHITECTURES=$(dpkg_get_main_architecture) || return $?
+   fi
+
+   local TYPES="${7}"
+   if [[ -z "${TYPES}" ]]; then
+       TYPES="deb"
+   fi
+
+${RUN_WITH_ADMIN_RIGHTS} ${SHELL} -c "echo 'Types: ${TYPES}
+URIs: ${URIS}
+Suites: ${SUITES}
+Components: ${COMPONENTS}
+Architectures: ${ARCHITECTURES}
+${SIGNED_BY_PATH}' > \"${TARGET_SOURCES_FILE_PATH}\"" || return $?
+    return 0
+}
+
+
+function apt_download_key() {
+    # fixme utopia Просто делаем gpg --dearmor для любого вида ключей, и не заморачиваемся с распознаванием типа файла ключа - это бесполезно
+
+}
+
+function apt_add_sources() {
+    NAME="${1}"
+    SIGN_FILE_URL="${2}"
+
+
+
+}
+
+# fixme utopia https://www.shellhacks.com/linux-mint-find-ubuntu-version-it-is-based-on/
 
 function package_manager_update_and_upgrade() {
     ${RUN_WITH_ADMIN_RIGHTS} apt update || return $?
