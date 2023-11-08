@@ -346,20 +346,93 @@ function apt_add_sources() {
 
 # fixme utopia https://www.shellhacks.com/linux-mint-find-ubuntu-version-it-is-based-on/
 
-function package_manager_update_and_upgrade() {
+# https://dev.to/henrybarreto/pacman-s-simple-guide-for-apt-s-users-5hc4
+
+function apt_update_and_upgrade() {
     ${RUN_WITH_ADMIN_RIGHTS} apt update || return $?
     ${RUN_WITH_ADMIN_RIGHTS} apt upgrade -y || return $?
     return 0
 }
 
-function install_packages() {
+function apt_install_packages() {
     ${RUN_WITH_ADMIN_RIGHTS} apt install ${1} -y || return $?
     return 0
 }
 
-function is_package_installed() {
+function apt_is_package_installed() {
     apt -L ${1}
     return $?
+}
+
+function pacman_update_and_upgrade() {
+    ${RUN_WITH_ADMIN_RIGHTS} pacman -Syu || return $?
+    return 0
+}
+
+function pacman_install_packages() {
+    ${RUN_WITH_ADMIN_RIGHTS} pacman -S ${1} || return $?
+    return 0
+}
+
+function pacman_is_package_installed() {
+    pacman -Q ${1}
+    return $?
+}
+
+function package_manager_update_and_upgrade() {
+    if package_manager_is_apt; then
+        apt_update_and_upgrade || return $?
+    elif package_manager_is_pacman; then
+        pacman_update_and_upgrade || return $?
+    elif package_manager_is_yum; then
+        # fixme utopia Дописать
+    elif package_manager_is_dnf; then
+        # fixme utopia Дописать
+    elif package_manager_is_zypper; then
+        # fixme utopia Дописать
+    else
+        echo "FATAL: unknown package manager"
+        return 1
+    fi
+    return 0
+}
+
+function package_manager_install_packages() {
+    if package_manager_is_apt; then
+        apt_install_packages || return $?
+    elif package_manager_is_pacman; then
+        pacman_install_packages || return $?
+    elif package_manager_is_yum; then
+        # fixme utopia Дописать
+    elif package_manager_is_dnf; then
+        # fixme utopia Дописать
+    elif package_manager_is_zypper; then
+        # fixme utopia Дописать
+    else
+        echo "FATAL: unknown package manager"
+        return 1
+    fi
+    return 0
+}
+
+function package_manager_is_package_installed() {
+    if package_manager_is_apt; then
+        apt_is_package_installed
+        return $?
+    elif package_manager_is_pacman; then
+        pacman_is_package_installed
+        return $?
+    elif package_manager_is_yum; then
+        # fixme utopia Дописать
+    elif package_manager_is_dnf; then
+        # fixme utopia Дописать
+    elif package_manager_is_zypper; then
+        # fixme utopia Дописать
+    else
+        echo "FATAL: unknown package manager"
+        return 1
+    fi
+    return 0
 }
 
 ### System package manager end
@@ -529,7 +602,7 @@ function install_pycharm() {
 }
 
 function termux_install_rdp_client() {
-    install_packages "freerdp"
+    package_manager_install_packages "freerdp"
     return $?
 }
 
@@ -674,7 +747,7 @@ function setup_vnc_server() {
 
 #package_manager_update_and_upgrade || exit $?
 
-#install_packages "${DEV_PACKAGES}" || exit $?
+#package_manager_install_packages "${DEV_PACKAGES}" || exit $?
 
 #update_pip || exit $?
 
