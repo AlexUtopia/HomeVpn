@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#set -x # Раскомментировать для отладки
+set -x # Раскомментировать для отладки
 
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
@@ -194,10 +194,29 @@ function get_file_name_from_url() {
 ## @param Директория куда будет скачан файл по URL
 ## @retval 0 если успешно
 function download_file_to_directory() {
-    # fixme utopia make directory
-    pushd "${2}" || return $?
-    wget "${1}" || return $?
+    local URL="${1}"
+    local DIRECTORY_PATH="${2}"
+
+    make_dirs "${DIRECTORY_PATH}" || return $?
+    pushd "${DIRECTORY_PATH}" || return $?
+    wget "${URL}" || return $?
     popd || return $?
+    return 0
+}
+
+## @fn download_file()
+## @brief Скачать файл
+## @param URL для скачивания
+## @param Путь до скачанного файла по URL
+## @retval 0 если успешно
+function download_file() {
+    local URL="${1}"
+    local FILE_PATH="${2}"
+    local FILE_DIRECTORY_PATH
+    FILE_DIRECTORY_PATH=$(dirname "${FILE_PATH}") || return $?
+
+    make_dirs "${FILE_DIRECTORY_PATH}" || return $?
+    wget -O "${FILE_PATH}" "${URL}" || return $?
     return 0
 }
 
@@ -265,88 +284,29 @@ function package_manager_is_zypper() {
     return $?
 }
 
-function get_linux_distro_codename() {
-   local RESULT
-   RESULT=$(lsb_release -c -s)
-   if $?; then
-       echo "${RESULT},,"
-       return 0
-   fi
-   echo ""
+function get_linux_distro_name() {
+   local OS_RELEASE_PATH="/etc/os-release"
+
+   . "${OS_RELEASE_PATH}" || return $?
+
+   echo "${ID}"
    return 0
 }
 
-function get_linux_mint_underlying_ubuntu_codename_or_normal_codename() {
+function get_linux_distro_version_codename() {
+   local OS_RELEASE_PATH="/etc/os-release"
 
-    return 0
-}
+   . "${OS_RELEASE_PATH}" || return $?
 
-function dpkg_get_main_architecture() {
-   local RESULT
-   RESULT=$(dpkg --print-architecture) || return $?
-   echo "${RESULT}"
+   if [[ -n "${UBUNTU_CODENAME}" ]]; then
+       echo "${UBUNTU_CODENAME}"
+   elif [[ -n "${VERSION_CODENAME}" ]]; then
+       echo "${VERSION_CODENAME}"
+   else
+       echo "${VERSION_ID}"
+   fi
    return 0
 }
-
-## @fn apt_add_sources()
-## @brief Добавить source файл в формате deb822 для apt
-## @details https://wiki.debian.org/ArchitectureSpecificsMemo
-## @param Путь куда сформировать *.source файл
-## @param URIs параметр (обязательный)
-## @param Suites параметр (обязательный)
-## @param Components параметр (обязательный)
-## @param Signed-By параметр (не обязательный)
-## @param Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
-## @param Types параметр (не обязательный, будет "deb")
-## @retval 0 - успешное выполнение
-function apt_create_sources() {
-   local TARGET_SOURCES_FILE_PATH="${1}"
-   local URIS="${2}"
-   local SUITES="${3}"
-   local COMPONENTS="${4}"
-
-   local SIGNED_BY="${5}"
-   local SIGNED_BY_PATH=""
-   if [[ -n "${SIGNED_BY}" ]]; then
-       SIGNED_BY_PATH="Signed-By: \"${SIGNED_BY}\""
-   fi
-
-   local ARCHITECTURES="${6}"
-   if [[ -z "${ARCHITECTURES}" ]]; then
-       ARCHITECTURES=$(dpkg_get_main_architecture) || return $?
-   fi
-
-   local TYPES="${7}"
-   if [[ -z "${TYPES}" ]]; then
-       TYPES="deb"
-   fi
-
-${RUN_WITH_ADMIN_RIGHTS} ${SHELL} -c "echo 'Types: ${TYPES}
-URIs: ${URIS}
-Suites: ${SUITES}
-Components: ${COMPONENTS}
-Architectures: ${ARCHITECTURES}
-${SIGNED_BY_PATH}' > \"${TARGET_SOURCES_FILE_PATH}\"" || return $?
-    return 0
-}
-
-
-function apt_download_key() {
-    # fixme utopia Просто делаем gpg --dearmor для любого вида ключей, и не заморачиваемся с распознаванием типа файла ключа - это бесполезно
-
-}
-
-function apt_add_sources() {
-    NAME="${1}"
-    SIGN_FILE_URL="${2}"
-
-
-
-}
-
-# fixme utopia https://www.shellhacks.com/linux-mint-find-ubuntu-version-it-is-based-on/
-
-# https://dev.to/henrybarreto/pacman-s-simple-guide-for-apt-s-users-5hc4
 
 function apt_update_and_upgrade() {
     ${RUN_WITH_ADMIN_RIGHTS} apt update || return $?
@@ -364,6 +324,127 @@ function apt_is_package_installed() {
     return $?
 }
 
+function dpkg_get_main_architecture() {
+   local RESULT
+   RESULT=$(dpkg --print-architecture) || return $?
+   echo "${RESULT}"
+   return 0
+}
+
+## @fn apt_create_sources()
+## @brief Добавить source файл в формате deb822 для apt
+## @details https://wiki.debian.org/ArchitectureSpecificsMemo
+## @details https://manpages.ubuntu.com/manpages/xenial/man5/sources.list.5.html
+## @param Путь куда сформировать *.source файл
+## @param URIs параметр (обязательный)
+## @param Suites параметр (обязательный)
+## @param Components параметр (обязательный)
+## @param Signed-By параметр (не обязательный)
+## @param Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
+## @param Types параметр (не обязательный, будет "deb")
+## @retval 0 - успешное выполнение
+function apt_create_sources() {
+   local SOURCES_FILE_PATH="${1}"
+   local URIS="${2}"
+   local SUITES="${3}"
+   local COMPONENTS="${4}"
+
+   local SIGNED_BY="${5}"
+   local SIGNED_BY_PATH=""
+   if [[ -n "${SIGNED_BY}" ]]; then
+       SIGNED_BY_PATH="Signed-By: ${SIGNED_BY}"
+   fi
+
+   local ARCHITECTURES="${6}"
+   if [[ -z "${ARCHITECTURES}" ]]; then
+       ARCHITECTURES=$(dpkg_get_main_architecture) || return $?
+   fi
+
+   local TYPES="${7}"
+   if [[ -z "${TYPES}" ]]; then
+       TYPES="deb"
+   fi
+
+   ${SHELL} -c "echo 'Types: ${TYPES}
+URIs: ${URIS}
+Suites: ${SUITES}
+Components: ${COMPONENTS}
+Architectures: ${ARCHITECTURES}
+${SIGNED_BY_PATH}' > \"${SOURCES_FILE_PATH}\"" || return $?
+    return 0
+}
+
+
+function apt_get_key_file_path() {
+   local KEYRINGS_DIR_PATH="/etc/apt/keyrings"
+
+   local NAME="${1}"
+
+   echo "${KEYRINGS_DIR_PATH}/${NAME}.gpg"
+   return 0
+}
+
+function apt_get_source_file_path() {
+   local APT_SOURCES_LIST_DIR_PATH="/etc/apt/sources.list.d"
+
+   local NAME="${1}"
+
+   echo "${APT_SOURCES_LIST_DIR_PATH}/${NAME}.sources"
+   return 0
+}
+
+function apt_download_key() {
+    local NAME="${1}"
+    local KEY_FILE_URL="${2}"
+
+    if [[ -z "${KEY_FILE_URL}" ]]; then
+        echo ""
+        return 0
+    fi
+
+    local KEY_FILE_PATH
+    KEY_FILE_PATH=$(apt_get_key_file_path "${NAME}") || return $?
+
+    if [[ -f "${KEY_FILE_PATH}" ]]; then
+        echo "${KEY_FILE_PATH}"
+        return 0
+    fi
+
+    download_file "${KEY_FILE_URL}" "-" | gpg --dearmor > "${KEY_FILE_PATH}" || return $?
+    echo "${KEY_FILE_PATH}"
+    return 0
+}
+
+function apt_add_sources() {
+    local NAME="${1}"
+    local KEY_FILE_URL="${2}"
+    local URIS="${3}"
+    local SUITES="${4}"
+    local COMPONENTS="${5}"
+    local ARCHITECTURES="${6}"
+    local TYPES="${7}"
+
+    local SOURCE_FILE_PATH
+    SOURCE_FILE_PATH=$(apt_get_source_file_path "${NAME}") || return $?
+    if [[ -f "${SOURCE_FILE_PATH}" ]]; then
+        echo "WARNING: \"${SOURCE_FILE_PATH}\" already exists"
+        return 0
+    fi
+
+    local KEY_FILE_PATH
+    KEY_FILE_PATH=$(apt_download_key "${NAME}" "${KEY_FILE_URL}") || return $?
+
+    apt_create_sources "${SOURCE_FILE_PATH}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${KEY_FILE_PATH}" "${ARCHITECTURES}" "${TYPES}" || return $?
+    apt_update_and_upgrade || return $?
+    return 0
+}
+
+# fixme utopia https://www.shellhacks.com/linux-mint-find-ubuntu-version-it-is-based-on/
+
+# https://dev.to/henrybarreto/pacman-s-simple-guide-for-apt-s-users-5hc4
+
+
+
 function pacman_update_and_upgrade() {
     ${RUN_WITH_ADMIN_RIGHTS} pacman -Syu || return $?
     return 0
@@ -375,7 +456,7 @@ function pacman_install_packages() {
 }
 
 function pacman_is_package_installed() {
-    pacman -Q ${1}
+    pacman -Q "${1}"
     return $?
 }
 
@@ -386,10 +467,13 @@ function package_manager_update_and_upgrade() {
         pacman_update_and_upgrade || return $?
     elif package_manager_is_yum; then
         # fixme utopia Дописать
+        return 1
     elif package_manager_is_dnf; then
         # fixme utopia Дописать
+        return 1
     elif package_manager_is_zypper; then
         # fixme utopia Дописать
+        return 1
     else
         echo "FATAL: unknown package manager"
         return 1
@@ -398,16 +482,21 @@ function package_manager_update_and_upgrade() {
 }
 
 function package_manager_install_packages() {
+    local PACKAGE_LIST="${1}"
+
     if package_manager_is_apt; then
-        apt_install_packages || return $?
+        apt_install_packages ${PACKAGE_LIST} || return $?
     elif package_manager_is_pacman; then
-        pacman_install_packages || return $?
+        pacman_install_packages ${PACKAGE_LIST} || return $?
     elif package_manager_is_yum; then
         # fixme utopia Дописать
+        return 1
     elif package_manager_is_dnf; then
         # fixme utopia Дописать
+        return 1
     elif package_manager_is_zypper; then
         # fixme utopia Дописать
+        return 1
     else
         echo "FATAL: unknown package manager"
         return 1
@@ -416,18 +505,23 @@ function package_manager_install_packages() {
 }
 
 function package_manager_is_package_installed() {
+    local PACKAGE="${1}"
+
     if package_manager_is_apt; then
-        apt_is_package_installed
+        apt_is_package_installed "${PACKAGE}"
         return $?
     elif package_manager_is_pacman; then
-        pacman_is_package_installed
+        pacman_is_package_installed "${PACKAGE}"
         return $?
     elif package_manager_is_yum; then
         # fixme utopia Дописать
+        return 1
     elif package_manager_is_dnf; then
         # fixme utopia Дописать
+        return 1
     elif package_manager_is_zypper; then
         # fixme utopia Дописать
+        return 1
     else
         echo "FATAL: unknown package manager"
         return 1
@@ -610,24 +704,23 @@ function install_rdp_client() {
     if is_termux; then
         termux_install_rdp_client || return $?
         return 0
-    fi
+    elif package_manager_is_apt; then # fixme utopia Под arm не полетит, может установим стандартный пакет?
+        local LINUX_DISTRO_VERSION_CODENAME
+        LINUX_DISTRO_VERSION_CODENAME=$(get_linux_distro_version_codename) || return $?
 
-    # 0) naming for package *.source file
-    # 1) check *.sources file in /etc/apt/sources.list.d/
-    # 2) download key
-    # 3) gpg --dearmor key if need (/etc/apt/keyrings) [gnupg package]
-    # 4) make *.sources file in /etc/apt/sources.list.d/
-    # 5) apt update
-    # 6) install_packages
+        local PACKAGE_NAME="freerdp-nightly"
+        local KEY_FILE_URL="http://pub.freerdp.com/repositories/ADD6BF6D97CE5D8D.asc"
+        local URIS="http://pub.freerdp.com/repositories/deb/${LINUX_DISTRO_VERSION_CODENAME}"
+        local SUITES="${PACKAGE_NAME}"
+        local COMPONENTS="main"
+        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" || return $?
+        package_manager_install_packages "${PACKAGE_NAME}"
+        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run /opt/freerdp-nightly/bin/xfreerdp"
+        return 0
+    fi
 
     # https://interface31.ru/tech_it/2022/09/apt-key-is-deprecated-ili-upravlenie-klyuchami-v-sovremennyh-vypuskah-debian-i-ubunt.html
     # https://habr.com/en/articles/683716/
-
-    # https://pub.freerdp.com/releases/
-    # https://github.com/FreeRDP/FreeRDP
-    # fixme utopia Реализовать
-    # https://ci.freerdp.com/job/freerdp-nightly-binaries/
-    # echo "FreeRDP installed to <directory>, see https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface"
     return 0
 }
 
@@ -753,12 +846,12 @@ function setup_vnc_server() {
 
 #install_pip_packages "${PIP_PACKAGES}" || exit $?
 
-#install_rdp_client || exit $?
+install_rdp_client || exit $?
 
 #install_pycharm || exit $?
 
 #setup_sshd || exit $?
 
-setup_smbd || exit $?
+#setup_smbd || exit $?
 
 #setup_vnc_server || exit $?
