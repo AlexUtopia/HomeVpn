@@ -1,6 +1,8 @@
 #!/bin/bash
 
-set -x # Раскомментировать для отладки
+# https://unix.stackexchange.com/a/306115
+
+#set -x # Раскомментировать для отладки
 
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
@@ -23,18 +25,10 @@ function is_termux() {
 # fixme utopia Проверка минимальной версии питона
 
 
-RUN_WITH_ADMIN_RIGHTS="sudo"
-if is_termux; then
-    RUN_WITH_ADMIN_RIGHTS=""
-fi
-
 TERMUX_ROOT=""
 if is_termux; then
     TERMUX_ROOT="${PREFIX}"
 fi
-
-
-MKDIR="mkdir -p" # fixme utopia to function
 
 
 SAMBA_PUBLIC_DIRECTORY_PATH="/share"
@@ -89,6 +83,11 @@ MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PA
 GIT_PACKAGE="git"
 AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
 NANO_PACKAGE="nano" # Консольный текстовый редактор
+
+RDP_CLIENT="freerdp2-${XDG_SESSION_TYPE}"
+if is_termux; then
+    RDP_CLIENT="freerdp"
+fi
 
 SSH_SERVER_PACKAGE="openssh-server"
 if is_termux; then
@@ -162,17 +161,87 @@ FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_
 PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1"
 
 
-function get_system_name() {
-    local RESULT
+### System API begin
+
+function get_os_name() {
+    local RESULT=""
     RESULT=$(uname -o) || return $?
     echo "${RESULT,,}"
     return 0
 }
 
-function make_dirs() {
-    mkdir -p "${1}"
-    return $?
+function is_linux() {
+  local SYSTEM_NAME=""
+  SYSTEM_NAME=$(get_os_name) || return $?
+
+   if [[ "${SYSTEM_NAME}" == *"linux"* ]]; then
+       return 0
+   fi
+   return 1
 }
+
+function is_msys() {
+  local SYSTEM_NAME=""
+  SYSTEM_NAME=$(get_os_name) || return $?
+
+   if [[ "${SYSTEM_NAME}" == *"msys"* ]]; then
+       return 0
+   fi
+   return 1
+}
+
+function is_cygwin() {
+  local SYSTEM_NAME=""
+  SYSTEM_NAME=$(get_os_name) || return $?
+
+   if [[ "${SYSTEM_NAME}" == *"cygwin"* ]]; then
+       return 0
+   fi
+   return 1
+}
+
+function get_os_distro_name() {
+   local OS_RELEASE_PATH="/etc/os-release"
+
+   . "${OS_RELEASE_PATH}" || return $?
+
+   if [[ -n "${UBUNTU_CODENAME}" ]]; then
+       # Для Ubuntu-based дистрибутивов linux (типа Linix Mint) всегда используются ubuntu PPA
+       echo "ubuntu"
+   else
+      echo "${ID}"
+   fi
+   return 0
+}
+
+function get_os_distro_codename_or_version() {
+   local OS_RELEASE_PATH="/etc/os-release"
+
+   . "${OS_RELEASE_PATH}" || return $?
+
+   if [[ -n "${UBUNTU_CODENAME}" ]]; then
+       echo "${UBUNTU_CODENAME}"
+   elif [[ -n "${VERSION_CODENAME}" ]]; then
+       echo "${VERSION_CODENAME}"
+   else
+       echo "${VERSION_ID}"
+   fi
+   return 0
+}
+
+function make_dirs() {
+    local DIRECTORY_PATH="${1}"
+
+    mkdir -p "${DIRECTORY_PATH}" || return $?
+    return 0
+}
+
+function check_result_code() {
+    return ${1}
+}
+
+### System API end
+
 
 ### Download API begin
 
@@ -182,7 +251,7 @@ function make_dirs() {
 ## @retval 0 если успешно
 ## @return Имя файла из URL
 function get_file_name_from_url() {
-    local RESULT
+    local RESULT=""
     RESULT=$(basename "${1}") || return $?
     echo "${RESULT}"
     return 0
@@ -207,12 +276,12 @@ function download_file_to_directory() {
 ## @fn download_file()
 ## @brief Скачать файл
 ## @param URL для скачивания
-## @param Путь до скачанного файла по URL
+## @param Путь до скачанного файла по URL; можно передать "-" - записать результат в stdout
 ## @retval 0 если успешно
 function download_file() {
     local URL="${1}"
     local FILE_PATH="${2}"
-    local FILE_DIRECTORY_PATH
+    local FILE_DIRECTORY_PATH=""
     FILE_DIRECTORY_PATH=$(dirname "${FILE_PATH}") || return $?
 
     make_dirs "${FILE_DIRECTORY_PATH}" || return $?
@@ -244,8 +313,8 @@ function is_executable_available() {
 ## @details Debian, Ubuntu, Linux Mint, termux
 ## @retval 0 пакетный менеджер apt существует; 1 - не существует
 function package_manager_is_apt() {
-    is_executable_available "apt"
-    return $?
+    is_executable_available "apt" || return $?
+    return 0
 }
 
 ## @fn package_manager_is_pacman()
@@ -253,8 +322,8 @@ function package_manager_is_apt() {
 ## @details Arch Linux, MinGW
 ## @retval 0 пакетный менеджер pacman существует; 1 - не существует
 function package_manager_is_pacman() {
-    is_executable_available "pacman"
-    return $?
+    is_executable_available "pacman" || return $?
+    return 0
 }
 
 ## @fn package_manager_is_yum()
@@ -262,8 +331,8 @@ function package_manager_is_pacman() {
 ## @details RHEL, Fedora, CentOS
 ## @retval 0 пакетный менеджер yum существует; 1 - не существует
 function package_manager_is_yum() {
-    is_executable_available "yum"
-    return $?
+    is_executable_available "yum" || return $?
+    return 0
 }
 
 ## @fn package_manager_is_dnf()
@@ -271,8 +340,8 @@ function package_manager_is_yum() {
 ## @details Fedora
 ## @retval 0 пакетный менеджер dnf существует; 1 - не существует
 function package_manager_is_dnf() {
-    is_executable_available "dnf"
-    return $?
+    is_executable_available "dnf" || return $?
+    return 0
 }
 
 ## @fn package_manager_is_zypper()
@@ -280,48 +349,8 @@ function package_manager_is_dnf() {
 ## @details openSUSE
 ## @retval 0 пакетный менеджер zypper существует; 1 - не существует
 function package_manager_is_zypper() {
-    is_executable_available "zypper"
-    return $?
-}
-
-function get_linux_distro_name() {
-   local OS_RELEASE_PATH="/etc/os-release"
-
-   . "${OS_RELEASE_PATH}" || return $?
-
-   echo "${ID}"
-   return 0
-}
-
-function get_linux_distro_version_codename() {
-   local OS_RELEASE_PATH="/etc/os-release"
-
-   . "${OS_RELEASE_PATH}" || return $?
-
-   if [[ -n "${UBUNTU_CODENAME}" ]]; then
-       echo "${UBUNTU_CODENAME}"
-   elif [[ -n "${VERSION_CODENAME}" ]]; then
-       echo "${VERSION_CODENAME}"
-   else
-       echo "${VERSION_ID}"
-   fi
-   return 0
-}
-
-function apt_update_and_upgrade() {
-    ${RUN_WITH_ADMIN_RIGHTS} apt update || return $?
-    ${RUN_WITH_ADMIN_RIGHTS} apt upgrade -y || return $?
+    is_executable_available "zypper" || return $?
     return 0
-}
-
-function apt_install_packages() {
-    ${RUN_WITH_ADMIN_RIGHTS} apt install ${1} -y || return $?
-    return 0
-}
-
-function apt_is_package_installed() {
-    apt -L ${1}
-    return $?
 }
 
 function dpkg_get_main_architecture() {
@@ -330,6 +359,27 @@ function dpkg_get_main_architecture() {
    echo "${RESULT}"
    return 0
 }
+
+function apt_update_and_upgrade() {
+    # https://wiki.debian.org/Multiarch/HOWTO
+    # https://wiki.ubuntu.com/MultiarchCross
+    dpkg --add-architecture i386 || return $? # Для установки wine требуется добавить i386 архитектуру
+    apt update || return $?
+    apt upgrade -y || return $?
+    return 0
+}
+
+function apt_install_packages() {
+    apt install ${1} -y || return $?
+    return 0
+}
+
+function apt_is_package_installed() {
+    apt -L ${1}
+    return $?
+}
+
+
 
 ## @fn apt_create_sources()
 ## @brief Добавить source файл в формате deb822 для apt
@@ -435,23 +485,27 @@ function apt_add_sources() {
     KEY_FILE_PATH=$(apt_download_key "${NAME}" "${KEY_FILE_URL}") || return $?
 
     apt_create_sources "${SOURCE_FILE_PATH}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${KEY_FILE_PATH}" "${ARCHITECTURES}" "${TYPES}" || return $?
-    apt_update_and_upgrade || return $?
+
+    apt update
+    local APT_UPDATE_RESULT=$?
+    if ! check_result_code ${APT_UPDATE_RESULT}; then
+        rm -f "${SOURCE_FILE_PATH}" "${KEY_FILE_PATH}"
+        return ${APT_UPDATE_RESULT}
+    fi
     return 0
 }
-
-# fixme utopia https://www.shellhacks.com/linux-mint-find-ubuntu-version-it-is-based-on/
 
 # https://dev.to/henrybarreto/pacman-s-simple-guide-for-apt-s-users-5hc4
 
 
 
 function pacman_update_and_upgrade() {
-    ${RUN_WITH_ADMIN_RIGHTS} pacman -Syu || return $?
+    pacman -Syu || return $?
     return 0
 }
 
 function pacman_install_packages() {
-    ${RUN_WITH_ADMIN_RIGHTS} pacman -S ${1} || return $?
+    pacman -S ${1} || return $?
     return 0
 }
 
@@ -485,9 +539,9 @@ function package_manager_install_packages() {
     local PACKAGE_LIST="${1}"
 
     if package_manager_is_apt; then
-        apt_install_packages ${PACKAGE_LIST} || return $?
+        apt_install_packages "${PACKAGE_LIST}" || return $?
     elif package_manager_is_pacman; then
-        pacman_install_packages ${PACKAGE_LIST} || return $?
+        pacman_install_packages "${PACKAGE_LIST}" || return $?
     elif package_manager_is_yum; then
         # fixme utopia Дописать
         return 1
@@ -532,14 +586,14 @@ function package_manager_is_package_installed() {
 ### System package manager end
 
 function update_pip() {
-    ${RUN_WITH_ADMIN_RIGHTS} python3 -m pip install pip --force-reinstall --ignore-installed || return $?
+    python3 -m pip install pip --force-reinstall --ignore-installed || return $?
     return 0
 }
 
 function install_pip_packages() {
     for pip_package in ${1}
     do
-      ${RUN_WITH_ADMIN_RIGHTS} pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
+        pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
     done
     return 0
 }
@@ -547,43 +601,43 @@ function install_pip_packages() {
 ### System services begin
 
 function systemd_is_service_active() {
-    local SERVICE_IS_RUNNING
+    local SERVICE_IS_RUNNING=""
     SERVICE_IS_RUNNING=$(systemctl is-active "${1}") || return $?
 
-    if [ "${SERVICE_IS_RUNNING,,}" = "active" ]; then
+    if [[ "${SERVICE_IS_RUNNING,,}" == "active" ]]; then
         return 0
     fi
     return 1
 }
 
 function systemd_service_enable() {
-    ${RUN_WITH_ADMIN_RIGHTS} systemctl enable "${1}"
+    systemctl enable "${1}"
     return $?
 }
 
 function systemd_service_disable() {
-    ${RUN_WITH_ADMIN_RIGHTS} systemctl disable "${1}"
+    systemctl disable "${1}"
     return $?
 }
 
 function termux_is_service_active() {
     # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
-    local SERVICE_IS_RUNNING
+    local SERVICE_IS_RUNNING=""
     SERVICE_IS_RUNNING=$(sv status "${1}") || return $?
 
-    if [[ "${SERVICE_IS_RUNNING}" = "run: "* ]]; then # https://stackoverflow.com/a/229606
+    if [[ "${SERVICE_IS_RUNNING}" == "run: "* ]]; then # https://stackoverflow.com/a/229606
         return 0
     fi
     return 1
 }
 
 function termux_service_enable() {
-    ${RUN_WITH_ADMIN_RIGHTS} sv-enable "${1}"
+    sv-enable "${1}"
     return $?
 }
 
 function termux_service_disable() {
-    ${RUN_WITH_ADMIN_RIGHTS} sv-disable "${1}"
+    sv-disable "${1}"
     return $?
 }
 
@@ -650,7 +704,7 @@ function firewall_accept_udp_traffic_for_port() {
 ### User API begin
 
 function user_add() {
-    ${RUN_WITH_ADMIN_RIGHTS} useradd "${1}"
+    useradd "${1}"
     return $?
 }
 
@@ -660,12 +714,12 @@ function user_is_available() {
 }
 
 function user_add_to_group() {
-    ${RUN_WITH_ADMIN_RIGHTS} usermod -a -G "${2}" "${1}"
+    usermod -a -G "${2}" "${1}"
     return $?
 }
 
 function user_is_added_to_group() {
-    local USER_GROUP_NAME_LIST
+    local USER_GROUP_NAME_LIST=""
     USER_GROUP_NAME_LIST=$(id "${1}" -G -n) || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
     for USER_GROUP_NAME in USER_GROUP_NAME_LIST
     do
@@ -688,35 +742,50 @@ function setup_sshd() {
     return 0
 }
 
-function install_pycharm() {
-    # https://www.jetbrains.com/edu-products/download/other-PCE.html
-    # Текущая версия 2023.2.3 (Community Edition)
-    # fixme utopia Реализовать
+function pycharm_install() {
+    local PYCHARM="pycharm-community-2023.2.4"
+    local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
+    local INSTALL_DIRECTORY="/opt"
+    local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
+
+    if [[ -d "${PYCHARM_INSTALL_DIRECTORY}" ]]; then
+        echo "WARNING: Pycharm \"${PYCHARM}\" already installed"
+        return 0
+    fi
+
+    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" || return $?
     return 0
 }
 
-function termux_install_rdp_client() {
-    package_manager_install_packages "freerdp"
-    return $?
+function rdp_client_install_default() {
+    package_manager_install_packages "${RDP_CLIENT}" || return $?
+    return 0
 }
 
-function install_rdp_client() {
-    if is_termux; then
-        termux_install_rdp_client || return $?
-        return 0
-    elif package_manager_is_apt; then # fixme utopia Под arm не полетит, может установим стандартный пакет?
-        local LINUX_DISTRO_VERSION_CODENAME
-        LINUX_DISTRO_VERSION_CODENAME=$(get_linux_distro_version_codename) || return $?
+function rdp_client_install_nightly() {
+    if package_manager_is_apt; then
+        local OS_DISTRO_VERSION_CODENAME=""
+        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
 
         local PACKAGE_NAME="freerdp-nightly"
         local KEY_FILE_URL="http://pub.freerdp.com/repositories/ADD6BF6D97CE5D8D.asc"
-        local URIS="http://pub.freerdp.com/repositories/deb/${LINUX_DISTRO_VERSION_CODENAME}"
+        local URIS="http://pub.freerdp.com/repositories/deb/${OS_DISTRO_VERSION_CODENAME}"
         local SUITES="${PACKAGE_NAME}"
         local COMPONENTS="main"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" || return $?
-        package_manager_install_packages "${PACKAGE_NAME}"
+        local ARCHITECTURES="amd64"
+        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+        package_manager_install_packages "${PACKAGE_NAME}" || return $?
         echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run /opt/freerdp-nightly/bin/xfreerdp"
         return 0
+    fi
+    return 1
+}
+
+function rdp_client_install() {
+    if is_termux; then
+        rdp_client_install_default || return $?
+    else
+        rdp_client_install_nightly || rdp_client_install_default || return $?
     fi
 
     # https://interface31.ru/tech_it/2022/09/apt-key-is-deprecated-ili-upravlenie-klyuchami-v-sovremennyh-vypuskah-debian-i-ubunt.html
@@ -724,8 +793,48 @@ function install_rdp_client() {
     return 0
 }
 
-function install_wine() {
-    # https://wiki.winehq.org/Ubuntu
+function wine_install_default() {
+    package_manager_install_packages "wine winetricks" || return $?
+    return 0
+}
+
+function wine_install_nightly() {
+    if package_manager_is_apt; then
+        local OS_DISTRO_VERSION_CODENAME=""
+        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
+
+        local OS_DISTRO_NAME=""
+        OS_DISTRO_NAME=$(get_os_distro_name) || return $?
+
+        local NAME="winehq"
+        local PACKAGE_NAME="${NAME}-staging"
+        local KEY_FILE_URL="https://dl.winehq.org/wine-builds/winehq.key"
+        local URIS="https://dl.winehq.org/wine-builds/${OS_DISTRO_NAME}"
+        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
+        local COMPONENTS="main"
+        local ARCHITECTURES="amd64 i386"
+        apt_add_sources "${NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+        package_manager_install_packages "--install-recommends ${PACKAGE_NAME} winetricks" || return $?
+        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\""
+        return 0
+    fi
+    return 1
+}
+
+# https://wiki.winehq.org/Ubuntu
+function wine_install() {
+    if is_termux; then
+        # fixme utopia Будем устанавливать в termux для архитектуры amd64/i386? Проверить в termux
+        return 0
+    else
+        wine_install_nightly || wine_install_default || return $?
+    fi
+
+    # https://gist.github.com/RobinCPC/9f42be23a1343600507aabdfecc5061d
+    # https://wiki.winehq.org/Mono
+    # https://wiki.winehq.org/Gecko
+    # https://forum.winehq.org/viewtopic.php?t=37344
+
     return 0
 }
 
@@ -758,8 +867,8 @@ function make_samba_user_and_assign_rights() {
 }
 
 function make_samba_public_directory() {
-    ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
-    ${RUN_WITH_ADMIN_RIGHTS} chmod 0777 "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    make_dirs "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    chmod 0777 "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
     return 0
 }
 
@@ -775,7 +884,7 @@ function make_smbd_config() {
     local SMBD_CONFIG_FILE_NAME
     SMBD_CONFIG_FILE_NAME=$(basename "${SMBD_CONFIG_FILE_PATH}") || return $?
 
-    ${RUN_WITH_ADMIN_RIGHTS} ${MKDIR} "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
+    make_dirs "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
 
     if [ -f "${SMBD_CONFIG_FILE_PATH}" ]; then
         local CURRENT_DATE_TIME
@@ -785,8 +894,9 @@ function make_smbd_config() {
         sudo mv "${SMBD_CONFIG_FILE_PATH}" ${OLD_SMBD_CONFIG_FILE_DIR_PATH}
     fi
 
+    # fixme utopia Переписать?
     # https://www.samba.org/samba/docs/using_samba/ch08.html#samba2-CHP-8-TABLE-2
-    ${RUN_WITH_ADMIN_RIGHTS} ${SHELL} -c "echo '[global]
+    ${SHELL} -c "echo '[global]
 workgroup = WORKGROUP
 security = user
 map to guest = bad user
@@ -838,7 +948,7 @@ function setup_vnc_server() {
     return 0
 }
 
-#package_manager_update_and_upgrade || exit $?
+package_manager_update_and_upgrade || exit $?
 
 #package_manager_install_packages "${DEV_PACKAGES}" || exit $?
 
@@ -846,9 +956,11 @@ function setup_vnc_server() {
 
 #install_pip_packages "${PIP_PACKAGES}" || exit $?
 
-install_rdp_client || exit $?
+rdp_client_install || exit $?
 
-#install_pycharm || exit $?
+wine_install || exit $?
+
+#pycharm_install || exit $?
 
 #setup_sshd || exit $?
 
