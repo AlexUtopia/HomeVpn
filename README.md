@@ -50,6 +50,20 @@ https://pkgs.org/
 | SSH сервер                 | Предоставление удалённого управления для ОС Linux                                                                                                                                                                                                                                                   | + |  [openssh-server](https://www.openssh.com/)                                                                                                    | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                              | -                                                                                                                                                                                                                                                                                            | см. SSH клиент                                                                                                                                       | см. SSH клиент                                                                                          | ?                                                                                   |
 
 
+Таблица 1.2 - Поддерживаемые дистрибутивы linux
+
+| Дистрибутив                | [setup_packages.sh](./setup_packages.sh) | Примечание                               |
+|----------------------------|------------------------------------------|------------------------------------------|
+| Ubuntu                     | + |                                          |
+| Linux Mint 21.2 (Cinnamon) | + |                                          |
+| Debian                     | + |                                          |
+| Arch Linux                 | + |                                          |
+| Fedora                     | + | требуются доработки по менеджеру пакетов |
+| openSUSE                   | + | требуются доработки по менеджеру пакетов |
+| RHEL                       | + | требуются доработки по менеджеру пакетов |
+| CentOS                     | + | требуются доработки по менеджеру пакетов |
+| termux 0.118.0             | + |                                          |
+
 # 2 Реализация
 
 [Основополагающая статья](https://habr.com/ru/post/482888/).

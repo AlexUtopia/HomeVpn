@@ -2,7 +2,7 @@
 
 # https://unix.stackexchange.com/a/306115
 
-#set -x # Раскомментировать для отладки
+set -x # Раскомментировать для отладки
 
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
@@ -15,6 +15,12 @@ function is_admin_rights_available() {
     return 0
 }
 
+# https://stackoverflow.com/questions/8818119/how-can-i-run-a-function-from-a-script-in-command-line
+function run_this_script_function_as_admin() {
+    sudo "${SHELL}" "${BASH_SOURCE[0]}" "$@" || return $?
+    return 0
+}
+
 function is_termux() {
     if [[ -n "${TERMUX_VERSION}" ]]; then
         return 0
@@ -24,17 +30,16 @@ function is_termux() {
 
 # fixme utopia Проверка минимальной версии питона
 
-
-TERMUX_ROOT=""
+ROOT_PREFIX=""
 if is_termux; then
-    TERMUX_ROOT="${PREFIX}"
+    ROOT_PREFIX="${PREFIX}"
 fi
 
 
 SAMBA_PUBLIC_DIRECTORY_PATH="/share"
 SAMBA_USERNAME="samba_user_for_home_vpn"
 if is_termux; then
-    SAMBA_PUBLIC_DIRECTORY_PATH="${TERMUX_ROOT}/share"
+    SAMBA_PUBLIC_DIRECTORY_PATH="${ROOT_PREFIX}/share"
 fi
 
 SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
@@ -44,7 +49,8 @@ fi
 
 ### Minimal packages begin
 
-# fixme utopia file, gpg, which, lsb-release (package)
+# fixme utopia gpg, which, findutils, pcregrep (package)
+# https://packages.msys2.org/package/mingw-w64-x86_64-pcre
 
 OPEN_VPN_PACKAGE="openvpn"
 WGET_PACKAGE="wget"
@@ -84,7 +90,7 @@ GIT_PACKAGE="git"
 AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
 NANO_PACKAGE="nano" # Консольный текстовый редактор
 
-RDP_CLIENT="freerdp2-${XDG_SESSION_TYPE}"
+RDP_CLIENT="freerdp2-x11 freerdp2-wayland"
 if is_termux; then
     RDP_CLIENT="freerdp"
 fi
@@ -240,6 +246,16 @@ function check_result_code() {
     return ${1}
 }
 
+function get_directory_files() {
+    local DIRECTORY_PATH="${1}"
+    local MAXDEPTH=1
+
+    local RESULT=""
+    RESULT=$(find "${DIRECTORY_PATH}" -type f -maxdepth ${MAXDEPTH}) || return $?
+    echo "${RESULT}"
+    return 0
+}
+
 ### System API end
 
 
@@ -354,7 +370,7 @@ function package_manager_is_zypper() {
 }
 
 function dpkg_get_main_architecture() {
-   local RESULT
+   local RESULT=""
    RESULT=$(dpkg --print-architecture) || return $?
    echo "${RESULT}"
    return 0
@@ -798,6 +814,7 @@ function wine_install_default() {
     return 0
 }
 
+# https://wiki.winehq.org/Ubuntu
 function wine_install_nightly() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
@@ -821,7 +838,6 @@ function wine_install_nightly() {
     return 1
 }
 
-# https://wiki.winehq.org/Ubuntu
 function wine_install() {
     if is_termux; then
         # fixme utopia Будем устанавливать в termux для архитектуры amd64/i386? Проверить в termux
@@ -830,10 +846,17 @@ function wine_install() {
         wine_install_nightly || wine_install_default || return $?
     fi
 
+    # fixme utopia Install Mono and Gecko automatically
+    # откуда версию Mono то взять? Курить внимательно appwiz.cpl
+    # https://source.winehq.org/winemono.php?arch=x86_64&v=8.1.0&winev=8.19
+    # https://gitlab.winehq.org/wine/wine/-/blob/master/dlls/appwiz.cpl/addons.c
+    # https://www.winehq.org/pipermail/wine-bugs/2014-January/373915.html
+
     # https://gist.github.com/RobinCPC/9f42be23a1343600507aabdfecc5061d
     # https://wiki.winehq.org/Mono
     # https://wiki.winehq.org/Gecko
     # https://forum.winehq.org/viewtopic.php?t=37344
+    # https://source.winehq.org/
 
     return 0
 }
@@ -938,17 +961,131 @@ function setup_smbd() {
     return 0
 }
 
-function setup_vnc_server() {
-    # fixme utopia Реализовать
+function desktop_environment_get_desktop_file_path() {
+    local DESKTOP_ENVIRONMENT_PRIORITY_LIST="xfce cinnamon"
+    local DESKTOP_ENVIRONMENT_DIR_PATH="${ROOT_PREFIX}/usr/share/xsessions"
+
+    local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=""
+    DESKTOP_ENVIRONMENT_FILE_PATH_LIST=$(get_directory_files "${DESKTOP_ENVIRONMENT_DIR_PATH}") || return $?
+
+    for DESKTOP_ENVIRONMENT_FILE_PATH in ${DESKTOP_ENVIRONMENT_FILE_PATH_LIST}
+    do
+        for DESKTOP_ENVIRONMENT in ${DESKTOP_ENVIRONMENT_PRIORITY_LIST}
+        do
+            if [[ "${DESKTOP_ENVIRONMENT_FILE_PATH}" == *"${DESKTOP_ENVIRONMENT}.desktop" ]]; then
+               echo "${DESKTOP_ENVIRONMENT_FILE_PATH}"
+               return 0
+            fi
+        done
+    done
+    return 1
+}
+
+function regex_zero_or_one() {
+    local PARAM="${1}"
+
+    echo "(?>${PARAM}){0,1}"
+    return 0
+}
+
+# https://www.gnu.org/software/sed/manual/html_node/Text-search-across-multiple-lines.html
+# https://unix.stackexchange.com/questions/251013/bash-regex-capture-group
+# https://www.gnu.org/software/bash/manual/bash.html
+# https://learnbyexample.github.io/learn_gnugrep_ripgrep/perl-compatible-regular-expressions.html
+# https://unix.stackexchange.com/questions/13466/can-grep-output-only-specified-groupings-that-match
+
+# https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html#index-BASH_005fREMATCH
+# https://www.gnu.org/software/bash/manual/html_node/Conditional-Constructs.html
+# https://gist.github.com/CMCDragonkai/6c933f4a7d713ef712145c5eb94a1816
+
+# https://learnbyexample.github.io/learn_gnugrep_ripgrep/perl-compatible-regular-expressions.html#string-anchors
+function desktop_file_get_value() {
+    local GROUP_NAME="Desktop Entry" # ${1}
+    local KEY="Exec" # ${1}
+
+    # fixme utopia Написать тесты (printf)
+
+    local WHITESPACE_CHARACTER_SET="[ \t]"
+    local NEWLINE_CHARACTER_SET="[\n\r]"
+    local ONE_OR_MORE_NEW_LINES="${NEWLINE_CHARACTER_SET}+"
+    local ZERO_OR_MORE_NEW_LINES="${NEWLINE_CHARACTER_SET}*"
+    local ONE_OR_MORE_WHITESPACES="${WHITESPACE_CHARACTER_SET}+"
+    local ZERO_OR_MORE_WHITESPACES="${WHITESPACE_CHARACTER_SET}*"
+
+    local GROUP_HEADER="\[${GROUP_NAME}\]${ZERO_OR_MORE_WHITESPACES}"
+    local GROUP_HEADER_SEARCH_REGEX="(?>^${GROUP_HEADER}|${NEWLINE_CHARACTER_SET}${GROUP_HEADER})"
+
+    # fixme utopia Вынести в отдельный метод
+    # https://unix.stackexchange.com/questions/720268/what-is-modifier-in-locale-name
+    # https://www.gnu.org/software/gettext/manual/html_node/Locale-Names.html
+    # https://www.gnu.org/software/libc/manual/html_node/Locale-Names.html
+    local BASE_KEY_TEMPLATE="[A-Za-z][A-Za-z0-9-]*"
+    local LANG_TEMPLATE="${BASE_KEY_TEMPLATE}"
+    local COUNTRY_TEMPLATE="_${BASE_KEY_TEMPLATE}"
+    local ENCODING_TEMPLATE="\.${BASE_KEY_TEMPLATE}"
+    local MODIFIER_TEMPLATE="@${BASE_KEY_TEMPLATE}"
+    local KEY_LANG_COUNTRY_MODIFIER=$(regex_zero_or_one "\[${LANG_TEMPLATE}$(regex_zero_or_one "${COUNTRY_TEMPLATE}")$(regex_zero_or_one "${ENCODING_TEMPLATE}")$(regex_zero_or_one "${MODIFIER_TEMPLATE}")\]")
+    local KEY_TEMPLATE="${BASE_KEY_TEMPLATE}${KEY_LANG_COUNTRY_MODIFIER}"
+
+    local COMMENT_LINE_TEMPLATE="${ZERO_OR_MORE_WHITESPACES}#.*"
+
+    local KEY_VALUE_TARGET="${KEY}${ZERO_OR_MORE_WHITESPACES}=${ZERO_OR_MORE_WHITESPACES}(.*)"
+    local KEY_VALUE_OTHER="${KEY_TEMPLATE}${ZERO_OR_MORE_WHITESPACES}=${ZERO_OR_MORE_WHITESPACES}.*"
+    local KEY_VALUE_REGEX="(?>${KEY_VALUE_TARGET}|${KEY_VALUE_OTHER}|${ONE_OR_MORE_WHITESPACES}|${COMMENT_LINE_TEMPLATE}|${ONE_OR_MORE_NEW_LINES})"
+
+    local REGEX="${GROUP_HEADER_SEARCH_REGEX}${KEY_VALUE_REGEX}+"
+
+    local RESULT=""
+    RESULT=$(cat "/usr/share/xsessions/cinnamon.desktop" | pcregrep --only-matching=1 --multiline "${REGEX}" ) || return $?
+    echo "${RESULT}"
+    return 0
+}
+
+function vnc_server_create_xstartup() {
+    local XSTARTUP_FILE_PATH="${HOME}/.vnc/xstartup"
+
+    local DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=""
+    DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=$(desktop_environment_get_desktop_file_path) || return $?
+
+    #${SHELL} -c "echo 'dex ${DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH}' > \"${XSTARTUP_FILE_PATH}\"" || return $?
+    ${SHELL} -c "echo 'unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+cinnamon-session-cinnamon' > \"${XSTARTUP_FILE_PATH}\"" || return $?
+    chmod +x "${XSTARTUP_FILE_PATH}"
+    return 0
+}
+
+function vnc_server_setup() {
+    vnc_server_create_xstartup || return $?
+
+    vncserver -localhost no || return $?
+
+    # 1) systemd
+    # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+
+    # 2) vnc run gui application as root
+    # https://forums.debian.net/viewtopic.php?p=569020
+
+    # 3) parse target desktop-entry file
+    # https://askubuntu.com/questions/347063/list-all-installed-desktop-environments-in-ubuntu
+    # https://docs.fileformat.com/settings/desktop/
+    # https://www.freedesktop.org/wiki/Specifications/desktop-entry-spec/
+    # https://askubuntu.com/a/577819
     #!/bin/bash
     ##autocutsel -fork
     #unset SESSION_MANAGER
     #unset DBUS_SESSION_BUS_ADDRESS
     #cinnamon-session-cinnamon
+    # искать по /usr/share/xsessions/
     return 0
 }
 
-package_manager_update_and_upgrade || exit $?
+run_this_script_function_as_admin "desktop_file_get_value" || exit $?
+
+#desktop_file_get_value || exit $?
+exit 0
+
+#package_manager_update_and_upgrade || exit $?
 
 #package_manager_install_packages "${DEV_PACKAGES}" || exit $?
 
@@ -956,9 +1093,9 @@ package_manager_update_and_upgrade || exit $?
 
 #install_pip_packages "${PIP_PACKAGES}" || exit $?
 
-rdp_client_install || exit $?
+# rdp_client_install || exit $?
 
-wine_install || exit $?
+# wine_install || exit $?
 
 #pycharm_install || exit $?
 
@@ -966,4 +1103,4 @@ wine_install || exit $?
 
 #setup_smbd || exit $?
 
-#setup_vnc_server || exit $?
+vnc_server_setup || exit $?
