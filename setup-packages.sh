@@ -7,6 +7,10 @@ set -x # Раскомментировать для отладки
 PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
 
+
+SAMBA_USERNAME="samba_user_for_home_vpn"
+VNC_USERNAME="${USER}"
+
 # su: termux-tools / util-linux
 # sudo: tsu / sudo
 # https://github.com/termux/termux-tools/blob/master/scripts/su.in
@@ -16,8 +20,9 @@ function is_admin_rights_available() {
 }
 
 # https://stackoverflow.com/questions/8818119/how-can-i-run-a-function-from-a-script-in-command-line
+# fixme utopia Не знаю как побороть - тут бесконечная рекурсия
 function run_this_script_function_as_admin() {
-    sudo "${SHELL}" "${BASH_SOURCE[0]}" "$@" || return $?
+    sudo -E "${SHELL}" -c ". ${BASH_SOURCE[0]}; $@" || return $?
     return 0
 }
 
@@ -37,7 +42,6 @@ fi
 
 
 SAMBA_PUBLIC_DIRECTORY_PATH="/share"
-SAMBA_USERNAME="samba_user_for_home_vpn"
 if is_termux; then
     SAMBA_PUBLIC_DIRECTORY_PATH="${ROOT_PREFIX}/share"
 fi
@@ -259,6 +263,52 @@ function get_directory_files() {
 ### System API end
 
 
+### Misc API begin
+
+function deactivate_file_if_exists() {
+    local FILE_PATH="${1}"
+
+    if [ -f "${FILE_PATH}" ]; then
+        local CURRENT_DATE_TIME=""
+        CURRENT_DATE_TIME=$(date +%Y-%m-%dT%H_%M_%S_%N%z) || return $?
+
+        local FILE_NAME=""
+        FILE_NAME=$(basename "${FILE_PATH}") || return $?
+
+        local FILE_DIR_PATH=""
+        FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
+
+        local DEACTIVATE_FILE_PATH="${FILE_DIR_PATH}/unused_since_${CURRENT_DATE_TIME}_${FILE_NAME}"
+        echo "File exist (${FILE_PATH}), rename to ${OLD_SMBD_CONFIG_FILE_DIR_PATH}"
+        mv "${FILE_PATH}" ${OLD_SMBD_CONFIG_FILE_DIR_PATH} || return $?
+    fi
+}
+
+function prepare_for_create_file() {
+    local FILE_PATH="${1}"
+
+    local FILE_DIR_PATH=""
+    FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
+
+    make_dirs "${FILE_DIR_PATH}" || return $?
+
+    deactivate_file_if_exists "${FILE_DIR_PATH}" || return $?
+    return 0
+}
+
+function create_file() {
+   local CONTENT="${1}"
+   local FILE_PATH="${2}"
+
+   prepare_for_create_file "${FILE_PATH}" || return $?
+
+   ${SHELL} -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
+   return 0
+}
+
+### Misc API end
+
+
 ### Download API begin
 
 ## @fn get_file_name_from_url()
@@ -431,12 +481,12 @@ function apt_create_sources() {
        TYPES="deb"
    fi
 
-   ${SHELL} -c "echo 'Types: ${TYPES}
+   create_file "Types: ${TYPES}
 URIs: ${URIS}
 Suites: ${SUITES}
 Components: ${COMPONENTS}
 Architectures: ${ARCHITECTURES}
-${SIGNED_BY_PATH}' > \"${SOURCES_FILE_PATH}\"" || return $?
+${SIGNED_BY_PATH}" "${SOURCES_FILE_PATH}" || return $?
     return 0
 }
 
@@ -901,25 +951,9 @@ function make_smbd_config() {
     local SMBD_CONFIG_FILE_PATH
     SMBD_CONFIG_FILE_PATH=$(get_smbd_config_file_path) || return $?
 
-    local SMBD_CONFIG_FILE_DIR_PATH
-    SMBD_CONFIG_FILE_DIR_PATH=$(dirname "${SMBD_CONFIG_FILE_PATH}") || return $?
-
-    local SMBD_CONFIG_FILE_NAME
-    SMBD_CONFIG_FILE_NAME=$(basename "${SMBD_CONFIG_FILE_PATH}") || return $?
-
-    make_dirs "${SMBD_CONFIG_FILE_DIR_PATH}" || return $?
-
-    if [ -f "${SMBD_CONFIG_FILE_PATH}" ]; then
-        local CURRENT_DATE_TIME
-        CURRENT_DATE_TIME=$(date +%Y-%m-%dT%H_%M_%S_%N%z) || return $?
-        local OLD_SMBD_CONFIG_FILE_DIR_PATH="${SMBD_CONFIG_FILE_DIR_PATH}/unused_since_${CURRENT_DATE_TIME}_${SMBD_CONFIG_FILE_NAME}"
-        echo "smbd config file exist (${SMBD_CONFIG_FILE_PATH}), rename to ${OLD_SMBD_CONFIG_FILE_DIR_PATH}"
-        sudo mv "${SMBD_CONFIG_FILE_PATH}" ${OLD_SMBD_CONFIG_FILE_DIR_PATH}
-    fi
-
     # fixme utopia Переписать?
     # https://www.samba.org/samba/docs/using_samba/ch08.html#samba2-CHP-8-TABLE-2
-    ${SHELL} -c "echo '[global]
+    create_file "[global]
 workgroup = WORKGROUP
 security = user
 map to guest = bad user
@@ -934,7 +968,7 @@ guest ok = yes
 force user = nobody
 browsable = yes
 writable = yes
-' > \"${SMBD_CONFIG_FILE_PATH}\"" || return $?
+" "${SMBD_CONFIG_FILE_PATH}" || return $?
     return 0
 }
 
@@ -1000,8 +1034,9 @@ function regex_zero_or_one() {
 
 # https://learnbyexample.github.io/learn_gnugrep_ripgrep/perl-compatible-regular-expressions.html#string-anchors
 function desktop_file_get_value() {
-    local GROUP_NAME="Desktop Entry" # ${1}
-    local KEY="Exec" # ${1}
+    local DESKTOP_ENTRY_FILE_PATH="${1}"
+    local GROUP_NAME="${2}"
+    local KEY="${3}"
 
     # fixme utopia Написать тесты (printf)
 
@@ -1036,7 +1071,7 @@ function desktop_file_get_value() {
     local REGEX="${GROUP_HEADER_SEARCH_REGEX}${KEY_VALUE_REGEX}+"
 
     local RESULT=""
-    RESULT=$(cat "/usr/share/xsessions/cinnamon.desktop" | pcregrep --only-matching=1 --multiline "${REGEX}" ) || return $?
+    RESULT=$(cat "${DESKTOP_ENTRY_FILE_PATH}" | pcregrep --only-matching=1 --multiline "${REGEX}" ) || return $?
     echo "${RESULT}"
     return 0
 }
@@ -1047,18 +1082,57 @@ function vnc_server_create_xstartup() {
     local DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=""
     DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=$(desktop_environment_get_desktop_file_path) || return $?
 
-    #${SHELL} -c "echo 'dex ${DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH}' > \"${XSTARTUP_FILE_PATH}\"" || return $?
-    ${SHELL} -c "echo 'unset SESSION_MANAGER
+    local EXEC=""
+    EXEC=$(desktop_file_get_value "${DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH}" "Desktop Entry" "Exec") || return $?
+
+    create_file "autocutsel -fork
+unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
-cinnamon-session-cinnamon' > \"${XSTARTUP_FILE_PATH}\"" || return $?
+${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
     chmod +x "${XSTARTUP_FILE_PATH}"
     return 0
 }
 
+function vnc_server_create_systemd_config() {
+    local VNCD="${1}"
+
+    local SYSTEMD_CONFIG_DIR_PATH="/etc/systemd/system"
+    local VNC_SERVER_CONFIG_PATH="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD}.service"
+
+    local VNC_SERVER_EXEC="vncserver"
+    local VNC_DISPLAY=":1"
+
+    # https://unix.stackexchange.com/a/530598
+    # https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-vnc-on-ubuntu-22-04
+    create_file "[Unit]
+Description=TigerVNC Service
+
+[Service]
+User=${VNC_USERNAME}
+Type=forking
+ExecStartPre=-${VNC_SERVER_EXEC} -kill ${VNC_DISPLAY} > /dev/null 2>&1
+ExecStart=${VNC_SERVER_EXEC} ${VNC_DISPLAY} -localhost no
+ExecStop=${VNC_SERVER_EXEC} -kill ${VNC_DISPLAY}
+
+[Install]
+WantedBy=default.target" "${VNC_SERVER_CONFIG_PATH}" || return $?
+    return 0
+}
+
 function vnc_server_setup() {
+    local VNCD="vncd"
+
+    service_disable "${VNCD}"
+
     vnc_server_create_xstartup || return $?
 
-    vncserver -localhost no || return $?
+    vnc_server_create_systemd_config "${VNCD}" || return $?
+
+    service_enable "${VNCD}" || return $?
+
+    if ! is_service_active "${VNCD}"; then
+      echo "FATAL: ${VNCD} not started"
+    fi
 
     # 1) systemd
     # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
@@ -1070,7 +1144,6 @@ function vnc_server_setup() {
     # https://askubuntu.com/questions/347063/list-all-installed-desktop-environments-in-ubuntu
     # https://docs.fileformat.com/settings/desktop/
     # https://www.freedesktop.org/wiki/Specifications/desktop-entry-spec/
-    # https://askubuntu.com/a/577819
     #!/bin/bash
     ##autocutsel -fork
     #unset SESSION_MANAGER
@@ -1080,10 +1153,10 @@ function vnc_server_setup() {
     return 0
 }
 
-run_this_script_function_as_admin "desktop_file_get_value" || exit $?
+# run_this_script_function_as_admin "desktop_file_get_value" || exit $?
 
 #desktop_file_get_value || exit $?
-exit 0
+#exit 0
 
 #package_manager_update_and_upgrade || exit $?
 
