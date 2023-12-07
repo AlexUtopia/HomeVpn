@@ -255,7 +255,7 @@ function get_directory_files() {
     local MAXDEPTH=1
 
     local RESULT=""
-    RESULT=$(find "${DIRECTORY_PATH}" -type f -maxdepth ${MAXDEPTH}) || return $?
+    RESULT=$(find "${DIRECTORY_PATH}" -maxdepth ${MAXDEPTH} -type f) || return $?
     echo "${RESULT}"
     return 0
 }
@@ -1093,6 +1093,28 @@ ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
     return 0
 }
 
+# https://www.baeldung.com/linux/find-default-sorting-order
+# find . -type f -name '*.txt' | sort -V
+function vnc_server_get_systemd_config_file_path() {
+
+    #     display_number=0
+    #     for file in /etc/systemd/system/vncd@*.service
+    #     {
+    #         if vncd@${VNC_USERNAME}-([0-9]+).service$
+    #         {
+    #             return file
+    #         }
+    #         else
+    #         {
+    #             if display_number < current_display_number
+    #                 display_number = current_display_number
+    #         }
+    #     }
+    #     return (vncd@${VNC_USERNAME}-${display_number + 1} /etc/systemd/system/vncd@${VNC_USERNAME}-${display_number + 1}.server display_number + 1)
+    return 0
+}
+
+
 function vnc_server_create_systemd_config() {
     local VNCD="${1}"
 
@@ -1100,22 +1122,31 @@ function vnc_server_create_systemd_config() {
     local VNC_SERVER_CONFIG_PATH="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD}.service"
 
     local VNC_SERVER_EXEC="vncserver"
+    local VNC_SERVER_EXEC_PATH=""
+    VNC_SERVER_EXEC_PATH=$(which "${VNC_SERVER_EXEC}") || return $?
+
+
     local VNC_DISPLAY=":1"
 
-    # https://unix.stackexchange.com/a/530598
+    # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options
     # https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-vnc-on-ubuntu-22-04
+    # https://wiki.archlinux.org/title/Systemd_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)#%D0%A2%D0%B8%D0%BF%D1%8B_%D1%81%D0%BB%D1%83%D0%B6%D0%B1
     create_file "[Unit]
-Description=TigerVNC Service
+Description=Start TightVNC server at startup
+After=syslog.target network.target
 
 [Service]
-User=${VNC_USERNAME}
 Type=forking
-ExecStartPre=-${VNC_SERVER_EXEC} -kill ${VNC_DISPLAY} > /dev/null 2>&1
-ExecStart=${VNC_SERVER_EXEC} ${VNC_DISPLAY} -localhost no
-ExecStop=${VNC_SERVER_EXEC} -kill ${VNC_DISPLAY}
+User=utopia
+Group=utopia
+WorkingDirectory=/home/utopia
+
+ExecStartPre=-${VNC_SERVER_EXEC_PATH} -kill ${VNC_DISPLAY} > /dev/null 2>&1
+ExecStart=${VNC_SERVER_EXEC_PATH} -localhost no ${VNC_DISPLAY}
+ExecStop=${VNC_SERVER_EXEC_PATH} -kill ${VNC_DISPLAY}
 
 [Install]
-WantedBy=default.target" "${VNC_SERVER_CONFIG_PATH}" || return $?
+WantedBy=multi-user.target" || return $?
     return 0
 }
 
