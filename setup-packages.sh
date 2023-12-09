@@ -8,8 +8,8 @@ PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
 
 
-SAMBA_USERNAME="samba_user_for_home_vpn"
-VNC_USERNAME="${USER}"
+GLOBAL_CONFIG_SAMBA_USERNAME="samba_user_for_home_vpn"
+GLOBAL_CONFIG_VNC_USER="${USER}"
 
 # su: termux-tools / util-linux
 # sudo: tsu / sudo
@@ -250,12 +250,20 @@ function check_result_code() {
     return ${1}
 }
 
+# https://www.baeldung.com/linux/find-default-sorting-order
+# fixme utopia что будет если в результирующем пути встретится пробел?
+# https://unix.stackexchange.com/questions/9496/looping-through-files-with-spaces-in-the-names
 function get_directory_files() {
-    local DIRECTORY_PATH="${1}"
+    local DIR_PATH="${1}"
+    local FILE_NAME_WILDCARDS="${2}"
+    if [[ -z "${FILE_NAME_WILDCARDS}" ]]; then
+        FILE_NAME_WILDCARDS="*"
+    fi
+
     local MAXDEPTH=1
 
     local RESULT=""
-    RESULT=$(find "${DIRECTORY_PATH}" -maxdepth ${MAXDEPTH} -type f) || return $?
+    RESULT=$(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${FILE_NAME_WILDCARDS}" -type f | sort -V) || return $?
     echo "${RESULT}"
     return 0
 }
@@ -279,8 +287,8 @@ function deactivate_file_if_exists() {
         FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
 
         local DEACTIVATE_FILE_PATH="${FILE_DIR_PATH}/unused_since_${CURRENT_DATE_TIME}_${FILE_NAME}"
-        echo "File exist (${FILE_PATH}), rename to ${OLD_SMBD_CONFIG_FILE_DIR_PATH}"
-        mv "${FILE_PATH}" ${OLD_SMBD_CONFIG_FILE_DIR_PATH} || return $?
+        echo "File exist (${FILE_PATH}), rename to ${DEACTIVATE_FILE_PATH}"
+        mv "${FILE_PATH}" "${DEACTIVATE_FILE_PATH}" || return $?
     fi
 }
 
@@ -796,6 +804,14 @@ function user_is_added_to_group() {
     return 1
 }
 
+# https://unix.stackexchange.com/a/758316
+function user_get_home_directory_path() {
+    local USERNAME="${1}"
+
+    eval echo "~${USERNAME}"
+    return 0
+}
+
 ### User API end
 
 
@@ -927,12 +943,12 @@ function make_samba_user_and_assign_rights() {
         # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
         local SAMBASHARE_GROUP="sambashare"
 
-        if ! user_is_available "${SAMBA_USERNAME}"; then
-            user_add "${SAMBA_USERNAME}" || return $?
+        if ! user_is_available "${GLOBAL_CONFIG_SAMBA_USERNAME}"; then
+            user_add "${GLOBAL_CONFIG_SAMBA_USERNAME}" || return $?
         fi
 
-        if ! user_is_added_to_group "${SAMBA_USERNAME}" "${SAMBASHARE_GROUP}"; then
-            user_add_to_group "${SAMBA_USERNAME}" "${SAMBASHARE_GROUP}" || return $?
+        if ! user_is_added_to_group "${GLOBAL_CONFIG_SAMBA_USERNAME}" "${SAMBASHARE_GROUP}"; then
+            user_add_to_group "${GLOBAL_CONFIG_SAMBA_USERNAME}" "${SAMBASHARE_GROUP}" || return $?
         fi
         return 0
     fi
@@ -1093,30 +1109,50 @@ ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
     return 0
 }
 
-# https://www.baeldung.com/linux/find-default-sorting-order
-# find . -type f -name '*.txt' | sort -V
-function vnc_server_get_systemd_config_file_path() {
 
-    #     display_number=0
-    #     for file in /etc/systemd/system/vncd@*.service
-    #     {
-    #         if vncd@${VNC_USERNAME}-([0-9]+).service$
-    #         {
-    #             return file
-    #         }
-    #         else
-    #         {
-    #             if display_number < current_display_number
-    #                 display_number = current_display_number
-    #         }
-    #     }
-    #     return (vncd@${VNC_USERNAME}-${display_number + 1} /etc/systemd/system/vncd@${VNC_USERNAME}-${display_number + 1}.server display_number + 1)
+function vnc_server_get_config_info() {
+    local VNC_USER="${1}"
+
+    local SYSTEMD_CONFIG_DIR_PATH="/etc/systemd/system"
+    local VNCD_BASENAME="vncd"
+
+    local VNCD_SYSTEMD_CONFIG_FILE_PATH_LIST=""
+    VNCD_SYSTEMD_CONFIG_FILE_PATH_LIST=$(get_directory_files "${SYSTEMD_CONFIG_DIR_PATH}" "${VNCD_BASENAME}@*.service") || return $?
+
+
+    local VNCD_SYSTEMD_INSTANCE_NAME_REGEX="${VNCD_BASENAME}@(.+)-([0-9]+).service$"
+
+    local DISPLAY_NUMBER="0"
+    for VNCD_SYSTEMD_CONFIG_FILE_PATH in ${VNCD_SYSTEMD_CONFIG_FILE_PATH_LIST}
+    do
+        if [[ "${VNCD_SYSTEMD_CONFIG_FILE_PATH}" =~ ${VNCD_SYSTEMD_INSTANCE_NAME_REGEX} ]]; then
+            local VNCD_SYSTEMD_INSTANCE_NAME="${BASH_REMATCH[0]}"
+            local VNCD_SYSTEMD_INSTANCE_USER="${BASH_REMATCH[1]}"
+            local VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER="${BASH_REMATCH[2]}"
+
+            if [[ "${VNCD_SYSTEMD_INSTANCE_USER}" == "${VNC_USER}" ]]; then
+                local RESULT=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${SYSTEMD_CONFIG_FILE_PATH}" "${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}")
+                echo "${RESULT[@]}"
+                return 0
+            else
+                if (( "${DISPLAY_NUMBER} < ${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}" )); then
+                    DISPLAY_NUMBER="${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}"
+                fi
+            fi
+        fi
+    done
+    DISPLAY_NUMBER="$(("${DISPLAY_NUMBER} + 1"))"
+    local VNCD_SYSTEMD_INSTANCE_NAME="${VNCD_BASENAME}@${VNC_USER}-${DISPLAY_NUMBER}.service"
+    local VNCD_SYSTEMD_CONFIG_PATH_NAME="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD_SYSTEMD_INSTANCE_NAME}"
+    local RESULT=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${VNCD_SYSTEMD_CONFIG_PATH_NAME}" "${DISPLAY_NUMBER}" )
+    echo "${RESULT[@]}"
     return 0
 }
 
 
 function vnc_server_create_systemd_config() {
     local VNCD="${1}"
+    local VNC_USER="${2}"
 
     local SYSTEMD_CONFIG_DIR_PATH="/etc/systemd/system"
     local VNC_SERVER_CONFIG_PATH="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD}.service"
@@ -1125,6 +1161,8 @@ function vnc_server_create_systemd_config() {
     local VNC_SERVER_EXEC_PATH=""
     VNC_SERVER_EXEC_PATH=$(which "${VNC_SERVER_EXEC}") || return $?
 
+    local VNC_USER_HOME_DIRECTORY_PATH=""
+    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path) "${VNC_USER}" || return $?
 
     local VNC_DISPLAY=":1"
 
@@ -1137,9 +1175,9 @@ After=syslog.target network.target
 
 [Service]
 Type=forking
-User=utopia
-Group=utopia
-WorkingDirectory=/home/utopia
+User=${VNC_USER}
+Group=${VNC_USER}
+WorkingDirectory=${VNC_USER_HOME_DIRECTORY_PATH}
 
 ExecStartPre=-${VNC_SERVER_EXEC_PATH} -kill ${VNC_DISPLAY} > /dev/null 2>&1
 ExecStart=${VNC_SERVER_EXEC_PATH} -localhost no ${VNC_DISPLAY}
@@ -1183,6 +1221,34 @@ function vnc_server_setup() {
     # искать по /usr/share/xsessions/
     return 0
 }
+
+
+# https://ostechnix.com/bash-variables-shell-scripting/
+# https://linuxopsys.com/topics/bash-readarray-with-examples
+# https://stackoverflow.com/questions/15691942/print-array-elements-on-separate-lines-in-bash
+# https://www.baeldung.com/linux/bash-special-variables
+# https://www.baeldung.com/linux/ifs-shell-variable
+
+#GGG=""
+#GGG=$(get_directory_files "${HOME}" "*.service") || return $?
+#for G in ${GGG}
+#do
+#    echo "${G}"
+#done
+#
+#exit 0
+#
+#function test() {
+#    TEST_VAR=("hello world" "hello" "world")
+#    echo "${TEST_VAR[@]}"
+#    return 0
+#}
+#
+#PPP=( $(test) )
+#echo ${PPP[1]}
+
+vnc_server_get_config_info test || exit $?
+exit 0
 
 # run_this_script_function_as_admin "desktop_file_get_value" || exit $?
 
