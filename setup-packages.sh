@@ -9,7 +9,7 @@ PYTHON_VERSION="3.10"
 
 
 GLOBAL_CONFIG_SAMBA_USERNAME="samba_user_for_home_vpn"
-GLOBAL_CONFIG_VNC_USER="${USER}"
+GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
 
 # su: termux-tools / util-linux
 # sudo: tsu / sudo
@@ -253,18 +253,25 @@ function check_result_code() {
 # https://www.baeldung.com/linux/find-default-sorting-order
 # fixme utopia что будет если в результирующем пути встретится пробел?
 # https://unix.stackexchange.com/questions/9496/looping-through-files-with-spaces-in-the-names
+# https://unix.stackexchange.com/a/200335
+# https://www.gnu.org/software/bash/manual/html_node/The-Shopt-Builtin.html
+# https://unix.stackexchange.com/questions/34325/sorting-the-output-of-find-print0-by-piping-to-the-sort-command
+# https://stackoverflow.com/a/69375372
 function get_directory_files() {
-    local DIR_PATH="${1}"
-    local FILE_NAME_WILDCARDS="${2}"
+    local -n RESULT_REF=${1}
+    local DIR_PATH="${2}"
+    local FILE_NAME_WILDCARDS="${3}"
     if [[ -z "${FILE_NAME_WILDCARDS}" ]]; then
         FILE_NAME_WILDCARDS="*"
     fi
 
     local MAXDEPTH=1
+    local NULL_SYMBOL=$'\0'
 
-    local RESULT=""
-    RESULT=$(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${FILE_NAME_WILDCARDS}" -type f | sort -V) || return $?
-    echo "${RESULT}"
+    while IFS= read -r -d "${NULL_SYMBOL}" FILE_PATH; do
+        echo "${FILE_PATH}"
+        RESULT_REF+=("${FILE_PATH}")
+    done < <(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${FILE_NAME_WILDCARDS}" -type f -print0 | sort -z -V)
     return 0
 }
 
@@ -278,7 +285,7 @@ function deactivate_file_if_exists() {
 
     if [ -f "${FILE_PATH}" ]; then
         local CURRENT_DATE_TIME=""
-        CURRENT_DATE_TIME=$(date +%Y-%m-%dT%H_%M_%S_%N%z) || return $?
+        CURRENT_DATE_TIME=$(date "+%Y-%m-%dT%H_%M_%S_%N%z") || return $?
 
         local FILE_NAME=""
         FILE_NAME=$(basename "${FILE_PATH}") || return $?
@@ -806,6 +813,11 @@ function user_is_added_to_group() {
 
 # https://unix.stackexchange.com/a/758316
 function user_get_home_directory_path() {
+    if is_termux; then # В termux возможен только один пользователь https://wiki.termux.com/wiki/Differences_from_Linux
+        echo ~
+        return 0
+    fi
+
     local USERNAME="${1}"
 
     eval echo "~${USERNAME}"
@@ -1111,7 +1123,8 @@ ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
 
 
 function vnc_server_get_config_info() {
-    local VNC_USER="${1}"
+    local -n RESULT_REF=${1}
+    local VNC_USER="${2}"
 
     local SYSTEMD_CONFIG_DIR_PATH="/etc/systemd/system"
     local VNCD_BASENAME="vncd"
@@ -1131,8 +1144,7 @@ function vnc_server_get_config_info() {
             local VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER="${BASH_REMATCH[2]}"
 
             if [[ "${VNCD_SYSTEMD_INSTANCE_USER}" == "${VNC_USER}" ]]; then
-                local RESULT=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${SYSTEMD_CONFIG_FILE_PATH}" "${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}")
-                echo "${RESULT[@]}"
+                RESULT_REF=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${SYSTEMD_CONFIG_FILE_PATH}" "${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}")
                 return 0
             else
                 if (( "${DISPLAY_NUMBER} < ${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}" )); then
@@ -1144,8 +1156,7 @@ function vnc_server_get_config_info() {
     DISPLAY_NUMBER="$(("${DISPLAY_NUMBER} + 1"))"
     local VNCD_SYSTEMD_INSTANCE_NAME="${VNCD_BASENAME}@${VNC_USER}-${DISPLAY_NUMBER}.service"
     local VNCD_SYSTEMD_CONFIG_PATH_NAME="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD_SYSTEMD_INSTANCE_NAME}"
-    local RESULT=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${VNCD_SYSTEMD_CONFIG_PATH_NAME}" "${DISPLAY_NUMBER}" )
-    echo "${RESULT[@]}"
+    RESULT_REF=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${VNCD_SYSTEMD_CONFIG_PATH_NAME}" "${DISPLAY_NUMBER}" )
     return 0
 }
 
@@ -1162,7 +1173,7 @@ function vnc_server_create_systemd_config() {
     VNC_SERVER_EXEC_PATH=$(which "${VNC_SERVER_EXEC}") || return $?
 
     local VNC_USER_HOME_DIRECTORY_PATH=""
-    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path) "${VNC_USER}" || return $?
+    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path "${VNC_USER}") || return $?
 
     local VNC_DISPLAY=":1"
 
@@ -1228,15 +1239,47 @@ function vnc_server_setup() {
 # https://stackoverflow.com/questions/15691942/print-array-elements-on-separate-lines-in-bash
 # https://www.baeldung.com/linux/bash-special-variables
 # https://www.baeldung.com/linux/ifs-shell-variable
+# https://www.gnu.org/software/bash/manual/bash.html#Arrays
+# https://www.gnu.org/software/bash/manual/bash.html#Shell-Parameters
+# https://stackoverflow.com/questions/169511/how-do-i-iterate-over-a-range-of-numbers-defined-by-variables-in-bash
 
-#GGG=""
-#GGG=$(get_directory_files "${HOME}" "*.service") || return $?
-#for G in ${GGG}
-#do
-#    echo "${G}"
-#done
-#
+
+create_array() {
+    local -n arr=$1             # use nameref for indirection
+    arr+=(one "two three" four)
+}
+
+#use_array() {
+#    local my_array=("rrr")
+#    create_array my_array       # call function to populate the array
+#    echo "inside use_array"
+#    declare -p my_array         # test the array
+#}
+
+my_array=("rrr")
+create_array my_array       # call function to populate the array
+echo "inside use_array"
+declare -p my_array         # test the array
+
+#use_array                       # call the main function
+
 #exit 0
+
+BBB=("rggg")
+get_directory_files BBB "${HOME}"
+echo "${#BBB[@]}"
+
+declare -p BBB         # test the array
+
+for B in ${BBB}; do
+    echo "${B}"
+done
+
+#for ((i=0;i<=${#BBB[@]};i++)); do
+#    echo "${BBB[i]}"
+#done
+
+exit 0
 #
 #function test() {
 #    TEST_VAR=("hello world" "hello" "world")
