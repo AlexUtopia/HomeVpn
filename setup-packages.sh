@@ -35,16 +35,13 @@ function is_termux() {
 
 # fixme utopia Проверка минимальной версии питона
 
-ROOT_PREFIX=""
+GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
-    ROOT_PREFIX="${PREFIX}"
+    GLOBAL_CONFIG_ROOT_PREFIX="${PREFIX}"
 fi
 
 
-SAMBA_PUBLIC_DIRECTORY_PATH="/share"
-if is_termux; then
-    SAMBA_PUBLIC_DIRECTORY_PATH="${ROOT_PREFIX}/share"
-fi
+GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/share"
 
 SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
@@ -211,7 +208,7 @@ function is_cygwin() {
 }
 
 function get_os_distro_name() {
-   local OS_RELEASE_PATH="/etc/os-release"
+   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/os-release"
 
    . "${OS_RELEASE_PATH}" || return $?
 
@@ -225,7 +222,7 @@ function get_os_distro_name() {
 }
 
 function get_os_distro_codename_or_version() {
-   local OS_RELEASE_PATH="/etc/os-release"
+   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/os-release"
 
    . "${OS_RELEASE_PATH}" || return $?
 
@@ -507,7 +504,7 @@ ${SIGNED_BY_PATH}" "${SOURCES_FILE_PATH}" || return $?
 
 
 function apt_get_key_file_path() {
-   local KEYRINGS_DIR_PATH="/etc/apt/keyrings"
+   local KEYRINGS_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/apt/keyrings"
 
    local NAME="${1}"
 
@@ -516,7 +513,7 @@ function apt_get_key_file_path() {
 }
 
 function apt_get_source_file_path() {
-   local APT_SOURCES_LIST_DIR_PATH="/etc/apt/sources.list.d"
+   local APT_SOURCES_LIST_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/apt/sources.list.d"
 
    local NAME="${1}"
 
@@ -839,7 +836,7 @@ function setup_sshd() {
 function pycharm_install() {
     local PYCHARM="pycharm-community-2023.2.4"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
-    local INSTALL_DIRECTORY="/opt"
+    local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
 
     if [[ -d "${PYCHARM_INSTALL_DIRECTORY}" ]]; then
@@ -968,8 +965,8 @@ function make_samba_user_and_assign_rights() {
 }
 
 function make_samba_public_directory() {
-    make_dirs "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
-    chmod 0777 "${SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    make_dirs "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
+    chmod 0777 "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
     return 0
 }
 
@@ -991,7 +988,7 @@ smb ports = ${SMBD_TCP_PORTS}
 inherit permissions = yes
 
 [public]
-path = \"${SAMBA_PUBLIC_DIRECTORY_PATH}\"
+path = \"${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}\"
 guest ok = yes
 force user = nobody
 browsable = yes
@@ -1004,7 +1001,7 @@ function setup_smbd() {
     # https://ubuntu.com/tutorials/install-and-configure-samba#1-overview
     local SMBD="smbd"
 
-    service_disable "${SMBD}" || return $?
+    service_disable "${SMBD}"
 
     # make_samba_user_and_assign_rights || return $?
     make_samba_public_directory || return $?
@@ -1025,13 +1022,14 @@ function setup_smbd() {
 
 function desktop_environment_get_desktop_file_path() {
     local DESKTOP_ENVIRONMENT_PRIORITY_LIST="xfce cinnamon"
-    local DESKTOP_ENVIRONMENT_DIR_PATH="${ROOT_PREFIX}/usr/share/xsessions"
+    local DESKTOP_ENVIRONMENT_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/usr/share/xsessions"
 
-    local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=""
-    DESKTOP_ENVIRONMENT_FILE_PATH_LIST=$(get_directory_files "${DESKTOP_ENVIRONMENT_DIR_PATH}") || return $?
+    local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=()
+    get_directory_files DESKTOP_ENVIRONMENT_FILE_PATH_LIST "${DESKTOP_ENVIRONMENT_DIR_PATH}" || return $?
 
-    for DESKTOP_ENVIRONMENT_FILE_PATH in ${DESKTOP_ENVIRONMENT_FILE_PATH_LIST}
+    for ((i=0; i<=${#DESKTOP_ENVIRONMENT_FILE_PATH_LIST[@]}; i++));
     do
+        DESKTOP_ENVIRONMENT_FILE_PATH="${DESKTOP_ENVIRONMENT_FILE_PATH_LIST[i]}"
         for DESKTOP_ENVIRONMENT in ${DESKTOP_ENVIRONMENT_PRIORITY_LIST}
         do
             if [[ "${DESKTOP_ENVIRONMENT_FILE_PATH}" == *"${DESKTOP_ENVIRONMENT}.desktop" ]]; then
@@ -1105,7 +1103,7 @@ function desktop_file_get_value() {
 }
 
 function vnc_server_create_xstartup() {
-    local XSTARTUP_FILE_PATH="${HOME}/.vnc/xstartup"
+    local XSTARTUP_FILE_PATH="${1}"
 
     local DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=""
     DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=$(desktop_environment_get_desktop_file_path) || return $?
@@ -1121,30 +1119,52 @@ ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
     return 0
 }
 
+function vnc_server_get_executable_path() {
+    local VNC_SERVER_EXEC="vncserver"
+    local RESULT=""
+    RESULT=$(which "${VNC_SERVER_EXEC}") || return $?
+    echo "${RESULT}"
+    return 0
+}
 
 function vnc_server_get_config_info() {
     local -n RESULT_REF=${1}
     local VNC_USER="${2}"
 
-    local SYSTEMD_CONFIG_DIR_PATH="/etc/systemd/system"
+    local SYSTEMD_CONFIG_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/systemd/system"
     local VNCD_BASENAME="vncd"
-
-    local VNCD_SYSTEMD_CONFIG_FILE_PATH_LIST=""
-    VNCD_SYSTEMD_CONFIG_FILE_PATH_LIST=$(get_directory_files "${SYSTEMD_CONFIG_DIR_PATH}" "${VNCD_BASENAME}@*.service") || return $?
-
-
     local VNCD_SYSTEMD_INSTANCE_NAME_REGEX="${VNCD_BASENAME}@(.+)-([0-9]+).service$"
 
+    local VNC_USER_HOME_DIRECTORY_PATH=""
+    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path "${VNC_USER}") || return $?
+    local VNC_XSTARTUP_FILE_PATH="${VNC_USER_HOME_DIRECTORY_PATH}/.vnc/xstartup"
+
+    local VNC_SERVER_EXECUTABLE_PATH=""
+    VNC_SERVER_EXECUTABLE_PATH=$(vnc_server_get_executable_path) || return $?
+
+    RESULT_REF["EXECUTABLE_PATH"]="${VNC_SERVER_EXECUTABLE_PATH}"
+    RESULT_REF["USER"]="${VNC_USER}"
+    RESULT_REF["USER_HOME_DIRECTORY_PATH"]="${VNC_USER_HOME_DIRECTORY_PATH}"
+    RESULT_REF["XSTARTUP_FILE_PATH"]="${VNC_XSTARTUP_FILE_PATH}"
+
+    local SYSTEMD_CONFIG_FILE_PATH_LIST=()
+    get_directory_files SYSTEMD_CONFIG_FILE_PATH_LIST "${SYSTEMD_CONFIG_DIR_PATH}" "${VNCD_BASENAME}@*.service" || return $?
+
     local DISPLAY_NUMBER="0"
-    for VNCD_SYSTEMD_CONFIG_FILE_PATH in ${VNCD_SYSTEMD_CONFIG_FILE_PATH_LIST}
+    for ((i=0; i<=${#SYSTEMD_CONFIG_FILE_PATH_LIST[@]}; i++));
     do
-        if [[ "${VNCD_SYSTEMD_CONFIG_FILE_PATH}" =~ ${VNCD_SYSTEMD_INSTANCE_NAME_REGEX} ]]; then
+        local SYSTEMD_CONFIG_FILE_PATH="${SYSTEMD_CONFIG_FILE_PATH_LIST[i]}"
+
+        if [[ "${SYSTEMD_CONFIG_FILE_PATH}" =~ ${VNCD_SYSTEMD_INSTANCE_NAME_REGEX} ]]; then
             local VNCD_SYSTEMD_INSTANCE_NAME="${BASH_REMATCH[0]}"
             local VNCD_SYSTEMD_INSTANCE_USER="${BASH_REMATCH[1]}"
             local VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER="${BASH_REMATCH[2]}"
 
             if [[ "${VNCD_SYSTEMD_INSTANCE_USER}" == "${VNC_USER}" ]]; then
-                RESULT_REF=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${SYSTEMD_CONFIG_FILE_PATH}" "${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}")
+
+                RESULT_REF["SYSTEMD_NAME"]="${VNCD_SYSTEMD_INSTANCE_NAME}"
+                RESULT_REF["SYSTEMD_CONFIG_PATH"]="${SYSTEMD_CONFIG_FILE_PATH}"
+                RESULT_REF["DISPLAY_NUMBER"]="${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}"
                 return 0
             else
                 if (( "${DISPLAY_NUMBER} < ${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}" )); then
@@ -1155,27 +1175,23 @@ function vnc_server_get_config_info() {
     done
     DISPLAY_NUMBER="$(("${DISPLAY_NUMBER} + 1"))"
     local VNCD_SYSTEMD_INSTANCE_NAME="${VNCD_BASENAME}@${VNC_USER}-${DISPLAY_NUMBER}.service"
-    local VNCD_SYSTEMD_CONFIG_PATH_NAME="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD_SYSTEMD_INSTANCE_NAME}"
-    RESULT_REF=("${VNCD_SYSTEMD_INSTANCE_NAME}" "${VNCD_SYSTEMD_CONFIG_PATH_NAME}" "${DISPLAY_NUMBER}" )
+    local VNCD_SYSTEMD_INSTANCE_CONFIG_PATH="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD_SYSTEMD_INSTANCE_NAME}"
+    RESULT_REF["SYSTEMD_NAME"]="${VNCD_SYSTEMD_INSTANCE_NAME}"
+    RESULT_REF["SYSTEMD_CONFIG_PATH"]="${VNCD_SYSTEMD_INSTANCE_CONFIG_PATH}"
+    RESULT_REF["DISPLAY_NUMBER"]="${DISPLAY_NUMBER}"
     return 0
 }
 
 
 function vnc_server_create_systemd_config() {
-    local VNCD="${1}"
-    local VNC_USER="${2}"
+    local -n VNC_SERVER_CONFIG=${1}
 
-    local SYSTEMD_CONFIG_DIR_PATH="/etc/systemd/system"
-    local VNC_SERVER_CONFIG_PATH="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD}.service"
+    local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG["EXECUTABLE_PATH"]}"
+    local VNC_USER="${VNC_SERVER_CONFIG["USER"]}"
+    local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
+    local VNC_DISPLAY=":${VNC_SERVER_CONFIG["DISPLAY_NUMBER"]}"
+    local VNCD_SYSTEMD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG["SYSTEMD_CONFIG_PATH"]}"
 
-    local VNC_SERVER_EXEC="vncserver"
-    local VNC_SERVER_EXEC_PATH=""
-    VNC_SERVER_EXEC_PATH=$(which "${VNC_SERVER_EXEC}") || return $?
-
-    local VNC_USER_HOME_DIRECTORY_PATH=""
-    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path "${VNC_USER}") || return $?
-
-    local VNC_DISPLAY=":1"
 
     # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options
     # https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-vnc-on-ubuntu-22-04
@@ -1190,28 +1206,32 @@ User=${VNC_USER}
 Group=${VNC_USER}
 WorkingDirectory=${VNC_USER_HOME_DIRECTORY_PATH}
 
-ExecStartPre=-${VNC_SERVER_EXEC_PATH} -kill ${VNC_DISPLAY} > /dev/null 2>&1
-ExecStart=${VNC_SERVER_EXEC_PATH} -localhost no ${VNC_DISPLAY}
-ExecStop=${VNC_SERVER_EXEC_PATH} -kill ${VNC_DISPLAY}
+ExecStartPre=-${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} > /dev/null 2>&1
+ExecStart=${VNC_SERVER_EXECUTABLE_PATH} -localhost no ${VNC_DISPLAY}
+ExecStop=${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY}
 
 [Install]
-WantedBy=multi-user.target" || return $?
+WantedBy=multi-user.target" "${VNCD_SYSTEMD_INSTANCE_CONFIG_PATH}" || return $?
     return 0
 }
 
 function vnc_server_setup() {
-    local VNCD="vncd"
+    local VNC_SERVER_CONFIG=()
+    vnc_server_get_config_info VNC_SERVER_CONFIG || return $?
 
-    service_disable "${VNCD}"
+    local VNCD_SYSTEMD_INSTANCE_NAME="${VNC_SERVER_CONFIG["SYSTEMD_NAME"]}"
+    local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
 
-    vnc_server_create_xstartup || return $?
+    service_disable "${VNCD_SYSTEMD_INSTANCE_NAME}"
 
-    vnc_server_create_systemd_config "${VNCD}" || return $?
+    vnc_server_create_xstartup "${VNC_XSTARTUP_FILE_PATH}" || return $?
 
-    service_enable "${VNCD}" || return $?
+    vnc_server_create_systemd_config VNC_SERVER_CONFIG || return $?
 
-    if ! is_service_active "${VNCD}"; then
-      echo "FATAL: ${VNCD} not started"
+    service_enable "${VNCD_SYSTEMD_INSTANCE_NAME}" || return $?
+
+    if ! is_service_active "${VNCD_SYSTEMD_INSTANCE_NAME}"; then
+      echo "FATAL: ${VNCD_SYSTEMD_INSTANCE_NAME} not started"
     fi
 
     # 1) systemd
@@ -1224,12 +1244,6 @@ function vnc_server_setup() {
     # https://askubuntu.com/questions/347063/list-all-installed-desktop-environments-in-ubuntu
     # https://docs.fileformat.com/settings/desktop/
     # https://www.freedesktop.org/wiki/Specifications/desktop-entry-spec/
-    #!/bin/bash
-    ##autocutsel -fork
-    #unset SESSION_MANAGER
-    #unset DBUS_SESSION_BUS_ADDRESS
-    #cinnamon-session-cinnamon
-    # искать по /usr/share/xsessions/
     return 0
 }
 
@@ -1244,54 +1258,6 @@ function vnc_server_setup() {
 # https://stackoverflow.com/questions/169511/how-do-i-iterate-over-a-range-of-numbers-defined-by-variables-in-bash
 
 
-create_array() {
-    local -n arr=$1             # use nameref for indirection
-    arr+=(one "two three" four)
-}
-
-#use_array() {
-#    local my_array=("rrr")
-#    create_array my_array       # call function to populate the array
-#    echo "inside use_array"
-#    declare -p my_array         # test the array
-#}
-
-my_array=("rrr")
-create_array my_array       # call function to populate the array
-echo "inside use_array"
-declare -p my_array         # test the array
-
-#use_array                       # call the main function
-
-#exit 0
-
-BBB=("rggg")
-get_directory_files BBB "${HOME}"
-echo "${#BBB[@]}"
-
-declare -p BBB         # test the array
-
-for B in ${BBB}; do
-    echo "${B}"
-done
-
-#for ((i=0;i<=${#BBB[@]};i++)); do
-#    echo "${BBB[i]}"
-#done
-
-exit 0
-#
-#function test() {
-#    TEST_VAR=("hello world" "hello" "world")
-#    echo "${TEST_VAR[@]}"
-#    return 0
-#}
-#
-#PPP=( $(test) )
-#echo ${PPP[1]}
-
-vnc_server_get_config_info test || exit $?
-exit 0
 
 # run_this_script_function_as_admin "desktop_file_get_value" || exit $?
 
