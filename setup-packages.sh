@@ -8,9 +8,6 @@ PYTHON_VERSION_MIN="3.8"
 PYTHON_VERSION="3.10"
 
 
-GLOBAL_CONFIG_SAMBA_USERNAME="samba_user_for_home_vpn"
-GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
-
 # su: termux-tools / util-linux
 # sudo: tsu / sudo
 # https://github.com/termux/termux-tools/blob/master/scripts/su.in
@@ -35,18 +32,27 @@ function is_termux() {
 
 # fixme utopia Проверка минимальной версии питона
 
+### Global config begin
+
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
+
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
     GLOBAL_CONFIG_ROOT_PREFIX="${PREFIX}"
 fi
 
+GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
 
+GLOBAL_CONFIG_SAMBA_USERNAME="samba_user_for_home_vpn"
 GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/share"
-
-SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
+GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
-    SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
+    GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
 fi
+
+### Global config end
+
+
 
 ### Minimal packages begin
 
@@ -91,9 +97,15 @@ GIT_PACKAGE="git"
 AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
 NANO_PACKAGE="nano" # Консольный текстовый редактор
 
-RDP_CLIENT="freerdp2-x11 freerdp2-wayland"
+XFCE4_PACKAGE=""
 if is_termux; then
-    RDP_CLIENT="freerdp"
+    XFCE4_PACKAGE="xfce4 xfce4-terminal" # https://wiki.termux.com/wiki/Graphical_Environment
+fi
+
+RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
+RDP_SERVER_PACKAGE="xrdp"
+if is_termux; then
+    RDP_CLIENT_PACKAGE="freerdp"
 fi
 
 SSH_SERVER_PACKAGE="openssh-server"
@@ -126,7 +138,7 @@ if is_termux; then
     PASSWD_PACKAGE=""
 fi
 
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${SSH_SERVER_PACKAGE} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
+DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_CLIENT_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
 ### Development packages end
 
 
@@ -138,11 +150,6 @@ if is_termux; then
 fi
 
 MIDNIGHT_COMMANDER_PACKAGE="mc"
-
-XFCE4_PACKAGE=""
-if is_termux; then
-    XFCE4_PACKAGE="xfce4 xfce4-terminal" # https://wiki.termux.com/wiki/Graphical_Environment
-fi
 
 FIREFOX_PACKAGE="firefox"
 
@@ -161,12 +168,11 @@ if is_termux; then
     LIBREOFFICE_PACKAGE=""
 fi
 
-FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${XFCE4_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE}"
+FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE}"
 ### Full packages end
 
 
 PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1"
-
 
 ### System API begin
 
@@ -663,12 +669,12 @@ function package_manager_is_package_installed() {
 
 ### System package manager end
 
-function update_pip() {
+function pip_update() {
     python3 -m pip install pip --force-reinstall --ignore-installed || return $?
     return 0
 }
 
-function install_pip_packages() {
+function pip_install_packages() {
     for pip_package in ${1}
     do
         pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
@@ -801,7 +807,7 @@ function user_is_added_to_group() {
     USER_GROUP_NAME_LIST=$(id "${1}" -G -n) || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
     for USER_GROUP_NAME in USER_GROUP_NAME_LIST
     do
-      if [ "${USER_GROUP_NAME}" = "${2}" ]; then
+      if [[ "${USER_GROUP_NAME}" == "${2}" ]]; then
           return 0
       fi
     done
@@ -824,7 +830,7 @@ function user_get_home_directory_path() {
 ### User API end
 
 
-function setup_sshd() {
+function sshd_setup() {
     local SSHD="sshd"
     if is_service_active "${SSHD}"; then
       return 0
@@ -913,11 +919,20 @@ function wine_install_nightly() {
     return 1
 }
 
+function wine_install_32bit_dependencies() {
+    # Зависимости для wine32 fixme utopia Это Ubuntu специфичные пакеты?
+    # https://pkgs.org/search/?q=libgl1
+    # https://pkgs.org/search/?q=mesa-vulkan-drivers
+    package_manager_install_packages "libgl1:i386 mesa-vulkan-drivers:i386" || return $?
+    return 0
+}
+
 function wine_install() {
     if is_termux; then
         # fixme utopia Будем устанавливать в termux для архитектуры amd64/i386? Проверить в termux
         return 0
     else
+        wine_install_32bit_dependencies || return $?
         wine_install_nightly || wine_install_default || return $?
     fi
 
@@ -936,7 +951,7 @@ function wine_install() {
     return 0
 }
 
-function get_smbd_config_file_path() {
+function smbd_get_config_file_path() {
     local SMBD_BUILD_OPTIONS
     SMBD_BUILD_OPTIONS=$(smbd -b) || return $?
 
@@ -947,7 +962,7 @@ function get_smbd_config_file_path() {
     return 0
 }
 
-function make_samba_user_and_assign_rights() {
+function samba_make_user_and_assign_rights() {
     if ! is_termux; then
         # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
         local SAMBASHARE_GROUP="sambashare"
@@ -964,17 +979,17 @@ function make_samba_user_and_assign_rights() {
     return 0
 }
 
-function make_samba_public_directory() {
+function samba_make_public_directory() {
     make_dirs "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
     chmod 0777 "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
     return 0
 }
 
-function make_smbd_config() {
+function smbd_make_config() {
     # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
 
     local SMBD_CONFIG_FILE_PATH
-    SMBD_CONFIG_FILE_PATH=$(get_smbd_config_file_path) || return $?
+    SMBD_CONFIG_FILE_PATH=$(smbd_get_config_file_path) || return $?
 
     # fixme utopia Переписать?
     # https://www.samba.org/samba/docs/using_samba/ch08.html#samba2-CHP-8-TABLE-2
@@ -984,7 +999,7 @@ security = user
 map to guest = bad user
 wins support = no
 dns proxy = no
-smb ports = ${SMBD_TCP_PORTS}
+smb ports = ${GLOBAL_CONFIG_SMBD_TCP_PORTS}
 inherit permissions = yes
 
 [public]
@@ -997,15 +1012,15 @@ writable = yes
     return 0
 }
 
-function setup_smbd() {
+function smbd_setup() {
     # https://ubuntu.com/tutorials/install-and-configure-samba#1-overview
     local SMBD="smbd"
 
     service_disable "${SMBD}"
 
     # make_samba_user_and_assign_rights || return $?
-    make_samba_public_directory || return $?
-    make_smbd_config || return $?
+    samba_make_public_directory || return $?
+    smbd_make_config || return $?
 
     service_enable "${SMBD}" || return $?
 
@@ -1215,18 +1230,33 @@ WantedBy=multi-user.target" "${VNCD_SYSTEMD_INSTANCE_CONFIG_PATH}" || return $?
     return 0
 }
 
+function vnc_create_password_if() {
+    local VNC_USER_HOME_DIRECTORY_PATH="${1}"
+
+    if [[ ! -f "${VNC_USER_HOME_DIRECTORY_PATH}/.vnc/passwd" ]]; then
+        echo "Set VNC password"
+        vncpasswd || return $?
+        return 0
+    fi
+
+    return 0
+}
+
 function vnc_server_setup() {
     local VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG || return $?
 
     local VNCD_SYSTEMD_INSTANCE_NAME="${VNC_SERVER_CONFIG["SYSTEMD_NAME"]}"
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
+    local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
 
     service_disable "${VNCD_SYSTEMD_INSTANCE_NAME}"
 
     vnc_server_create_xstartup "${VNC_XSTARTUP_FILE_PATH}" || return $?
 
     vnc_server_create_systemd_config VNC_SERVER_CONFIG || return $?
+
+    vnc_create_password_if "${VNC_USER_HOME_DIRECTORY_PATH}" || return $?
 
     service_enable "${VNCD_SYSTEMD_INSTANCE_NAME}" || return $?
 
@@ -1247,6 +1277,40 @@ function vnc_server_setup() {
     return 0
 }
 
+function main() {
+    package_manager_update_and_upgrade || return $?
+
+    if [[ "${GLOBAL_CONFIG_SETUP_PACKAGES_MODE,,}" == "min" ]]; then
+        package_manager_install_packages "${MINIMAL_PACKAGES}" || return $?
+        pip_update || return $?
+        pip_install_packages "${PIP_PACKAGES}" || return $?
+
+    elif [[ "${GLOBAL_CONFIG_SETUP_PACKAGES_MODE,,}" == "dev" ]]; then
+        package_manager_install_packages "${DEV_PACKAGES}" || return $?
+        pip_update || return $?
+        pip_install_packages "${PIP_PACKAGES}" || return $?
+
+        rdp_client_install || return $?
+        sshd_setup || return $?
+        vnc_server_setup || return $?
+        smbd_setup || return $?
+        pycharm_install || return $?
+    else
+        package_manager_install_packages "${FULL_PACKAGES}" || return $?
+        pip_update || return $?
+        pip_install_packages "${PIP_PACKAGES}" || return $?
+
+        rdp_client_install || return $?
+        sshd_setup || return $?
+        vnc_server_setup || return $?
+        smbd_setup || return $?
+        pycharm_install || return $?
+
+        wine_install || return $?
+    fi
+    return 0
+}
+
 
 # https://ostechnix.com/bash-variables-shell-scripting/
 # https://linuxopsys.com/topics/bash-readarray-with-examples
@@ -1257,29 +1321,11 @@ function vnc_server_setup() {
 # https://www.gnu.org/software/bash/manual/bash.html#Shell-Parameters
 # https://stackoverflow.com/questions/169511/how-do-i-iterate-over-a-range-of-numbers-defined-by-variables-in-bash
 
+#rdp
+# https://c-nergy.be/blog/?p=13708
+# https://www.cyberithub.com/how-to-install-xrdp-on-ubuntu-22-04-lts-jammy-jellyfish/
+# https://forum.altlinux.org/index.php?topic=43501.15
+# https://bytexd.com/xrdp-ubuntu/
+# https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-
-# run_this_script_function_as_admin "desktop_file_get_value" || exit $?
-
-#desktop_file_get_value || exit $?
-#exit 0
-
-#package_manager_update_and_upgrade || exit $?
-
-#package_manager_install_packages "${DEV_PACKAGES}" || exit $?
-
-#update_pip || exit $?
-
-#install_pip_packages "${PIP_PACKAGES}" || exit $?
-
-# rdp_client_install || exit $?
-
-# wine_install || exit $?
-
-#pycharm_install || exit $?
-
-#setup_sshd || exit $?
-
-#setup_smbd || exit $?
-
-vnc_server_setup || exit $?
+main
