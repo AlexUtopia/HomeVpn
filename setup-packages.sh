@@ -168,7 +168,7 @@ if is_termux; then
     LIBREOFFICE_PACKAGE=""
 fi
 
-FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE}"
+FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE}"
 ### Full packages end
 
 
@@ -286,7 +286,7 @@ function get_directory_files() {
 function deactivate_file_if_exists() {
     local FILE_PATH="${1}"
 
-    if [ -f "${FILE_PATH}" ]; then
+    if [[ -f "${FILE_PATH}" ]]; then
         local CURRENT_DATE_TIME=""
         CURRENT_DATE_TIME=$(date "+%Y-%m-%dT%H_%M_%S_%N%z") || return $?
 
@@ -1244,7 +1244,7 @@ function vnc_create_password_if() {
 
 function vnc_server_setup() {
     local VNC_SERVER_CONFIG=()
-    vnc_server_get_config_info VNC_SERVER_CONFIG || return $?
+    vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
     local VNCD_SYSTEMD_INSTANCE_NAME="${VNC_SERVER_CONFIG["SYSTEMD_NAME"]}"
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
@@ -1294,7 +1294,6 @@ function main() {
         sshd_setup || return $?
         vnc_server_setup || return $?
         smbd_setup || return $?
-        pycharm_install || return $?
     else
         package_manager_install_packages "${FULL_PACKAGES}" || return $?
         pip_update || return $?
