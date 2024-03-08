@@ -8,7 +8,7 @@
 
 # https://unix.stackexchange.com/a/306115
 
-# set -x # Раскомментировать для отладки
+set -x # Раскомментировать для отладки
 
 
 # su: termux-tools / util-linux
@@ -58,9 +58,6 @@ fi
 
 ### Minimal packages begin
 
-# fixme utopia gpg, which, findutils, pcregrep (package)
-# https://packages.msys2.org/package/mingw-w64-x86_64-pcre
-
 OPEN_VPN_PACKAGE="openvpn"
 WGET_PACKAGE="wget"
 TAR_PACKAGE="tar"
@@ -68,6 +65,12 @@ PROCPS_PACKAGE="procps" # Утилита sysctl для записи параме
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
 COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id
+GPG_PACKAGE="gpg"
+if is_termux; then
+    GPG_PACKAGE=""
+fi
+FINDUTILS_PACKAGE="findutils" # Утилита find
+PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -89,7 +92,7 @@ if is_termux; then
     QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
 fi
 
-MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE}"
+MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE}"
 ### Minimal packages end
 
 
@@ -97,6 +100,10 @@ MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PA
 
 GIT_PACKAGE="git"
 AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
+if is_termux; then
+    AUTOCUTSEL_PACKAGE=""
+fi
+
 NANO_PACKAGE="nano" # Консольный текстовый редактор
 
 XFCE4_PACKAGE=""
