@@ -72,6 +72,8 @@ fixme utopia Описать min / dev / full в таблице 1.1
 Проект разворачивается в 2 этапа:
  - скачивание проекта с github на ПК (см. пункты 2.2 - 2.4)
  - установка и автоматическая настройка пакетов при помощи скрипта [setup-packages.sh](/setup-packages.sh)
+ - настройка серверной части проекта HomeVpn (пункт 2.5)
+ - настройка клиентской части проекта HomeVpn (пункт 2.6)
 
 Если проект уже выкачан, форсировано подтянутся последние изменения для ветки `main` и ещё раз будет вызван [setup-packages.sh](/setup-packages.sh)
 
@@ -242,7 +244,7 @@ fi
 ```
 
 
-### 2.2.6 Особенности разворота на ARM архитектуре
+### 2.2.6 Особенности разворота на ARM архитектуре и запуск x86/x86-64 приложений
 
 fixme utopia Дописать
 
@@ -295,10 +297,7 @@ fi
 
 ### 2.3.4 Доступ к рабочему столу XFCE4
 
-Доступ к рабочему столу можно осуществить при помощи VNC клиента. Рекомендуется использовать bVNC клиент.
-
-fixme utopia Дать скрин моих настроек
-
+Доступ к рабочему столу можно осуществить при помощи VNC клиента. Рекомендуется использовать bVNC клиент (см. пункт 3.4.2).
 
 #### 2.3.4.1 Возможность работы с аппаратным обеспечением Android из termux
 
@@ -319,6 +318,197 @@ fixme utopia Дописать
 
 fixme utopia Скачать батник для разворота MSYS2 со страницы проекта на github?
 
+## 2.5 Настройка серверной части HomeVpn
+
+## 2.5.1 Настройка домашнего роутера
+
+fixme utopia Как настроить Port Forwarding на роутере со скринами
+
+### 2.5.2 Конфигурационные параметры проекта HomeVpn
+
+#### 2.5.2.1 Главный конфиг
+
+fixme utopia Дописать
+
+#### 2.5.2.2 Шаблон для OpenVPN сервера
+
+fixme utopia Дописать
+
+#### 2.5.2.3 Шаблон для OpenVPN клиента
+
+fixme utopia Дописать
+
+#### 2.5.2.4 Список STUN серверов
+
+fixme utopia Дописать
+
+#### 2.5.2.5 Конфигурация Telegram бота
+
+fixme utopia Дописать
+
+### 2.5.3 Настройка OpenVPN сервера
+
+1. сконфигурируем пути в [open-vpn.config.json](/open-vpn.config.json), **если необходимо**
+2. сгенерируем сертификаты
+
+```bash
+
+sudo ./setup-easy-rsa.sh
+
+```
+
+3. создадим сертификаты для нового пользователя
+
+```bash
+
+sudo ./build-client.sh <имя_пользователя>
+
+```
+
+4. запустим OpenVPN сервер
+
+Права суперпользователя необходимы для запуска OpenVPN сервера.
+
+```bash
+
+sudo python3.8 main.py run
+
+```
+
+5. сгенерируем ovpn конфигурацию для пользователя, которому сгенерировали сертификаты на шаге (3)
+
+```bash
+
+python3.8 main.py user_ovpn <имя_пользователя>
+
+```
+
+6. запустим OpenVpn клиента на удалённом ПК с конфигурацией полученной на шаге (5)
+
+```bash
+
+openvpn --config client-<имя_пользователя>.ovpn
+
+```
+
+7. запустим виртуальную машину fixme utopia расписать работу с реестром виртуалок
+
+
+## 2.7 Настройка клиентской части HomeVpn
+
+Telegram бот поставляет новый ovpn конфиг от сервера (например, потому что сменился ip адрес и UDP порт), OpenVPN клиент автоматически перенастраивается.
+
+
+# 3 Администрирование
+
+## 3.1 Настройка ОС к работе
+
+Настройку ОС к работе (в том числе гостевую ОС виртуальной машины) можно делать при помощи скрипта setup-packages.sh (см. пункт 2).
+
+
+## 3.2 SSH клиент
+
+### 3.2.1 Запуск графических приложений от имени администратора (root)
+
+Использовать скрипт [connect_to_host_over_ssh.sh](/connect_to_host_over_ssh.sh)
+
+fixme utopia batch скрипт для win/putty
+https://superuser.com/questions/119792/how-to-use-x11-forwarding-with-putty
+
+### 3.2.2 X11 vs Wayland
+
+https://www.dbts-analytics.com/notesxfwdgb.html
+
+## 3.3 SAMBA
+
+Ссылка для проводника Linux
+
+`smb://<ip адрес>/public/` или `smb://<ip адрес>:445/public/`
+
+Ссылка для проводника Windows
+
+`\\<ip адрес>\public\`
+
+
+### 3.3.1 Особенность доступа к публичным папкам на Android (используются нестандартные порты)
+
+Ссылка для проводника Linux
+
+`smb://<ip адрес>:4445/public/`
+
+Для проводника Windows есть проблемы
+
+https://superuser.com/questions/702948/how-to-mount-a-samba-share-on-non-standard-port
+https://learn.microsoft.com/en-us/answers/questions/908346/how-to-access-smb-share-from-windows-on-a-differen
+https://superuser.com/questions/1094931/ssh-tunnel-on-windows-10-to-linux-samba
+
+## 3.4 VNC клиент
+
+### 3.4.1 VNC клиент Linux
+
+[Описание параметров командной строки tiger VNC клиента](https://tigervnc.org/doc/vncviewer.html).
+
+```bash
+
+xtigervncviewer <ip адрес>:1
+
+```
+
+### 3.4.2 VNC клиент Android
+
+fixme utopia Установка bVNC описана выше
+
+bVNC / RealVNC
+
+### 3.4.3 VNC клиент Android/termux
+
+См. пункт 3.4.1.
+
+### 3.4.4 VNC клиент Windows
+
+fixme utopia Дописать
+
+## 3.5 RDP клиент
+
+### 3.5.1 RDP клиент Linux
+
+[Описание параметров командной строки freerdp клиента](https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface).
+[Хороший мануал](https://github.com/awakecoding/FreeRDP-Manuals/blob/master/User/FreeRDP-User-Manual.markdown)
+
+### 3.5.2 RDP клиент Android
+
+Клиент удалённого доступа (Microsoft) / Remote RDP / aFreeRDP
+
+### 3.5.3 VNC клиент Android/termux
+
+См. пункт 3.5.1.
+
+### 3.5.4 VNC клиент Windows
+
+fixme utopia Дописать. Используем стандартный RDP клиент Windows
+
+
+### 3.6 Аппаратное ускорение OpenGL для SSH и VNC (VirtualGL)
+
+https://virtualgl.org/
+
+https://www.turbovnc.org/
+
+https://wiki.archlinux.org/title/VirtualGL
+
+https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-turbovnc
+
+
+## 3.7 Полезные команды Linux
+
+Понять [какому пакету принадлежит данная команда](https://askubuntu.com/questions/13792/finding-out-what-package-a-command-came-from)
+можно так (пример, для команды ip)
+
+```bash
+
+dpkg -S $(which ip)
+
+```
 
 
 # 2 Реализация
@@ -357,63 +547,11 @@ My external IP address and port: 78.106.192.197:63016
 
 Если "UDP hole punching: True", то NAT удастся обойти.
 
-## 2.2 Стороннее ПО для установки (fixme utopia НЕ АКТУАЛЬНО)
-
-Понять [какому пакету принадлежит данная команда](https://askubuntu.com/questions/13792/finding-out-what-package-a-command-came-from)
-можно так (пример, для команды ip)
-
-```bash
-
-dpkg -S $(which ip)
-
-```
 
 ### 2.2.1 Ubuntu 18.04 LTS (bionic) (fixme utopia НЕ АКТУАЛЬНО)
 
-```bash
-
-export PYTHON_VERSION=3.10
-
-sudo apt-get install python${PYTHON_VERSION} git openvpn wget tar python3-venv python3-pip qemu qemu-system tigervnc-viewer procps iptables iproute2 dnsmasq-base coreutils -y
-
-sudo python${PYTHON_VERSION} -m pip install pip --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'pystun3==1.0.0' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'python-iptables==1.0.0' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'psutil==5.9.1' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'netaddr==0.8.0' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'randmac==0.1' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'transmission-rpc==4.2.0' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'semantic_version==2.10.0' --force-reinstall --ignore-installed
-
-sudo pip${PYTHON_VERSION} install 'os-release==1.0.1' --force-reinstall --ignore-installed
-
-```
-
-dnsmasq-base - dns/dhcp сервер использумый для раздачи ip адресов внутри сетевого моста к которому привязаны виртуальные машины
-
-xvnc4viewer ---> xtigervncviewer
-
-fixme utopia Что нужно установить для KVM?
-https://ubuntu.com/blog/kvm-hyphervisor
-
-procps - для утилиты sysctl которая используется для записи параметров ядра
-
-coreutils - содержит утилиту uname
-
 [Про установку pip для версии Python отличной от умолчательной](https://stackoverflow.com/a/63207387)
 
-[STUN клиент для Python (pystun3)](https://pypi.org/project/pystun3/)
-
-[iptables (linux firewall) обёртка для Python (python-iptables)](https://pypi.org/project/python-iptables/)
-
-[Утилиты работы с процессами (psutil)](https://pypi.org/project/psutil/)
 
 https://community.openvpn.net/openvpn/wiki/UnprivilegedUser#RunOpenVPNwithinunprivilegedpodmancontainer
 https://openvpn.net/community-resources/reference-manual-for-openvpn-2-4/
@@ -440,23 +578,6 @@ https://bbs.archlinux.org/viewtopic.php?id=207907
 
 Полученную конфигурацию записываем в [telegram-bot.config.json](telegram-bot.config.json).
 
-## 2.4 Настройка OpenVpn сервера (fixme utopia НЕ АКТУАЛЬНО)
-
-## 2.5 Настройка OpenVpn клиента (fixme utopia НЕ АКТУАЛЬНО)
-
-OpenVpn клиент с [официального сайта](https://openvpn.net/vpn-client/)
-
-### 2.5.1 Android клиент (fixme utopia НЕ АКТУАЛЬНО)
-
-OpenVpn клиент установить [отсюда](https://play.google.com/store/apps/details?id=net.openvpn.openvpn)
-
-### 2.5.2 iOS клиент
-
-### 2.5.3 Windows клиент (fixme utopia НЕ АКТУАЛЬНО)
-
-### 2.5.4 Linux клиент (fixme utopia НЕ АКТУАЛЬНО)
-
-### 2.5.5 MacOS клиент (fixme utopia НЕ АКТУАЛЬНО)
 
 ## 2.6 Настройка виртуальных машин Qemu
 
@@ -497,7 +618,7 @@ qemu-system-$(uname -m) -device help
 
 ```
 
-### 2.6.1 Настройка сетевого адаптера виртуальной машины
+### 2.5.2 Настройка сетевого адаптера виртуальной машины
 
 [Статья](http://sassan.me.uk/blog/qemu-and-openvpn-secure-and-convenient-remote-access-to-virtual-servers/) описывающая
 подключение виртуальных машин Qemu к OpnVpn (Routing or Bridging?).
@@ -689,146 +810,13 @@ https://ctf.re//windows/kernel/pcie/tutorial/2023/02/14/pcie-part-1/
 https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
 
 
-### 2.6.3 Настройка VNC сервера гостевой ОС
 
-Основополагающая [статья](https://habr.com/ru/company/ruvds/blog/510860/).
-
-https://hackware.ru/?p=12588
-
-https://losst.ru/ustanovka-vnc-server-v-ubuntu-18-04
-
-https://losst.ru/avtozagruzka-linux
-
-#### 2.6.3.1 VNC клиент Linux (гостевая ОС Linux)
-
-#### 2.6.3.2 VNC клиент Linux (гостевая ОС Windows)
-
-#### 2.6.3.3 VNC клиент Windows (гостевая ОС Linux)
-
-#### 2.6.3.4 VNC клиент Windows (гостевая ОС Windows)
-
-### 2.6.4 Настройка RDP сервера гостевой ОС
-
-Основополагающая [статья](https://habr.com/ru/company/ruvds/blog/512878/).
-
-#### Windows Home
-
-У "домашних" версий Windows необходимо активировать RDP сервер при
-помощи [RDP Wrapper](https://github.com/stascorp/rdpwrap).
-
-#### Ubuntu 20.04
-
-https://setiwik.ru/kak-ustanovit-xrdp-na-ubuntu-20-04/
-
-#### Linux Mint 20.2
-
-https://www.avoiderrors.com/easily-remote-connect-to-linux-mint-20-2-from-any-os/
-
-### 2.6.4 Аппаратное ускорение OpenGL по SSH и VNC для гостевых ОС Linux
-
-https://virtualgl.org/
-
-https://www.turbovnc.org/
-
-https://wiki.archlinux.org/title/VirtualGL
-
-https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-turbovnc
-
-
-### 2.6.5 SSH
-
-Заполучить возможность запускать графические приложения от имени суперпользователя
-
-https://www.simplified.guide/ssh/x11-forwarding-as-root
-
-
-
-
-# 3 Инсталяция системы
-
-1. настроить домашний роутер fixme utopia
-2. сконфигурировать пути в open-vpn.config.json, **если необходимо**
-3. сгенерировать сертификаты для OpenVpn сервера
-
-```bash
-
-sudo ./setup-easy-rsa.sh
-
-```
-
-4. создать сертификаты для нового пользователя
-
-```bash
-
-sudo ./build-client.sh имя_пользователя
-
-```
-
-5. запустить OpenVpn сервер
-
-Права суперпользователя необходимы для запуска OpenVpn сервера.
-
-```bash
-
-sudo python3.8 main.py run
-
-```
-
-6. сгенерировать ovpn конфигурацию для пользователя, которому сгенерировали сертификаты на шаге (3)
-
-```bash
-
-python3.8 main.py user_ovpn имя_пользователя
-
-```
-
-7. запустить OpenVpn клиента на удалённом ПК с конфигурацией полученной на шаге (5)
-
-```bash
-
-openvpn --config client-имя_пользователя.ovpn
-
-```
-
-8. запустить виртуальную машину fixme utopia расписать работу с реестром виртуалок
-
-9. подлючиться к виртуальной машине fixme utopia
-
- - пример ssh (расписать настройку на гостевой машине)
- - пример rdp (расписать настройку на гостевой машине)
- - пример vnc (расписать настройку на гостевой машине)
-
-10. Проброс виртуальной машины в локальную сеть
-
-http://rhd.ru/docs/manuals/enterprise/RHEL-4-Manual/security-guide/s1-firewall-ipt-fwd.html
-
-## 3.1 Преднастроенные виртуальные машины
+# 5 Преднастроенные виртуальные машины
 
 fixme utopia Выложить на google диск преднастроенные виртуальные машины (просто болванки)
 
 
-# 4 Конфигурация
-
-## 4.1 Конфигурация проекта
-
-fixme utopia Описать содержимое open-vpn.config.json
-
-## 4.2 Список используемых STUN серверов
-
-
-## 4.3 Конфигурация OpenVpn сервера
-
-
-## 4.4 Конфигурация OpenVpn клиента
-
-
-# 5 Возможные конфигурации клиентского оборудования
-
-
-# 6 Хотелки
-
-1. Следить за температурой видеокарты для виртуальной машины
-2. Описать как запустить игры на виртуальной машине с проброшенной видеокартой (Windows)
+# 6 Возможные конфигурации клиентского оборудования
 
 
 # 7 Установка операционных систем

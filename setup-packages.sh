@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Понять что мы исполняемся внутри вирт машины
+# https://unix.stackexchange.com/questions/89714/easy-way-to-determine-the-virtualization-technology-of-a-linux-machine
+
 # https://unix.stackexchange.com/a/306115
 
 # set -x # Раскомментировать для отладки
@@ -99,10 +102,10 @@ if is_termux; then
 fi
 
 RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
-RDP_SERVER_PACKAGE="xrdp"
 if is_termux; then
     RDP_CLIENT_PACKAGE="freerdp"
 fi
+RDP_SERVER_PACKAGE="xrdp"
 
 SSH_SERVER_PACKAGE="openssh-server"
 if is_termux; then
@@ -164,7 +167,9 @@ if is_termux; then
     LIBREOFFICE_PACKAGE=""
 fi
 
-FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE}"
+TRANSMISSION_PACKAGE="transmission transmission-gtk"
+
+FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE} ${TRANSMISSION_PACKAGE}"
 ### Full packages end
 
 
