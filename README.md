@@ -43,12 +43,14 @@ https://pkgs.org/
 | Telnet клиент              | [Клиент доступа к qemu monitor](https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor)<br>[Доступные команды](https://www.qemu.org/docs/master/system/monitor.html)                                                                                    | +                    | [putty](https://www.putty.org/)                                                                                                                | [putty](https://packages.termux.dev/apt/termux-x11/pool/main/p/putty/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/x11-packages/putty)                                                                                                                                                                                                                | [putty](https://www.putty.org/)                                                                                                                                                                                                                                                              | [putty](https://packages.msys2.org/base/mingw-w64-putty)                                                                                             | [putty](https://www.cygwin.com/packages/summary/putty.html)                                             | ?                                                                                   |
 | Универсальный загрузчик ПО |                                                                                                                                                                                                                                                                                                     | +<br>python          |                                                                                                                                                |                                                                                                                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                                                                                                              |                                                                                                                                                      |                                                                                                         |                                                                                     |
 | RDP клиент                 | Удалённый доступ к ОС Windows                                                                                                                                                                                                                                                                       | -                    | [FreeRDP](https://www.freerdp.com/)                                                                                                            | 1) (termux) [xfreerdp](https://packages.termux.dev/apt/termux-x11/pool/main/f/freerdp/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/x11-packages/freerdp)<br>2) (Android) [Remote Desktop](https://play.google.com/store/apps/details?id=com.microsoft.rdc.androidx)<br>3) (Android) [aFreeRDP](https://f-droid.org/ru/packages/com.freerdp.afreerdp/) | [mstsc.exe](https://learn.microsoft.com/ru-ru/windows-server/administration/windows-commands/mstsc)                                                                                                                                                                                          | [freerdp](https://packages.msys2.org/base/mingw-w64-freerdp)                                                                                         | [freerdp](https://www.cygwin.com/packages/summary/freerdp.html)                                         |                                                                                     |
-| RDP сервер                 | Предоставление удалённого управления для ОС Windows/Linux                                                                                                                                                                                                                                           | -                    | [xrdp](https://www.xrdp.org/)                                                                                                                                       | [xrdp](https://www.xrdp.org/)                                                                                                                                                                                                                                                                                                                                                                                          | [RDPWrapper](https://github.com/stascorp/rdpwrap)                                                                                                                                                                                                                                            | -                                                                                                                                                    | -                                                                                                       | -                                                                                   |
+| RDP сервер                 | Предоставление удалённого управления для ОС Windows/Linux                                                                                                                                                                                                                                           | -                    | [xrdp](https://www.xrdp.org/)<br>fixme utopia Пока не поддержано                                                                               | [xrdp](https://www.xrdp.org/)<br>fixme utopia Пока не поддержано                                                                                                                                                                                                                                                                                                                                                                                         | [RDPWrapper](https://github.com/stascorp/rdpwrap)                                                                                                                                                                                                                                            | -                                                                                                                                                    | -                                                                                                       | -                                                                                   |
 | VNC клиент                 | Удалённый доступ к ОС Linux                                                                                                                                                                                                                                                                         | +                    | [tigervnc-viewer](https://tigervnc.org/)                                                                                                       | 1) (termux) [tigervnc-viewer](https://packages.termux.dev/apt/termux-x11/pool/main/t/tigervnc-viewer/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/x11-packages/tigervnc-viewer)<br>2) (Android) [bVNC](https://play.google.com/store/apps/details?id=com.iiordanov.freebVNC)                                                                         | [tigervnc-viewer](https://tigervnc.org/)                                                                                                                                                                                                                                                     | [Можно собрать по инструкции](https://github.com/TigerVNC/tigervnc/blob/master/BUILDING.txt)                                                         | [Можно собрать по инструкции](https://github.com/TigerVNC/tigervnc/blob/master/BUILDING.txt)            | ?                                                                                   |
 | VNC сервер                 | Предоставление удалённого управления для ОС Linux                                                                                                                                                                                                                                                   | +                    | [tigervnc-standalone-server](https://tigervnc.org/)                                                                                            | [tigervnc](https://packages.termux.dev/apt/termux-x11/pool/main/t/tigervnc/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/x11-packages/tigervnc)                                                                                                                                                                                                       | -                                                                                                                                                                                                                                                                                            | см. VNC клиент                                                                                                                                       | VNC клиент                                                                                              | ?                                                                                   |
 | SSH клиент                 | Удалённый доступ к ОС Linux                                                                                                                                                                                                                                                                         | +                    | [openssh-client](https://www.openssh.com/)                                                                                                     | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                             | [putty](https://www.putty.org/)                                                                                                                                                                                                                                                              | [openssh](https://packages.msys2.org/base/openssh)                                                                                                   | [openssh](https://www.cygwin.com/packages/summary/openssh.html)                                         | ?                                                                                   |
 | SSH сервер                 | Предоставление удалённого управления для ОС Linux                                                                                                                                                                                                                                                   | +                    | [openssh-server](https://www.openssh.com/)                                                                                                     | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                             | -                                                                                                                                                                                                                                                                                            | см. SSH клиент                                                                                                                                       | см. SSH клиент                                                                                          | ?                                                                                   |
 
+fixme utopia Установка openvpn3 (нужно для работы)
+fixme utopia Описать min / dev / full в таблице 1.1
 
 Таблица 1.2 - Поддерживаемые дистрибутивы linux
 
@@ -63,6 +65,171 @@ https://pkgs.org/
 | RHEL                       | + | требуются доработки по менеджеру пакетов |
 | CentOS                     | + | требуются доработки по менеджеру пакетов |
 | termux 0.118.0             | + |                                          |
+
+
+# 2 Разворот проекта
+
+Проект разворачивается в 2 этапа:
+ - скачивание проекта с github на ПК (см. пункты 2.2 - 2.4)
+ - установка и автоматическая настройка пакетов при помощи скрипта [setup_packages.sh](/setup_packages.sh)
+
+Если проект уже выкачан, форсировано подтянутся последние изменения для ветки `main` и ещё раз будет вызван [setup_packages.sh](/setup_packages.sh)
+
+## 2.1 Конфигурационные параметры setup_packages.sh
+
+| Параметр                                  | Описание                                            | Возможные варианты значений | Примечание                                                                                                                       |
+|-------------------------------------------|-----------------------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| GLOBAL_CONFIG_SETUP_PACKAGES_MODE         | Режим установки пакетов                             | `min`<br>`dev`<br>`full`    | `full` по умолчанию<br>см. таблицу 1.1                                                                                           |
+| GLOBAL_CONFIG_ROOT_PREFIX                 | Корень файловой системы                             |                             | `/` по умолчанию<br>для termux используется значение переменной окружения `PREFIX`                                               |
+| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup_packages.sh                                             |
+| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/share` по умолчанию                                                                                |
+| GLOBAL_CONFIG_SMBD_TCP_PORTS              | TCP порты которые "слушает" SAMBA сервер            |                             | `139 445` по умолчанию<br>для termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
+
+
+## 2.2 Разворот проекта в Linux
+
+[Шпаргалка](https://distrowatch.com/dwres.php?resource=package-management) по менеджерам пакетов.
+
+### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)
+
+```bash
+
+PROJECT_BASE_DIR_PATH=$(echo ~)
+PROJECT_NAME="HomeVpn"
+PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_BRANCH="main"
+PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
+RUN_WITH_ADMIN_RIGHTS="sudo"
+RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
+${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -y && apt install git &&
+if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+    pushd "${PROJECT_DIR_PATH}" &&
+    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    popd
+else
+    mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
+    pushd "${PROJECT_BASE_DIR_PATH}" &&
+    git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    popd
+fi
+
+```
+
+### 2.2.2 Arch Linux (дистрибутивы Linux с пакетным менеджером packman)
+
+```bash
+
+PROJECT_BASE_DIR_PATH=$(echo ~)
+PROJECT_NAME="HomeVpn"
+PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_BRANCH="main"
+PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
+RUN_WITH_ADMIN_RIGHTS="sudo"
+RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
+${RUN_WITH_ADMIN_RIGHTS} pacman -Syu && pacman -S git &&
+if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+    pushd "${PROJECT_DIR_PATH}" &&
+    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    popd
+else
+    mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
+    pushd "${PROJECT_BASE_DIR_PATH}" &&
+    git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    popd
+fi
+
+```
+
+### 2.2.3 RHEL, Fedora, CentOS (дистрибутивы Linux с пакетным менеджером yum)
+
+fixme utopia Дописать
+
+### 2.2.4 RHEL, Fedora, CentOS (дистрибутивы Linux с пакетным менеджером dnf)
+
+fixme utopia Дописать
+
+## 2.2.5 Особенности разворота на ARM архитектуре
+
+fixme utopia Дописать
+
+
+
+## 2.3 Android
+
+### 2.3.1 Установка приложений
+
+Необходимо скачать и установить вручную приложения
+ - **[F-Droid]** [termux](https://f-droid.org/ru/packages/com.termux/) [ссылка для скачивания apk](https://f-droid.org/repo/com.termux_118.apk)
+ - **[F-Droid]** [termux-boot](https://f-droid.org/ru/packages/com.termux.boot/) [ссылка для скачивания apk](https://f-droid.org/repo/com.termux.boot_7.apk)
+ - **[F-Droid]** [termux-api](https://f-droid.org/ru/packages/com.termux.api/) [ссылка для скачивания apk](https://f-droid.org/repo/com.termux.api_51.apk)
+ - **[F-Droid]** [OpenVPN for Android](https://f-droid.org/packages/de.blinkt.openvpn/) [ссылка для скачивания apk](https://f-droid.org/repo/de.blinkt.openvpn_206.apk)
+ - **[Google Play]** [bVNC viewer](https://play.google.com/store/apps/details?id=com.iiordanov.freebVNC)
+
+Можно установить приложения из [маркета F-Droid](https://f-droid.org/ru/).
+
+
+### 2.3.2 Настройка разрешений
+
+fixme utopia Оформить в виде таблицы со скринами
+
+### 2.3.3 Разворот в termux
+
+```bash
+
+PROJECT_BASE_DIR_PATH=$(echo ~)
+PROJECT_NAME="HomeVpn"
+PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_BRANCH="main"
+PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
+RUN_WITH_ADMIN_RIGHTS=
+RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV=
+${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -y && apt install git &&
+if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+    pushd "${PROJECT_DIR_PATH}" &&
+    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    popd
+else
+    mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
+    pushd "${PROJECT_BASE_DIR_PATH}" &&
+    git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    popd
+fi
+
+```
+
+### 2.3.4 Доступ к рабочему столу XFCE4
+
+Доступ к рабочему столу можно осуществить при помощи VNC клиента. Рекомендуется использовать bVNC клиент.
+
+fixme utopia Дать скрин моих настроек
+
+
+#### 2.3.4.1 Возможность работы с аппаратным обеспечением Android из termux
+
+Автоматически настраивается возможность работы браузера firefox с микрофоном и видеокамерой.
+
+
+#### 2.3.4.2 Особенности работы физической клавиатуры в Android
+
+fixme utopia Дописать с примерами записи экрана
+
+
+### 2.3.5 Возможность полноценного разворота проекта на Android с root доступом
+
+fixme utopia Дописать
+
+
+## 2.4 Windows (MSYS2)
+
+fixme utopia Скачать батник для разворота MSYS2 со страницы проекта на github?
+
+
 
 # 2 Реализация
 
@@ -100,7 +267,7 @@ My external IP address and port: 78.106.192.197:63016
 
 Если "UDP hole punching: True", то NAT удастся обойти.
 
-## 2.2 Стороннее ПО для установки
+## 2.2 Стороннее ПО для установки (fixme utopia НЕ АКТУАЛЬНО)
 
 Понять [какому пакету принадлежит данная команда](https://askubuntu.com/questions/13792/finding-out-what-package-a-command-came-from)
 можно так (пример, для команды ip)
@@ -111,7 +278,7 @@ dpkg -S $(which ip)
 
 ```
 
-### 2.2.1 Ubuntu 18.04 LTS (bionic)
+### 2.2.1 Ubuntu 18.04 LTS (bionic) (fixme utopia НЕ АКТУАЛЬНО)
 
 ```bash
 
@@ -183,23 +350,23 @@ https://bbs.archlinux.org/viewtopic.php?id=207907
 
 Полученную конфигурацию записываем в [telegram-bot.config.json](telegram-bot.config.json).
 
-## 2.4 Настройка OpenVpn сервера
+## 2.4 Настройка OpenVpn сервера (fixme utopia НЕ АКТУАЛЬНО)
 
-## 2.5 Настройка OpenVpn клиента
+## 2.5 Настройка OpenVpn клиента (fixme utopia НЕ АКТУАЛЬНО)
 
 OpenVpn клиент с [официального сайта](https://openvpn.net/vpn-client/)
 
-### 2.5.1 Android клиент
+### 2.5.1 Android клиент (fixme utopia НЕ АКТУАЛЬНО)
 
 OpenVpn клиент установить [отсюда](https://play.google.com/store/apps/details?id=net.openvpn.openvpn)
 
 ### 2.5.2 iOS клиент
 
-### 2.5.3 Windows клиент
+### 2.5.3 Windows клиент (fixme utopia НЕ АКТУАЛЬНО)
 
-### 2.5.4 Linux клиент
+### 2.5.4 Linux клиент (fixme utopia НЕ АКТУАЛЬНО)
 
-### 2.5.5 MacOS клиент
+### 2.5.5 MacOS клиент (fixme utopia НЕ АКТУАЛЬНО)
 
 ## 2.6 Настройка виртуальных машин Qemu
 

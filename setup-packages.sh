@@ -2,10 +2,7 @@
 
 # https://unix.stackexchange.com/a/306115
 
-set -x # Раскомментировать для отладки
-
-PYTHON_VERSION_MIN="3.8"
-PYTHON_VERSION="3.10"
+# set -x # Раскомментировать для отладки
 
 
 # su: termux-tools / util-linux
@@ -43,7 +40,6 @@ fi
 
 GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
 
-GLOBAL_CONFIG_SAMBA_USERNAME="samba_user_for_home_vpn"
 GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/share"
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
@@ -403,7 +399,7 @@ function package_manager_is_apt() {
 
 ## @fn package_manager_is_pacman()
 ## @brief Проверить существует ли пакетный менеджер pacman
-## @details Arch Linux, MinGW
+## @details Arch Linux, MSYS2
 ## @retval 0 пакетный менеджер pacman существует; 1 - не существует
 function package_manager_is_pacman() {
     is_executable_available "pacman" || return $?
@@ -965,14 +961,16 @@ function smbd_get_config_file_path() {
 function samba_make_user_and_assign_rights() {
     if ! is_termux; then
         # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
+
+        local SAMBA_USER="${1}"
         local SAMBASHARE_GROUP="sambashare"
 
-        if ! user_is_available "${GLOBAL_CONFIG_SAMBA_USERNAME}"; then
-            user_add "${GLOBAL_CONFIG_SAMBA_USERNAME}" || return $?
+        if ! user_is_available "${SAMBA_USER}"; then
+            user_add "${SAMBA_USER}" || return $?
         fi
 
-        if ! user_is_added_to_group "${GLOBAL_CONFIG_SAMBA_USERNAME}" "${SAMBASHARE_GROUP}"; then
-            user_add_to_group "${GLOBAL_CONFIG_SAMBA_USERNAME}" "${SAMBASHARE_GROUP}" || return $?
+        if ! user_is_added_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}"; then
+            user_add_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}" || return $?
         fi
         return 0
     fi
@@ -991,6 +989,8 @@ function smbd_make_config() {
     local SMBD_CONFIG_FILE_PATH
     SMBD_CONFIG_FILE_PATH=$(smbd_get_config_file_path) || return $?
 
+
+    # https://learn.microsoft.com/en-us/answers/questions/1280211/symbolic-links-created-by-linux-are-not-displayed
     # fixme utopia Переписать?
     # https://www.samba.org/samba/docs/using_samba/ch08.html#samba2-CHP-8-TABLE-2
     create_file "[global]
@@ -1001,6 +1001,9 @@ wins support = no
 dns proxy = no
 smb ports = ${GLOBAL_CONFIG_SMBD_TCP_PORTS}
 inherit permissions = yes
+follow symlinks = yes
+wide links = yes
+allow insecure wide links = yes
 
 [public]
 path = \"${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}\"
@@ -1277,35 +1280,48 @@ function vnc_server_setup() {
     return 0
 }
 
+function main_install_min_packages() {
+    local PACKAGE_LIST="${1}"
+
+    package_manager_update_and_upgrade || return $?
+
+    package_manager_install_packages "${PACKAGE_LIST}" || return $?
+    pip_update || return $?
+    pip_install_packages "${PIP_PACKAGES}" || return $?
+    return 0
+}
+
+function main_install_dev_packages() {
+    local PACKAGE_LIST="${1}"
+
+    main_install_min_packages "${PACKAGE_LIST}" || return $?
+
+    rdp_client_install || return $?
+    sshd_setup || return $?
+    vnc_server_setup || return $?
+    smbd_setup || return $?
+    return 0
+}
+
+function main_install_full_packages() {
+    local PACKAGE_LIST="${1}"
+
+    main_install_dev_packages "${PACKAGE_LIST}" || return $?
+
+    pycharm_install || return $?
+    wine_install || return $?
+    return 0
+}
+
 function main() {
     package_manager_update_and_upgrade || return $?
 
     if [[ "${GLOBAL_CONFIG_SETUP_PACKAGES_MODE,,}" == "min" ]]; then
-        package_manager_install_packages "${MINIMAL_PACKAGES}" || return $?
-        pip_update || return $?
-        pip_install_packages "${PIP_PACKAGES}" || return $?
-
+        main_install_min_packages "${MINIMAL_PACKAGES}" || return $?
     elif [[ "${GLOBAL_CONFIG_SETUP_PACKAGES_MODE,,}" == "dev" ]]; then
-        package_manager_install_packages "${DEV_PACKAGES}" || return $?
-        pip_update || return $?
-        pip_install_packages "${PIP_PACKAGES}" || return $?
-
-        rdp_client_install || return $?
-        sshd_setup || return $?
-        vnc_server_setup || return $?
-        smbd_setup || return $?
+        main_install_dev_packages "${DEV_PACKAGES}" || return $?
     else
-        package_manager_install_packages "${FULL_PACKAGES}" || return $?
-        pip_update || return $?
-        pip_install_packages "${PIP_PACKAGES}" || return $?
-
-        rdp_client_install || return $?
-        sshd_setup || return $?
-        vnc_server_setup || return $?
-        smbd_setup || return $?
-        pycharm_install || return $?
-
-        wine_install || return $?
+        main_install_full_packages "${FULL_PACKAGES}" || return $?
     fi
     return 0
 }
@@ -1321,10 +1337,17 @@ function main() {
 # https://stackoverflow.com/questions/169511/how-do-i-iterate-over-a-range-of-numbers-defined-by-variables-in-bash
 
 #rdp
+# 1) service disable
+# 2) config /etc/xrdp/startwm.sh as xstartup for vnc
+# 3) add xrdp user to ssl-cert group
+# 4) service enable
+# 5) freerfp for win
+# 6) статья по тюнингу xrdp
 # https://c-nergy.be/blog/?p=13708
 # https://www.cyberithub.com/how-to-install-xrdp-on-ubuntu-22-04-lts-jammy-jellyfish/
 # https://forum.altlinux.org/index.php?topic=43501.15
 # https://bytexd.com/xrdp-ubuntu/
 # https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-main
+echo "setup packages call!!!"
+#main
