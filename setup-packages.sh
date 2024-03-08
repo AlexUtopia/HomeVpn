@@ -3,6 +3,9 @@
 # Понять что мы исполняемся внутри вирт машины
 # https://unix.stackexchange.com/questions/89714/easy-way-to-determine-the-virtualization-technology-of-a-linux-machine
 
+# fixme utopia VNC сервер для Windows
+# fixme utopia RDP сервер для Linux
+
 # https://unix.stackexchange.com/a/306115
 
 # set -x # Раскомментировать для отладки
