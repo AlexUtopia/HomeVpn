@@ -54,7 +54,7 @@ fixme utopia Описать min / dev / full в таблице 1.1
 
 Таблица 1.2 - Поддерживаемые дистрибутивы linux
 
-| Дистрибутив                | [setup_packages.sh](./setup_packages.sh) | Примечание                               |
+| Дистрибутив                | [setup-packages.sh](./setup-packages.sh) | Примечание                               |
 |----------------------------|------------------------------------------|------------------------------------------|
 | Ubuntu                     | + |                                          |
 | Linux Mint 21.2 (Cinnamon) | + |                                          |
@@ -71,17 +71,17 @@ fixme utopia Описать min / dev / full в таблице 1.1
 
 Проект разворачивается в 2 этапа:
  - скачивание проекта с github на ПК (см. пункты 2.2 - 2.4)
- - установка и автоматическая настройка пакетов при помощи скрипта [setup_packages.sh](/setup_packages.sh)
+ - установка и автоматическая настройка пакетов при помощи скрипта [setup-packages.sh](/setup-packages.sh)
 
-Если проект уже выкачан, форсировано подтянутся последние изменения для ветки `main` и ещё раз будет вызван [setup_packages.sh](/setup_packages.sh)
+Если проект уже выкачан, форсировано подтянутся последние изменения для ветки `main` и ещё раз будет вызван [setup-packages.sh](/setup-packages.sh)
 
-## 2.1 Конфигурационные параметры setup_packages.sh
+## 2.1 Конфигурационные параметры setup-packages.sh
 
 | Параметр                                  | Описание                                            | Возможные варианты значений | Примечание                                                                                                                       |
 |-------------------------------------------|-----------------------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
 | GLOBAL_CONFIG_SETUP_PACKAGES_MODE         | Режим установки пакетов                             | `min`<br>`dev`<br>`full`    | `full` по умолчанию<br>см. таблицу 1.1                                                                                           |
 | GLOBAL_CONFIG_ROOT_PREFIX                 | Корень файловой системы                             |                             | `/` по умолчанию<br>для termux используется значение переменной окружения `PREFIX`                                               |
-| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup_packages.sh                                             |
+| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh                                             |
 | GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/share` по умолчанию                                                                                |
 | GLOBAL_CONFIG_SMBD_TCP_PORTS              | TCP порты которые "слушает" SAMBA сервер            |                             | `139 445` по умолчанию<br>для termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
 
@@ -105,13 +105,13 @@ ${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -y && apt install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 fi
 
@@ -132,13 +132,13 @@ ${RUN_WITH_ADMIN_RIGHTS} pacman -Syu && pacman -S git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 fi
 
@@ -152,7 +152,7 @@ fixme utopia Дописать
 
 fixme utopia Дописать
 
-## 2.2.5 Особенности разворота на ARM архитектуре
+### 2.2.5 Особенности разворота на ARM архитектуре
 
 fixme utopia Дописать
 
@@ -163,10 +163,10 @@ fixme utopia Дописать
 ### 2.3.1 Установка приложений
 
 Необходимо скачать и установить вручную приложения
- - **[F-Droid]** [termux](https://f-droid.org/ru/packages/com.termux/) [ссылка для скачивания apk](https://f-droid.org/repo/com.termux_118.apk)
- - **[F-Droid]** [termux-boot](https://f-droid.org/ru/packages/com.termux.boot/) [ссылка для скачивания apk](https://f-droid.org/repo/com.termux.boot_7.apk)
- - **[F-Droid]** [termux-api](https://f-droid.org/ru/packages/com.termux.api/) [ссылка для скачивания apk](https://f-droid.org/repo/com.termux.api_51.apk)
- - **[F-Droid]** [OpenVPN for Android](https://f-droid.org/packages/de.blinkt.openvpn/) [ссылка для скачивания apk](https://f-droid.org/repo/de.blinkt.openvpn_206.apk)
+ - **[F-Droid]** [termux](https://f-droid.org/ru/packages/com.termux/) ([ссылка для скачивания apk](https://f-droid.org/repo/com.termux_118.apk))
+ - **[F-Droid]** [termux-boot](https://f-droid.org/ru/packages/com.termux.boot/) ([ссылка для скачивания apk](https://f-droid.org/repo/com.termux.boot_7.apk))
+ - **[F-Droid]** [termux-api](https://f-droid.org/ru/packages/com.termux.api/) ([ссылка для скачивания apk](https://f-droid.org/repo/com.termux.api_51.apk))
+ - **[F-Droid]** [OpenVPN for Android](https://f-droid.org/packages/de.blinkt.openvpn/) ([ссылка для скачивания apk](https://f-droid.org/repo/de.blinkt.openvpn_206.apk))
  - **[Google Play]** [bVNC viewer](https://play.google.com/store/apps/details?id=com.iiordanov.freebVNC)
 
 Можно установить приложения из [маркета F-Droid](https://f-droid.org/ru/).
@@ -191,13 +191,13 @@ ${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -y && apt install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup_packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 fi
 
