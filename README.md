@@ -92,6 +92,9 @@ fixme utopia Описать min / dev / full в таблице 1.1
 
 ### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)
 
+Пакетный менеджер [apt](https://wiki.debian.org/Apt).
+[Описание команд](https://wiki.debian.org/AptCLI?highlight=%28%5CbCategoryPackageManagement%5Cb%29).
+
 ```bash
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
@@ -119,6 +122,9 @@ fi
 
 ### 2.2.2 Arch Linux (дистрибутивы Linux с пакетным менеджером packman)
 
+Пакетный менеджер [packman](https://wiki.archlinux.org/title/pacman).
+[Описание команд](https://archlinux.org/pacman/pacman.8.html).
+
 ```bash
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
@@ -128,7 +134,7 @@ PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
 RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
-${RUN_WITH_ADMIN_RIGHTS} pacman -Syu && pacman -S git &&
+${RUN_WITH_ADMIN_RIGHTS} pacman -Syu --noconfirm && pacman -S git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
@@ -146,13 +152,97 @@ fi
 
 ### 2.2.3 RHEL, Fedora, CentOS (дистрибутивы Linux с пакетным менеджером yum)
 
-fixme utopia Дописать
+
+Пакетный менеджер [yum](https://www.redhat.com/sysadmin/how-manage-packages).
+[Описание команд](https://access.redhat.com/sites/default/files/attachments/rh_yum_cheatsheet_1214_jcs_print-1.pdf).
+
+```bash
+
+PROJECT_BASE_DIR_PATH=$(echo ~)
+PROJECT_NAME="HomeVpn"
+PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_BRANCH="main"
+PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
+RUN_WITH_ADMIN_RIGHTS="sudo"
+RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
+${RUN_WITH_ADMIN_RIGHTS} yum check-update && yum -y update && yum install git &&
+if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+    pushd "${PROJECT_DIR_PATH}" &&
+    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    popd
+else
+    mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
+    pushd "${PROJECT_BASE_DIR_PATH}" &&
+    git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    popd
+fi
+
+```
 
 ### 2.2.4 RHEL, Fedora, CentOS (дистрибутивы Linux с пакетным менеджером dnf)
 
-fixme utopia Дописать
+Пакетный менеджер [dnf](https://docs.fedoraproject.org/en-US/fedora/latest/system-administrators-guide/package-management/DNF/).
+[Описание команд](https://dnf.readthedocs.io/en/latest/command_ref.html).
 
-### 2.2.5 Особенности разворота на ARM архитектуре
+```bash
+
+PROJECT_BASE_DIR_PATH=$(echo ~)
+PROJECT_NAME="HomeVpn"
+PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_BRANCH="main"
+PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
+RUN_WITH_ADMIN_RIGHTS="sudo"
+RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
+${RUN_WITH_ADMIN_RIGHTS} dnf check-update && dnf -y upgrade && dnf install git &&
+if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+    pushd "${PROJECT_DIR_PATH}" &&
+    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    popd
+else
+    mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
+    pushd "${PROJECT_BASE_DIR_PATH}" &&
+    git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    popd
+fi
+
+```
+
+### 2.2.5 openSUSE (дистрибутивы Linux с пакетным менеджером zypper)
+
+Пакетный менеджер [zypper](https://documentation.suse.com/smart/systems-management/html/concept-zypper/index.html).
+[Описание команд](https://en.opensuse.org/SDB:Zypper_manual).
+
+```bash
+
+PROJECT_BASE_DIR_PATH=$(echo ~)
+PROJECT_NAME="HomeVpn"
+PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_BRANCH="main"
+PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
+RUN_WITH_ADMIN_RIGHTS="sudo"
+RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
+${RUN_WITH_ADMIN_RIGHTS} zypper refresh && zypper update -y && zypper install git &&
+if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+    pushd "${PROJECT_DIR_PATH}" &&
+    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    popd
+else
+    mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
+    pushd "${PROJECT_BASE_DIR_PATH}" &&
+    git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    popd
+fi
+
+```
+
+
+### 2.2.6 Особенности разворота на ARM архитектуре
 
 fixme utopia Дописать
 
