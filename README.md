@@ -17,8 +17,6 @@
  - Windows/msys2
 7. Версия python 3.8+
 
-https://pkgs.org/
-
 Таблица 1.1 - Компоненты проекта в разрезе ОС
 
 | Компонент                  | Назначение                                                                                                                                                                                                                                                                                          | Кроссплатформенность | Linux                                                                                                                                          | Android/termux                                                                                                                                                                                                                                                                                                                                                                            | Windows                                                                                                                                                                                                                                                                                      | [MinGW](https://www.mingw-w64.org/)/[MSYS2](https://www.msys2.org/)                                                                                  | [Cygwin](http://cygwin.com/)                                                                            | [WSL (Windows Subsystem for Linux)](https://learn.microsoft.com/ru-ru/windows/wsl/) |
@@ -90,12 +88,14 @@ fixme utopia Описать min / dev / full в таблице 1.1
 
 ## 2.2 Разворот проекта в Linux
 
-[Шпаргалка](https://distrowatch.com/dwres.php?resource=package-management) по менеджерам пакетов.
+[Шпаргалка](https://distrowatch.com/dwres.php?resource=package-management) по менеджерам пакетов.  
+[Пакеты](https://pkgs.org/) для различных Linux дистрибутивов.
 
 ### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)
 
-Пакетный менеджер [apt](https://wiki.debian.org/Apt).
-[Описание команд](https://wiki.debian.org/AptCLI?highlight=%28%5CbCategoryPackageManagement%5Cb%29).
+Пакетный менеджер [apt](https://wiki.debian.org/Apt).  
+[Описание команд](https://wiki.debian.org/AptCLI?highlight=%28%5CbCategoryPackageManagement%5Cb%29).  
+[Использование опции `--force-confnew`](https://serverfault.com/questions/527789/how-to-automate-changed-config-files-during-apt-get-upgrade-in-ubuntu-12).
 
 ```bash
 
@@ -106,7 +106,7 @@ PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
 RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
-${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -y && apt install git &&
+${RUN_WITH_ADMIN_RIGHTS} apt update && apt -o Dpkg::Options::="--force-confnew" -y upgrade && apt update && apt -y install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
@@ -124,8 +124,10 @@ fi
 
 ### 2.2.2 Arch Linux (дистрибутивы Linux с пакетным менеджером packman)
 
-Пакетный менеджер [packman](https://wiki.archlinux.org/title/pacman).
+Пакетный менеджер [packman](https://wiki.archlinux.org/title/pacman).  
 [Описание команд](https://archlinux.org/pacman/pacman.8.html).
+
+fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 ```bash
 
@@ -155,8 +157,10 @@ fi
 ### 2.2.3 RHEL, Fedora, CentOS (дистрибутивы Linux с пакетным менеджером yum)
 
 
-Пакетный менеджер [yum](https://www.redhat.com/sysadmin/how-manage-packages).
+Пакетный менеджер [yum](https://www.redhat.com/sysadmin/how-manage-packages).  
 [Описание команд](https://access.redhat.com/sites/default/files/attachments/rh_yum_cheatsheet_1214_jcs_print-1.pdf).
+
+fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 ```bash
 
@@ -185,8 +189,10 @@ fi
 
 ### 2.2.4 RHEL, Fedora, CentOS (дистрибутивы Linux с пакетным менеджером dnf)
 
-Пакетный менеджер [dnf](https://docs.fedoraproject.org/en-US/fedora/latest/system-administrators-guide/package-management/DNF/).
+Пакетный менеджер [dnf](https://docs.fedoraproject.org/en-US/fedora/latest/system-administrators-guide/package-management/DNF/).  
 [Описание команд](https://dnf.readthedocs.io/en/latest/command_ref.html).
+
+fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 ```bash
 
@@ -215,8 +221,10 @@ fi
 
 ### 2.2.5 openSUSE (дистрибутивы Linux с пакетным менеджером zypper)
 
-Пакетный менеджер [zypper](https://documentation.suse.com/smart/systems-management/html/concept-zypper/index.html).
+Пакетный менеджер [zypper](https://documentation.suse.com/smart/systems-management/html/concept-zypper/index.html).  
 [Описание команд](https://en.opensuse.org/SDB:Zypper_manual).
+
+fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 ```bash
 
@@ -268,7 +276,7 @@ fixme utopia Дописать
 
 fixme utopia Оформить в виде таблицы со скринами
 
-### 2.3.3 Разворот в termux
+### 2.3.3 Разворот в termux (пакетный менеджер apt)
 
 ```bash
 
@@ -279,7 +287,7 @@ PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS=
 RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV=
-${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -y && apt install git &&
+${RUN_WITH_ADMIN_RIGHTS} apt update && apt -o Dpkg::Options::="--force-confnew" -y upgrade && apt update && apt -y install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&

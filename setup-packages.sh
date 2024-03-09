@@ -19,13 +19,6 @@ function is_admin_rights_available() {
     return 0
 }
 
-# https://stackoverflow.com/questions/8818119/how-can-i-run-a-function-from-a-script-in-command-line
-# fixme utopia Не знаю как побороть - тут бесконечная рекурсия
-function run_this_script_function_as_admin() {
-    sudo -E "${SHELL}" -c ". ${BASH_SOURCE[0]}; $@" || return $?
-    return 0
-}
-
 function is_termux() {
     if [[ -n "${TERMUX_VERSION}" ]]; then
         return 0
@@ -460,12 +453,18 @@ function apt_update_and_upgrade() {
     # https://wiki.ubuntu.com/MultiarchCross
     dpkg --add-architecture i386 || return $? # Для установки wine требуется добавить i386 архитектуру
     apt update || return $?
-    apt upgrade -y || return $?
+    apt -o Dpkg::Options::="--force-confnew" -y upgrade  || return $?
+    apt update || return $?
+
+    if is_termux; then
+        apt -y install x11-repo root-repo || return $?
+    fi
+
     return 0
 }
 
 function apt_install_packages() {
-    apt install ${1} -y || return $?
+    apt -y install ${1} || return $?
     return 0
 }
 
@@ -1311,10 +1310,10 @@ function main_install_dev_packages() {
 
     main_install_min_packages "${PACKAGE_LIST}" || return $?
 
-    rdp_client_install || return $?
-    sshd_setup || return $?
-    vnc_server_setup || return $?
-    smbd_setup || return $?
+#    rdp_client_install || return $?
+#    sshd_setup || return $?
+#    vnc_server_setup || return $?
+#    smbd_setup || return $?
     return 0
 }
 
@@ -1323,8 +1322,8 @@ function main_install_full_packages() {
 
     main_install_dev_packages "${PACKAGE_LIST}" || return $?
 
-    pycharm_install || return $?
-    wine_install || return $?
+#    pycharm_install || return $?
+#    wine_install || return $?
     return 0
 }
 
@@ -1364,5 +1363,4 @@ function main() {
 # https://bytexd.com/xrdp-ubuntu/
 # https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-echo "setup packages call!!!"
-#main
+main
