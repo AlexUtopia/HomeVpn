@@ -332,29 +332,60 @@ fixme utopia Скачать батник для разворота MSYS2 со с
 
 fixme utopia Как настроить Port Forwarding на роутере со скринами
 
-### 2.5.2 Конфигурационные параметры проекта HomeVpn
+### 2.5.2 Настройка аппаратной виртуализации
 
-#### 2.5.2.1 Главный конфиг
-
-fixme utopia Дописать
-
-#### 2.5.2.2 Шаблон для OpenVPN сервера
+### 2.5.2.1 Платформа IBM/PC. Intel `VT-x` / `VT-d`
 
 fixme utopia Дописать
 
-#### 2.5.2.3 Шаблон для OpenVPN клиента
+### 2.5.2.2 Платформа IBM/PC. AMD `AMD-V`
 
 fixme utopia Дописать
 
-#### 2.5.2.4 Список STUN серверов
+### 2.5.2.3 ARM платформы
+
+У меня есть [Orange Pi 5 Plus (16GB)](http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5-plus.html).
+Необходимо провести эксперименты на Ubuntu и ArchLinux.
 
 fixme utopia Дописать
 
-#### 2.5.2.5 Конфигурация Telegram бота
+
+### 2.5.2.4 Android платформы
+
+Всё сложно. Пока нет однозначного масштабируемого не хакерского решения.
 
 fixme utopia Дописать
 
-### 2.5.3 Настройка OpenVPN сервера
+https://lwn.net/Articles/836693/
+
+https://source.android.com/docs/core/virtualization
+
+https://www.xda-developers.com/android-13-dp1-google-pixel-6-kvm-virtual-machine/
+
+
+### 2.5.3 Конфигурационные параметры проекта HomeVpn
+
+#### 2.5.3.1 Главный конфиг
+
+fixme utopia Дописать
+
+#### 2.5.3.2 Шаблон для OpenVPN сервера
+
+fixme utopia Дописать
+
+#### 2.5.3.3 Шаблон для OpenVPN клиента
+
+fixme utopia Дописать
+
+#### 2.5.3.4 Список STUN серверов
+
+fixme utopia Дописать
+
+#### 2.5.3.5 Конфигурация Telegram бота
+
+fixme utopia Дописать
+
+### 2.5.4 Настройка OpenVPN сервера
 
 1. сконфигурируем пути в [open-vpn.config.json](/open-vpn.config.json), **если необходимо**
 2. сгенерируем сертификаты
@@ -407,27 +438,38 @@ openvpn --config client-<имя_пользователя>.ovpn
 Telegram бот поставляет новый ovpn конфиг от сервера (например, потому что сменился ip адрес и UDP порт), OpenVPN клиент автоматически перенастраивается.
 
 
-# 3 Администрирование
+# 3 Совместная разработка на github
 
-## 3.1 Настройка ОС к работе
+## 3.1 Смена рабочего места с существующим ключом
+
+fixme utopia Дописать
+
+## 3.2 Команда разработки на github
+
+fixme utopia Дописать
+
+
+# 4 Администрирование
+
+## 4.1 Настройка ОС к работе
 
 Настройку ОС к работе (в том числе гостевую ОС виртуальной машины) можно делать при помощи скрипта setup-packages.sh (см. пункт 2).
 
 
-## 3.2 SSH клиент
+## 4.2 SSH клиент
 
-### 3.2.1 Запуск графических приложений от имени администратора (root)
+### 4.2.1 Запуск графических приложений от имени администратора (root)
 
 Использовать скрипт [connect_to_host_over_ssh.sh](/connect_to_host_over_ssh.sh)
 
 fixme utopia batch скрипт для win/putty
 https://superuser.com/questions/119792/how-to-use-x11-forwarding-with-putty
 
-### 3.2.2 X11 vs Wayland
+### 4.2.2 X11 vs Wayland
 
 https://www.dbts-analytics.com/notesxfwdgb.html
 
-## 3.3 SAMBA
+## 4.3 SAMBA
 
 Ссылка для проводника Linux
 
@@ -438,7 +480,7 @@ https://www.dbts-analytics.com/notesxfwdgb.html
 `\\<ip адрес>\public\`
 
 
-### 3.3.1 Особенность доступа к публичным папкам на Android (используются нестандартные порты)
+### 4.3.1 Особенность доступа к публичным папкам на Android (используются нестандартные порты)
 
 Ссылка для проводника Linux
 
@@ -450,9 +492,9 @@ https://superuser.com/questions/702948/how-to-mount-a-samba-share-on-non-standar
 https://learn.microsoft.com/en-us/answers/questions/908346/how-to-access-smb-share-from-windows-on-a-differen
 https://superuser.com/questions/1094931/ssh-tunnel-on-windows-10-to-linux-samba
 
-## 3.4 VNC клиент
+## 4.4 VNC клиент
 
-### 3.4.1 VNC клиент Linux
+### 4.4.1 VNC клиент Linux
 
 [Описание параметров командной строки tiger VNC клиента](https://tigervnc.org/doc/vncviewer.html).
 
@@ -462,41 +504,41 @@ xtigervncviewer <ip адрес>:1
 
 ```
 
-### 3.4.2 VNC клиент Android
+### 4.4.2 VNC клиент Android
 
 fixme utopia Установка bVNC описана выше
 
 bVNC / RealVNC
 
-### 3.4.3 VNC клиент Android/termux
+### 4.4.3 VNC клиент Android/termux
 
 См. пункт 3.4.1.
 
-### 3.4.4 VNC клиент Windows
+### 4.4.4 VNC клиент Windows
 
 fixme utopia Дописать
 
-## 3.5 RDP клиент
+## 4.5 RDP клиент
 
-### 3.5.1 RDP клиент Linux
+### 4.5.1 RDP клиент Linux
 
 [Описание параметров командной строки freerdp клиента](https://github.com/FreeRDP/FreeRDP/wiki/CommandLineInterface).
 [Хороший мануал](https://github.com/awakecoding/FreeRDP-Manuals/blob/master/User/FreeRDP-User-Manual.markdown)
 
-### 3.5.2 RDP клиент Android
+### 4.5.2 RDP клиент Android
 
 Клиент удалённого доступа (Microsoft) / Remote RDP / aFreeRDP
 
-### 3.5.3 VNC клиент Android/termux
+### 4.5.3 VNC клиент Android/termux
 
 См. пункт 3.5.1.
 
-### 3.5.4 VNC клиент Windows
+### 4.5.4 VNC клиент Windows
 
 fixme utopia Дописать. Используем стандартный RDP клиент Windows
 
 
-## 3.6 Аппаратное ускорение OpenGL для SSH и VNC (VirtualGL)
+## 4.6 Аппаратное ускорение OpenGL для SSH и VNC (VirtualGL)
 
 https://virtualgl.org/
 
@@ -507,7 +549,7 @@ https://wiki.archlinux.org/title/VirtualGL
 https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-turbovnc
 
 
-## 3.7 Полезные команды Linux
+## 4.7 Полезные команды Linux
 
 Понять [какому пакету принадлежит данная команда](https://askubuntu.com/questions/13792/finding-out-what-package-a-command-came-from)
 можно так (пример, для команды ip)
@@ -517,6 +559,14 @@ https://askubuntu.com/questions/1319317/run-all-applications-with-virtualgl-on-t
 dpkg -S $(which ip)
 
 ```
+
+## 4.8 Запуск Android приложений на Linux
+
+https://waydro.id/
+
+## 4.9 Запуск Android приложений на Windows
+
+https://learn.microsoft.com/en-us/windows/android/wsa/
 
 
 # 2 Реализация
@@ -819,13 +869,9 @@ https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
 
 
 
-# 5 Преднастроенные виртуальные машины
+# 6 Преднастроенные виртуальные машины
 
 fixme utopia Выложить на google диск преднастроенные виртуальные машины (просто болванки)
-
-
-# 6 Возможные конфигурации клиентского оборудования
-
 
 # 7 Установка операционных систем
 
@@ -865,6 +911,8 @@ https://www.howtogeek.com/howto/windows-vista/allow-pings-icmp-echo-request-thro
  - надо тестировать, пока не обнаружил
 
 https://docs.blissos.org/install-bliss-os/install-in-a-virtual-machine/install-in-qemu
+
+https://help.clouding.io/hc/en-us/articles/4405454393756-How-to-virtualize-Android-with-QEMU-KVM
 
 
 ### 7.3.2 Android-x86
@@ -1024,3 +1072,15 @@ https://www.kernel.org/doc/html/v5.10/admin-guide/kernel-parameters.html
 Минусы
  - очень сложно разобраться что к чему даже при наличии опыта
  - работает только через qemu (для проекта HomeVpn минусом не является)
+
+
+## 7.4 Установка ОС на Orange Pi 5 Plus (16GB)
+
+http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5-plus.html
+
+https://drive.google.com/file/d/1qJcShkcYlMZdgdr5HVqTmpcYxUYuP-aE/view
+
+
+### 7.4.1 Ожидание полноценной поддержки Rockchip RK3588/RK3588S в Vanilla Linux
+
+https://gitlab.collabora.com/hardware-enablement/rockchip-3588/notes-for-rockchip-3588/-/blob/main/mainline-status.md
