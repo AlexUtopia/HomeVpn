@@ -58,10 +58,7 @@ PROCPS_PACKAGE="procps" # Утилита sysctl для записи параме
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
 COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id
-GPG_PACKAGE="gpg"
-if is_termux; then
-    GPG_PACKAGE=""
-fi
+GPG_PACKAGE="gnupg"
 FINDUTILS_PACKAGE="findutils" # Утилита find
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
 
@@ -680,6 +677,9 @@ function package_manager_is_package_installed() {
 ### System package manager end
 
 function pip_update() {
+    if is_termux; then
+        return 0
+    fi
     python3 -m pip install pip --force-reinstall --ignore-installed || return $?
     return 0
 }
