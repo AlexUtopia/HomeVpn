@@ -4,7 +4,11 @@
 # https://unix.stackexchange.com/questions/89714/easy-way-to-determine-the-virtualization-technology-of-a-linux-machine
 
 # fixme utopia VNC сервер для Windows
-# fixme utopia RDP сервер для Linux
+# fixme utopia RDP сервер для Linux / Android/termux
+# fixme utopia VNC сервер / SAMBA / SSH для Android/termux
+# fixme utopia Проверка минимальной версии питона
+# fixme utopia Установка openvpn3 (нужно для работы)
+# fixme utopia Актуальный winetricks устанавливаем из репо https://github.com/Winetricks/winetricks
 
 # https://unix.stackexchange.com/a/306115
 
@@ -25,8 +29,6 @@ function is_termux() {
     fi
     return 1
 }
-
-# fixme utopia Проверка минимальной версии питона
 
 ### Global config begin
 
@@ -940,6 +942,9 @@ function wine_install_32bit_dependencies() {
 function wine_install() {
     if is_termux; then
         # fixme utopia Будем устанавливать в termux для архитектуры amd64/i386? Проверить в termux
+        # fixme utopia Запуск из под box86/box64
+        # fixme utopia Запуск ARM программ под ARM/wine?
+        # https://github.com/termux/termux-packages/blob/master/x11-packages/wine-stable/build.sh
         return 0
     else
         wine_install_32bit_dependencies || return $?

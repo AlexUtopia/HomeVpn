@@ -47,8 +47,8 @@
 | SSH клиент                 | Удалённый доступ к ОС Linux                                                                                                                                                                                                                                                                         | +                    | [openssh-client](https://www.openssh.com/)                                                                                                     | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                             | [putty](https://www.putty.org/)                                                                                                                                                                                                                                                              | [openssh](https://packages.msys2.org/base/openssh)                                                                                                   | [openssh](https://www.cygwin.com/packages/summary/openssh.html)                                         | ?                                                                                   |
 | SSH сервер                 | Предоставление удалённого управления для ОС Linux                                                                                                                                                                                                                                                   | +                    | [openssh-server](https://www.openssh.com/)                                                                                                     | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                             | -                                                                                                                                                                                                                                                                                            | см. SSH клиент                                                                                                                                       | см. SSH клиент                                                                                          | ?                                                                                   |
 
-fixme utopia Установка openvpn3 (нужно для работы)
-fixme utopia Описать min / dev / full в таблице 1.1
+fixme utopia Описать min / dev / full в таблице 1.1  
+fixme utopia Описать wine
 
 Таблица 1.2 - Поддерживаемые дистрибутивы linux
 
@@ -305,7 +305,7 @@ fi
 
 ### 2.3.4 Доступ к рабочему столу XFCE4
 
-Доступ к рабочему столу можно осуществить при помощи VNC клиента. Рекомендуется использовать bVNC клиент (см. пункт 3.4.2).
+Доступ к рабочему столу можно осуществить при помощи VNC клиента. Рекомендуется использовать bVNC клиент (см. пункт 4.4.2).
 
 #### 2.3.4.1 Возможность работы с аппаратным обеспечением Android из termux
 
@@ -512,7 +512,7 @@ bVNC / RealVNC
 
 ### 4.4.3 VNC клиент Android/termux
 
-См. пункт 3.4.1.
+См. пункт 4.4.1.
 
 ### 4.4.4 VNC клиент Windows
 
