@@ -850,7 +850,7 @@ function sshd_setup() {
 }
 
 function pycharm_install() {
-    local PYCHARM="pycharm-community-2023.2.4"
+    local PYCHARM="pycharm-community-2023.3.4"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
     local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
@@ -1310,7 +1310,7 @@ function main_install_dev_packages() {
 
     main_install_min_packages "${PACKAGE_LIST}" || return $?
 
-#    rdp_client_install || return $?
+    rdp_client_install || return $?
 #    sshd_setup || return $?
 #    vnc_server_setup || return $?
 #    smbd_setup || return $?
@@ -1322,7 +1322,7 @@ function main_install_full_packages() {
 
     main_install_dev_packages "${PACKAGE_LIST}" || return $?
 
-#    pycharm_install || return $?
+    pycharm_install || return $?
 #    wine_install || return $?
     return 0
 }
