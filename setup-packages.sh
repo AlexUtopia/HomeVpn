@@ -9,6 +9,9 @@
 # fixme utopia Проверка минимальной версии питона
 # fixme utopia Установка openvpn3 (нужно для работы)
 # fixme utopia Актуальный winetricks устанавливаем из репо https://github.com/Winetricks/winetricks
+# fixme utopia Настройка символических ссылок для папок termux в SAMBA шару (в том числе внешняя SDcard)
+# https://wiki.termux.com/wiki/Internal_and_external_storage
+# https://stackoverflow.com/questions/29789204/bash-how-to-get-real-path-of-a-symlink
 
 # https://unix.stackexchange.com/a/306115
 
@@ -50,6 +53,12 @@ fi
 ### Global config end
 
 
+### termux specific packages begin
+
+TERMUX_SPECIFIC_PACKAGES="termux-setup-storage termux-services termux-tools termux-api proot"
+
+### termux specific packages end
+
 
 ### Minimal packages begin
 
@@ -85,6 +94,10 @@ if is_termux; then
 fi
 
 MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE}"
+if is_termux; then
+    MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
+fi
+
 ### Minimal packages end
 
 
@@ -307,21 +320,25 @@ function deactivate_file_if_exists() {
 
 function prepare_for_create_file() {
     local FILE_PATH="${1}"
+    local REWRITE_IF_EXIST="${2}"
 
     local FILE_DIR_PATH=""
     FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
 
     make_dirs "${FILE_DIR_PATH}" || return $?
 
-    deactivate_file_if_exists "${FILE_DIR_PATH}" || return $?
+    if [[ -z "${REWRITE_IF_EXIST}" ]]; then
+        deactivate_file_if_exists "${FILE_PATH}" || return $?
+    fi
     return 0
 }
 
 function create_file() {
    local CONTENT="${1}"
    local FILE_PATH="${2}"
+   local REWRITE_IF_EXIST="${3}"
 
-   prepare_for_create_file "${FILE_PATH}" || return $?
+   prepare_for_create_file "${FILE_PATH}" "${REWRITE_IF_EXIST}" || return $?
 
    ${SHELL} -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
    return 0
@@ -727,6 +744,10 @@ function termux_is_service_active() {
     return 1
 }
 
+# https://wiki.termux.com/wiki/Termux-services
+# https://smarden.org/runit/
+# https://wiki.termux.com/wiki/Termux:Boot
+
 function termux_service_enable() {
     sv-enable "${1}"
     return $?
@@ -834,12 +855,61 @@ function user_get_home_directory_path() {
     fi
 
     local USERNAME="${1}"
+    if [[ -z "${USERNAME}" ]]; then
+       USERNAME=$(whoami) || return $?
+    fi
 
     eval echo "~${USERNAME}"
     return 0
 }
 
 ### User API end
+
+### termux specific API begin
+
+function termux_autorun_serves_at_boot() {
+    local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_directory_path)/.termux/boot"
+    local AUTORUN_SERVICES_SCRIPT="autorun_serves_at_boot.sh"
+
+    create_file "termux-wake-lock
+. $PREFIX/etc/profile" "${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}" "rewrite_if_exist" || return $?
+    return 0
+}
+
+function termux_set_symlinks_to_storage() {
+   local TARGET_DIRECTORY_PATH="${1}"
+   if [[ -z "${TARGET_DIRECTORY_PATH}" ]]; then
+      TARGET_DIRECTORY_PATH="."
+   fi
+
+   termux-setup-storage || return $? # Вылезет запрос доступа к накопителю (Android)
+
+   local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_directory_path)/storage"
+
+   local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
+   if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
+       ANDROID_INTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_INTERNAL_STORAGE_DIR_PATH}") || return $?
+       if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
+           ln -sf "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
+       fi
+   fi
+
+   # fixme utopia Проверить на смартфоне и планшете
+
+   # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
+   # В итоге хотим получить /storage/9C33-6BBD
+   local ANDROID_EXTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/external-1"
+   if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
+       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
+       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
+       if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
+           ln -sf "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
+       fi
+   fi
+}
+
+### termux specific API end
+
 
 
 function sshd_setup() {
@@ -1316,7 +1386,7 @@ function main_install_dev_packages() {
     main_install_min_packages "${PACKAGE_LIST}" || return $?
 
     rdp_client_install || return $?
-#    sshd_setup || return $?
+    sshd_setup || return $?
 #    vnc_server_setup || return $?
 #    smbd_setup || return $?
     return 0
