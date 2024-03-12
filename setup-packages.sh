@@ -55,7 +55,7 @@ fi
 
 ### termux specific packages begin
 
-TERMUX_SPECIFIC_PACKAGES="termux-services termux-tools termux-api proot"
+TERMUX_SPECIFIC_PACKAGES="termux-tools termux-api proot"
 
 ### termux specific packages end
 
@@ -474,6 +474,7 @@ function apt_update_and_upgrade() {
 
     if is_termux; then
         apt -y install x11-repo root-repo || return $?
+        apt update || return $?
     fi
 
     return 0
@@ -713,32 +714,44 @@ function pip_install_packages() {
 
 ### System services begin
 
-function systemd_is_service_active() {
-    local SERVICE_IS_RUNNING=""
-    SERVICE_IS_RUNNING=$(systemctl is-active "${1}") || return $?
+function systemd_init() {
+    return 0
+}
 
-    if [[ "${SERVICE_IS_RUNNING,,}" == "active" ]]; then
+function systemd_is_service_active() {
+    local SERVICE_NAME="${1}"
+
+    local SERVICE_STATUS=""
+    SERVICE_STATUS=$(systemctl is-active "${SERVICE_NAME}") || return $?
+
+    if [[ "${SERVICE_STATUS,,}" == "active" ]]; then
         return 0
     fi
     return 1
 }
 
 function systemd_service_enable() {
-    systemctl enable "${1}"
-    return $?
+    local SERVICE_NAME="${1}"
+
+    systemctl enable "${SERVICE_NAME}" || return $?
+    return 0
 }
 
 function systemd_service_disable() {
-    systemctl disable "${1}"
-    return $?
+    local SERVICE_NAME="${1}"
+
+    systemctl disable "${SERVICE_NAME}" || return $?
+    return 0
 }
 
 function runit_is_service_active() {
-    # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
-    local SERVICE_IS_RUNNING=""
-    SERVICE_IS_RUNNING=$(sv status "${1}") || return $?
+    local SERVICE_NAME="${1}"
 
-    if [[ "${SERVICE_IS_RUNNING}" == "run: "* ]]; then # https://stackoverflow.com/a/229606
+    # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
+    local SERVICE_STATUS=""
+    SERVICE_STATUS=$(sv status "${SERVICE_NAME}") || return $?
+
+    if [[ "${SERVICE_STATUS,,}" == "run: "* ]]; then # https://stackoverflow.com/a/229606
         return 0
     fi
     return 1
@@ -748,44 +761,72 @@ function runit_is_service_active() {
 # https://smarden.org/runit/
 # https://wiki.termux.com/wiki/Termux:Boot
 
+function runit_init() {
+    if is_termux; then
+        service-daemon restart || return $?
+        return 0
+    fi
+    return 0
+}
+
 function runit_service_enable() {
-    sv-enable "${1}"
-    return $?
+    local SERVICE_NAME="${1}"
+
+    sv-enable "${SERVICE_NAME}" || return $?
+    return 0
 }
 
 function runit_service_disable() {
-    sv-disable "${1}"
-    return $?
+    local SERVICE_NAME="${1}"
+
+    sv-disable "${SERVICE_NAME}" || return $?
+    return 0
+}
+
+function service_init() {
+    if is_termux; then
+        runit_init || return $?
+        return 0
+    fi
+
+    systemd_init || return $?
+    return 0
 }
 
 function is_service_active() {
+    local SERVICE_NAME="${1}"
+
     if is_termux; then
-        runit_is_service_active "${1}"
-        return $?
+        runit_is_service_active "${SERVICE_NAME}" || return $?
+        return 0
     fi
 
-    systemd_is_service_active "${1}"
-    return $?
+    systemd_is_service_active "${SERVICE_NAME}" || return $?
+    return 0
 }
 
 function service_enable() {
+    local SERVICE_NAME="${1}"
+
     if is_termux; then
-        runit_service_enable "${1}"
-        return $?
+        runit_service_enable "${SERVICE_NAME}" || return $?
+        return 0
     fi
 
-    systemd_service_enable "${1}"
-    return $?
+    systemd_service_enable "${SERVICE_NAME}" || return $?
+    return 0
 }
 
 function service_disable() {
+    local SERVICE_NAME="${1}"
+
     if is_termux; then
-        runit_service_disable "${1}"
-        return $?
+        runit_service_disable "${SERVICE_NAME}" || return $?
+        return 0
     fi
 
-    systemd_service_disable "${1}"
-    return $?
+    systemd_service_disable "${SERVICE_NAME}" || return $?
+    return 0
 }
 
 ### System services end
@@ -1378,6 +1419,7 @@ function main_install_min_packages() {
     package_manager_update_and_upgrade || return $?
 
     package_manager_install_packages "${PACKAGE_LIST}" || return $?
+    service_init || return $?
     pip_update || return $?
     pip_install_packages "${PIP_PACKAGES}" || return $?
     return 0
