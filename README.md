@@ -77,19 +77,20 @@ fixme utopia Описать wine
 
 ## 2.1 Конфигурационные параметры setup-packages.sh
 
-| Параметр                                  | Описание                                            | Возможные варианты значений | Примечание                                                                                                                       |
-|-------------------------------------------|-----------------------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| GLOBAL_CONFIG_SETUP_PACKAGES_MODE         | Режим установки пакетов                             | `min`<br>`dev`<br>`full`    | `full` по умолчанию<br>см. таблицу 1.1                                                                                           |
-| GLOBAL_CONFIG_ROOT_PREFIX                 | Корень файловой системы                             |                             | `/` по умолчанию<br>для termux используется значение переменной окружения `PREFIX`                                               |
-| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh                                             |
-| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/share` по умолчанию                                                                                |
-| GLOBAL_CONFIG_SMBD_TCP_PORTS              | TCP порты которые "слушает" SAMBA сервер            |                             | `139 445` по умолчанию<br>для termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
+| Параметр                                  | Описание                                            | Возможные варианты значений | Примечание                                                                                                                               |
+|-------------------------------------------|-----------------------------------------------------|-----------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| GLOBAL_CONFIG_SETUP_PACKAGES_MODE         | Режим установки пакетов                             | `min`<br>`dev`<br>`full`    | `full` по умолчанию<br>см. таблицу 1.1                                                                                                   |
+| GLOBAL_CONFIG_ROOT_PREFIX                 | Корень файловой системы                             |                             | `/` по умолчанию<br>для Android/termux используется значение переменной окружения `PREFIX`                                               |
+| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh                                                     |
+| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/share` по умолчанию                                                                                        |
+| GLOBAL_CONFIG_SMBD_TCP_PORTS              | TCP порты которые "слушает" SAMBA сервер            |                             | `139 445` по умолчанию<br>для Android/termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
 
 
 ## 2.2 Разворот проекта в Linux
 
 [Шпаргалка](https://distrowatch.com/dwres.php?resource=package-management) по менеджерам пакетов.  
-[Пакеты](https://pkgs.org/) для различных Linux дистрибутивов.
+[Пакеты](https://pkgs.org/) для различных Linux дистрибутивов.  
+Для работы со службами используется [`systemd`](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options).
 
 ### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)
 
@@ -277,6 +278,9 @@ fixme utopia Дописать
 fixme utopia Оформить в виде таблицы со скринами
 
 ### 2.3.3 Разворот в termux (пакетный менеджер apt)
+
+Для работы со службами используется [`runit`](https://wiki.termux.com/wiki/Termux-services).  
+Подробное руководство по runit с [официального сайта](https://smarden.org/runit/).
 
 ```bash
 

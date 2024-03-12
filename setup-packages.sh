@@ -733,7 +733,7 @@ function systemd_service_disable() {
     return $?
 }
 
-function termux_is_service_active() {
+function runit_is_service_active() {
     # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
     local SERVICE_IS_RUNNING=""
     SERVICE_IS_RUNNING=$(sv status "${1}") || return $?
@@ -748,19 +748,19 @@ function termux_is_service_active() {
 # https://smarden.org/runit/
 # https://wiki.termux.com/wiki/Termux:Boot
 
-function termux_service_enable() {
+function runit_service_enable() {
     sv-enable "${1}"
     return $?
 }
 
-function termux_service_disable() {
+function runit_service_disable() {
     sv-disable "${1}"
     return $?
 }
 
 function is_service_active() {
     if is_termux; then
-        termux_is_service_active "${1}"
+        runit_is_service_active "${1}"
         return $?
     fi
 
@@ -770,7 +770,7 @@ function is_service_active() {
 
 function service_enable() {
     if is_termux; then
-        termux_service_enable "${1}"
+        runit_service_enable "${1}"
         return $?
     fi
 
@@ -780,7 +780,7 @@ function service_enable() {
 
 function service_disable() {
     if is_termux; then
-        termux_service_disable "${1}"
+        runit_service_disable "${1}"
         return $?
     fi
 
@@ -871,8 +871,11 @@ function termux_autorun_serves_at_boot() {
     local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_directory_path)/.termux/boot"
     local AUTORUN_SERVICES_SCRIPT="autorun_serves_at_boot.sh"
 
+    local AUTORUN_SERVICES_SCRIPT_PATH="${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}"
+
     create_file "termux-wake-lock
-. $PREFIX/etc/profile" "${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}" "rewrite_if_exist" || return $?
+. \"${PREFIX}/etc/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
+    chmod +x "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
     return 0
 }
 
@@ -915,7 +918,7 @@ function termux_set_symlinks_to_storage() {
 function sshd_setup() {
     local SSHD="sshd"
     if is_service_active "${SSHD}"; then
-      return 0
+        return 0
     fi
     service_enable "${SSHD}" || return $?
     return 0
