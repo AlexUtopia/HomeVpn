@@ -270,6 +270,8 @@ fixme utopia Дописать
  - **[F-Droid]** [OpenVPN for Android](https://f-droid.org/packages/de.blinkt.openvpn/) ([ссылка для скачивания apk](https://f-droid.org/repo/de.blinkt.openvpn_206.apk))
  - **[Google Play]** [bVNC viewer](https://play.google.com/store/apps/details?id=com.iiordanov.freebVNC)
 
+https://www.youtube.com/watch?v=yoW2HccWZkw
+
 Можно установить приложения из [маркета F-Droid](https://f-droid.org/ru/).
 
 

@@ -763,7 +763,7 @@ function runit_is_service_active() {
 
 function runit_init() {
     if is_termux; then
-        service-daemon start || return $?
+        . "${PREFIX}/etc/profile" || return $?
         return 0
     fi
     return 0
