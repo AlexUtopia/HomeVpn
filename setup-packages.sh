@@ -55,7 +55,7 @@ fi
 
 ### termux specific packages begin
 
-TERMUX_SPECIFIC_PACKAGES="termux-setup-storage termux-services termux-tools termux-api proot"
+TERMUX_SPECIFIC_PACKAGES="termux-services termux-tools termux-api proot"
 
 ### termux specific packages end
 
