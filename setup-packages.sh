@@ -763,7 +763,7 @@ function runit_is_service_active() {
 
 function runit_init() {
     if is_termux; then
-        service-daemon restart || return $?
+        service-daemon start || return $?
         return 0
     fi
     return 0
