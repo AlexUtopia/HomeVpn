@@ -35,7 +35,7 @@ function is_termux() {
 
 ### Global config begin
 
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="dev" # min, dev, full
 
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
@@ -763,7 +763,9 @@ function runit_is_service_active() {
 
 function runit_init() {
     if is_termux; then
-        . "${PREFIX}/etc/profile" || return $?
+        # Если не удалось запустить service-daemon то перезагружаем bash и запускаем скрипт setup-packages.sh вновь.
+        # После установки termux-services рекомендовано перезапустить termux чтобы bash подхватил новые переменные окружения (нас интересует SVDIR)
+        service-daemon restart || exec ${SHELL} -c "${0}"
         return 0
     fi
     return 0

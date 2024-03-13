@@ -566,6 +566,15 @@ dpkg -S $(which ip)
 
 ```
 
+### 4.7.1 Учимся работать с mc (midnight commander)
+
+https://www.youtube.com/watch?v=CEp2-G3HQ_s
+
+### 4.7.2 Учимся работать с nano
+
+fixme utopia Дописать
+
+
 ## 4.8 Запуск Android приложений на Linux
 
 https://waydro.id/
