@@ -765,7 +765,7 @@ function runit_init() {
     if is_termux; then
         # Если не удалось запустить service-daemon то перезагружаем bash и запускаем скрипт setup-packages.sh вновь.
         # После установки termux-services рекомендовано перезапустить termux чтобы bash подхватил новые переменные окружения (нас интересует SVDIR)
-        service-daemon restart || exec ${SHELL} -c "${0}"
+        service-daemon restart || exec ${SHELL} --login -c "${0}"
         return 0
     fi
     return 0
