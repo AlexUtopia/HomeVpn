@@ -462,7 +462,21 @@ fixme utopia Дописать
 Настройку ОС к работе (в том числе гостевую ОС виртуальной машины) можно делать при помощи скрипта setup-packages.sh (см. пункт 2).
 
 
-## 4.2 SSH клиент
+## 4.2 ssh клиент
+
+fixme utopia Провести эксперименты с wayland по инструкции из 4.2.2
+
+Таблица 4.1 - Варианты подключения к ssh серверу
+
+| ОС ssh сервер             | ОС ssh клиент             | Команда                                                                 | Примечание                                                                                                    |
+|---------------------------|---------------------------|-------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| Linux (X11)<br>openssh    | Linux<br>openssh          | `ssh -XC <user>@<ip адрес>`<br>или<br>`ssh -p 22 -XC <user>@<ip адрес>` | Проброс X11                                                                                                   |
+| Linux (X11)<br>openssh    | Android/termux<br>openssh | ?                                                                       | Проброс X11?                                                                                                  |
+| Linux (X11)<br>openssh    | Windows/MSYS2<br>openssh  | ?                                                                       | Проброс X11?                                                                                                  |
+| Linux (X11)<br>openssh    | Windows/MSYS2<br>putty    | ?                                                                       | Проброс X11?                                                                                                  |
+| Linux (X11)<br>openssh    | Windows<br>putty          | ?                                                                       | Проброс X11?                                                                                                  |
+| Android/termux<br>openssh | Linux<br>openssh          | `ssh -p 8022 <ip адрес>`<br>или<br>`ssh -p 8022 <user>@<ip адрес>`      | fixme utopia [Можно пробросить X11?](https://www.reddit.com/r/termux/comments/jvypeq/x11_fowarding_over_ssh/) |
+
 
 ### 4.2.1 Запуск графических приложений от имени администратора (root)
 
@@ -474,6 +488,11 @@ https://superuser.com/questions/119792/how-to-use-x11-forwarding-with-putty
 ### 4.2.2 X11 vs Wayland
 
 https://www.dbts-analytics.com/notesxfwdgb.html
+
+### 4.2.3 ssh клиент/сервер Android/termux
+
+https://wiki.termux.com/wiki/Remote_Access
+
 
 ## 4.3 SAMBA
 

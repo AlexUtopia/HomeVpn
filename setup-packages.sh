@@ -122,9 +122,9 @@ if is_termux; then
 fi
 RDP_SERVER_PACKAGE="xrdp"
 
-SSH_SERVER_PACKAGE="openssh-server"
+SSH_SERVER_PACKAGE="openssh-server passwd" # passwd для настройки доступа по паролю
 if is_termux; then
-    SSH_SERVER_PACKAGE="openssh"
+    SSH_SERVER_PACKAGE="openssh passwd"
 fi
 
 VNC_CLIENT_PACKAGE="tigervnc-viewer"
@@ -765,6 +765,8 @@ function runit_init() {
     if is_termux; then
         # Если не удалось запустить service-daemon то перезагружаем bash и запускаем скрипт setup-packages.sh вновь.
         # После установки termux-services рекомендовано перезапустить termux чтобы bash подхватил новые переменные окружения (нас интересует SVDIR)
+        # https://github.com/termux/termux-services/tree/master
+        # "Restart your shell so that the service-daemon is started"
         service-daemon restart || exec ${SHELL} --login -c "${0}"
         return 0
     fi
@@ -863,6 +865,13 @@ function firewall_accept_udp_traffic_for_port() {
 
 ### User API begin
 
+function user_get_current() {
+   local RESULT=""
+   RESULT=$(whoami) || return $?
+   echo "${RESULT}"
+   return 0
+}
+
 function user_add() {
     useradd "${1}"
     return $?
@@ -899,12 +908,36 @@ function user_get_home_directory_path() {
 
     local USERNAME="${1}"
     if [[ -z "${USERNAME}" ]]; then
-       USERNAME=$(whoami) || return $?
+       USERNAME=$(user_get_current) || return $?
+    fi
+
+    if ! user_is_available "${USERNAME}"; then
+        return 1
     fi
 
     eval echo "~${USERNAME}"
     return 0
 }
+
+function user_create_password_if() {
+    local USERNAME="${1}"
+    if [[ -z "${USERNAME}" ]]; then
+       USERNAME=$(user_get_current) || return $?
+    fi
+
+    if ! user_is_available "${USERNAME}"; then
+        return 1
+    fi
+
+    if ! passwd --status "${USERNAME}"; then
+        echo "Set password for \"${USERNAME}\""
+        passwd "${USERNAME}" || return $?
+        return 0
+    fi
+
+    return 0
+}
+
 
 ### User API end
 
@@ -960,10 +993,15 @@ function termux_set_symlinks_to_storage() {
 
 function sshd_setup() {
     local SSHD="sshd"
-    if is_service_active "${SSHD}"; then
-        return 0
-    fi
+
+    user_create_password_if || return $?
+
+    service_disable "${SSHD}"
     service_enable "${SSHD}" || return $?
+
+    if ! is_service_active "${SSHD}"; then
+        echo "FATAL: ${SSHD} not started"
+    fi
     return 0
 }
 
@@ -1163,7 +1201,7 @@ function smbd_setup() {
     service_enable "${SMBD}" || return $?
 
     if ! is_service_active "${SMBD}"; then
-      echo "FATAL: ${SMBD} not started"
+        echo "FATAL: ${SMBD} not started"
     fi
 
     # https://www.samba.org/~tpot/articles/firewall.html
