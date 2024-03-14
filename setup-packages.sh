@@ -122,9 +122,9 @@ if is_termux; then
 fi
 RDP_SERVER_PACKAGE="xrdp"
 
-SSH_SERVER_PACKAGE="openssh-server passwd" # passwd для настройки доступа по паролю
+SSH_SERVER_PACKAGE="openssh-server"
 if is_termux; then
-    SSH_SERVER_PACKAGE="openssh passwd"
+    SSH_SERVER_PACKAGE="openssh"
 fi
 
 VNC_CLIENT_PACKAGE="tigervnc-viewer"
@@ -148,11 +148,11 @@ if is_termux; then
 fi
 
 PASSWD_PACKAGE="passwd" # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
-if is_termux; then
-    PASSWD_PACKAGE=""
+if is_termux; then      # passwd для настройки доступа к ssh серверу по паролю
+    PASSWD_PACKAGE="termux-auth"
 fi
 
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_CLIENT_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
+DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_CLIENT_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
 ### Development packages end
 
 
