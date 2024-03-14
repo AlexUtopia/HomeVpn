@@ -899,6 +899,21 @@ function user_is_added_to_group() {
     return 1
 }
 
+function user_check_and_correct() {
+   local USERNAME="${1}"
+
+    if [[ -z "${USERNAME}" ]]; then
+       USERNAME=$(user_get_current) || return $?
+    fi
+
+    if ! user_is_available "${USERNAME}"; then
+        return 1
+    fi
+
+    echo "${USERNAME}"
+    return 0
+}
+
 # https://unix.stackexchange.com/a/758316
 function user_get_home_directory_path() {
     if is_termux; then # В termux возможен только один пользователь https://wiki.termux.com/wiki/Differences_from_Linux
@@ -907,29 +922,38 @@ function user_get_home_directory_path() {
     fi
 
     local USERNAME="${1}"
-    if [[ -z "${USERNAME}" ]]; then
-       USERNAME=$(user_get_current) || return $?
-    fi
-
-    if ! user_is_available "${USERNAME}"; then
-        return 1
-    fi
+    USERNAME=$(user_check_and_correct "${USERNAME}") || return $?
 
     eval echo "~${USERNAME}"
     return 0
 }
 
-function user_create_password_if() {
+function user_is_set_password() {
     local USERNAME="${1}"
-    if [[ -z "${USERNAME}" ]]; then
-       USERNAME=$(user_get_current) || return $?
-    fi
 
-    if ! user_is_available "${USERNAME}"; then
+    USERNAME=$(user_check_and_correct "${USERNAME}") || return $?
+
+    if is_termux; then
+        local USER_HOME_DIR_PATH=""
+        USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USERNAME}") || return $?
+        # https://github.com/termux/termux-auth/blob/master/termux-auth.h#L13C30-L13C41
+        local USER_PASSWORD_FILE_PATH="${USER_HOME_DIR_PATH}/.termux_authinfo"
+        if [[ -f "$USER_PASSWORD_FILE_PATH" ]]; then
+            return 0
+        fi
         return 1
     fi
 
-    if ! passwd --status "${USERNAME}"; then
+    passwd --status "${USERNAME}"
+    return $?
+}
+
+function user_create_password_if() {
+    local USERNAME="${1}"
+
+    USERNAME=$(user_check_and_correct "${USERNAME}") || return $?
+
+    if ! user_is_set_password "${USERNAME}"; then
         echo "Set password for \"${USERNAME}\""
         passwd "${USERNAME}" || return $?
         return 0
@@ -937,7 +961,6 @@ function user_create_password_if() {
 
     return 0
 }
-
 
 ### User API end
 
@@ -949,7 +972,8 @@ function termux_autorun_serves_at_boot() {
 
     local AUTORUN_SERVICES_SCRIPT_PATH="${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}"
 
-    create_file "termux-wake-lock
+    create_file "#!${SHELL}
+termux-wake-lock
 . \"${PREFIX}/etc/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
     chmod +x "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
     return 0
@@ -1302,7 +1326,8 @@ function vnc_server_create_xstartup() {
     local EXEC=""
     EXEC=$(desktop_file_get_value "${DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH}" "Desktop Entry" "Exec") || return $?
 
-    create_file "autocutsel -fork
+    create_file "#!${SHELL}
+autocutsel -fork
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
