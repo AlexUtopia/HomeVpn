@@ -1018,9 +1018,10 @@ function termux_set_symlinks_to_storage() {
 function sshd_setup() {
     local SSHD="sshd"
 
+    service_disable "${SSHD}"
+
     user_create_password_if || return $?
 
-    service_disable "${SSHD}"
     service_enable "${SSHD}" || return $?
 
     if ! is_service_active "${SSHD}"; then
