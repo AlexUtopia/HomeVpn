@@ -238,7 +238,7 @@ function get_os_distro_name() {
        # Для Ubuntu-based дистрибутивов linux (типа Linix Mint) всегда используются ubuntu PPA
        echo "ubuntu"
    else
-      echo "${ID}"
+       echo "${ID}"
    fi
    return 0
 }
@@ -259,9 +259,9 @@ function get_os_distro_codename_or_version() {
 }
 
 function make_dirs() {
-    local DIRECTORY_PATH="${1}"
+    local DIR_PATH="${1}"
 
-    mkdir -p "${DIRECTORY_PATH}" || return $?
+    mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
     return 0
 }
 
@@ -722,7 +722,7 @@ function systemd_is_service_active() {
     local SERVICE_NAME="${1}"
 
     local SERVICE_STATUS=""
-    SERVICE_STATUS=$(systemctl is-active "${SERVICE_NAME}") || return $?
+    SERVICE_STATUS=$(systemctl is-active "${SERVICE_NAME}" 2> "/dev/null") || return $?
 
     if [[ "${SERVICE_STATUS,,}" == "active" ]]; then
         return 0
@@ -733,14 +733,14 @@ function systemd_is_service_active() {
 function systemd_service_enable() {
     local SERVICE_NAME="${1}"
 
-    systemctl enable "${SERVICE_NAME}" || return $?
+    systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
     return 0
 }
 
 function systemd_service_disable() {
     local SERVICE_NAME="${1}"
 
-    systemctl disable "${SERVICE_NAME}" || return $?
+    systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
     return 0
 }
 
@@ -749,7 +749,7 @@ function runit_is_service_active() {
 
     # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
     local SERVICE_STATUS=""
-    SERVICE_STATUS=$(sv status "${SERVICE_NAME}") || return $?
+    SERVICE_STATUS=$(sv status "${SERVICE_NAME}" 2> "/dev/null") || return $?
 
     if [[ "${SERVICE_STATUS,,}" == "run: "* ]]; then # https://stackoverflow.com/a/229606
         return 0
@@ -776,14 +776,14 @@ function runit_init() {
 function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
-    sv-enable "${SERVICE_NAME}" || return $?
+    sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
     return 0
 }
 
 function runit_service_disable() {
     local SERVICE_NAME="${1}"
 
-    sv-disable "${SERVICE_NAME}" || return $?
+    sv-disable "${SERVICE_NAME}" > "/dev/null" || return $?
     return 0
 }
 
@@ -873,44 +873,51 @@ function user_get_current() {
 }
 
 function user_add() {
-    useradd "${1}"
-    return $?
+    useradd "${1}" > "/dev/null" || return $?
+    return 0
 }
 
 function user_is_available() {
-    id "${1}"
-    return $?
+    local USER_NAME="${1}"
+
+    id "${USER_NAME}" &> "/dev/null" || return $?
+    return 0
 }
 
 function user_add_to_group() {
-    usermod -a -G "${2}" "${1}"
+    local USER_NAME="${1}"
+    local GROUP_NAME="${2}"
+
+    usermod -a -G "${GROUP_NAME}" "${USER_NAME}" > "/dev/null" || return $?
     return $?
 }
 
 function user_is_added_to_group() {
+    local USER_NAME="${1}"
+    local GROUP_NAME="${2}"
+
     local USER_GROUP_NAME_LIST=""
-    USER_GROUP_NAME_LIST=$(id "${1}" -G -n) || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
-    for USER_GROUP_NAME in USER_GROUP_NAME_LIST
-    do
-      if [[ "${USER_GROUP_NAME}" == "${2}" ]]; then
-          return 0
-      fi
+    USER_GROUP_NAME_LIST=$(id "${USER_NAME}" -G -n 2> "/dev/null") || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
+    for USER_GROUP_NAME in USER_GROUP_NAME_LIST; do
+        if [[ "${USER_GROUP_NAME,,}" == "${GROUP_NAME,,}" ]]; then
+            return 0
+        fi
     done
     return 1
 }
 
 function user_check_and_correct() {
-   local USERNAME="${1}"
+   local USER_NAME="${1}"
 
-    if [[ -z "${USERNAME}" ]]; then
-       USERNAME=$(user_get_current) || return $?
+    if [[ -z "${USER_NAME}" ]]; then
+        USER_NAME=$(user_get_current) || return $?
     fi
 
-    if ! user_is_available "${USERNAME}"; then
+    if ! user_is_available "${USER_NAME}"; then
         return 1
     fi
 
-    echo "${USERNAME}"
+    echo "${USER_NAME}"
     return 0
 }
 
@@ -921,21 +928,21 @@ function user_get_home_directory_path() {
         return 0
     fi
 
-    local USERNAME="${1}"
-    USERNAME=$(user_check_and_correct "${USERNAME}") || return $?
+    local USER_NAME="${1}"
+    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
 
-    eval echo "~${USERNAME}"
+    eval echo "~${USER_NAME}"
     return 0
 }
 
 function user_is_set_password() {
-    local USERNAME="${1}"
+    local USER_NAME="${1}"
 
-    USERNAME=$(user_check_and_correct "${USERNAME}") || return $?
+    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
 
     if is_termux; then
         local USER_HOME_DIR_PATH=""
-        USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USERNAME}") || return $?
+        USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USER_NAME}") || return $?
         # https://github.com/termux/termux-auth/blob/master/termux-auth.h#L13C30-L13C41
         local USER_PASSWORD_FILE_PATH="${USER_HOME_DIR_PATH}/.termux_authinfo"
         if [[ -f "$USER_PASSWORD_FILE_PATH" ]]; then
@@ -944,18 +951,18 @@ function user_is_set_password() {
         return 1
     fi
 
-    passwd --status "${USERNAME}"
-    return $?
+    passwd --status "${USER_NAME}" &> "/dev/null" || return $?
+    return 0
 }
 
 function user_create_password_if() {
-    local USERNAME="${1}"
+    local USER_NAME="${1}"
 
-    USERNAME=$(user_check_and_correct "${USERNAME}") || return $?
+    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
 
-    if ! user_is_set_password "${USERNAME}"; then
-        echo "Set password for \"${USERNAME}\""
-        passwd "${USERNAME}" || return $?
+    if ! user_is_set_password "${USER_NAME}"; then
+        echo "Set password for \"${USER_NAME}\""
+        passwd "${USER_NAME}" || return $?
         return 0
     fi
 
