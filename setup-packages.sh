@@ -396,6 +396,116 @@ function download_file() {
 ### Download API end
 
 
+
+### User API begin
+
+function user_get_current() {
+   local RESULT=""
+   RESULT=$(whoami) || return $?
+   echo "${RESULT}"
+   return 0
+}
+
+function user_add() {
+    useradd "${1}" > "/dev/null" || return $?
+    return 0
+}
+
+function user_is_available() {
+    local USER_NAME="${1}"
+
+    id "${USER_NAME}" &> "/dev/null" || return $?
+    return 0
+}
+
+function user_add_to_group() {
+    local USER_NAME="${1}"
+    local GROUP_NAME="${2}"
+
+    usermod -a -G "${GROUP_NAME}" "${USER_NAME}" > "/dev/null" || return $?
+    return $?
+}
+
+function user_is_added_to_group() {
+    local USER_NAME="${1}"
+    local GROUP_NAME="${2}"
+
+    local USER_GROUP_NAME_LIST=""
+    USER_GROUP_NAME_LIST=$(id "${USER_NAME}" -G -n 2> "/dev/null") || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
+    for USER_GROUP_NAME in USER_GROUP_NAME_LIST; do
+        if [[ "${USER_GROUP_NAME,,}" == "${GROUP_NAME,,}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+function user_check_and_correct() {
+   local USER_NAME="${1}"
+
+    if [[ -z "${USER_NAME}" ]]; then
+        USER_NAME=$(user_get_current) || return $?
+    fi
+
+    if ! user_is_available "${USER_NAME}"; then
+        return 1
+    fi
+
+    echo "${USER_NAME}"
+    return 0
+}
+
+# https://unix.stackexchange.com/a/758316
+function user_get_home_directory_path() {
+    if is_termux; then # В termux возможен только один пользователь https://wiki.termux.com/wiki/Differences_from_Linux
+        echo ~
+        return 0
+    fi
+
+    local USER_NAME="${1}"
+    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
+
+    eval echo "~${USER_NAME}"
+    return 0
+}
+
+function user_is_set_password() {
+    local USER_NAME="${1}"
+
+    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
+
+    if is_termux; then
+        local USER_HOME_DIR_PATH=""
+        USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USER_NAME}") || return $?
+        # https://github.com/termux/termux-auth/blob/master/termux-auth.h#L13C30-L13C41
+        local USER_PASSWORD_FILE_PATH="${USER_HOME_DIR_PATH}/.termux_authinfo"
+        if [[ -f "$USER_PASSWORD_FILE_PATH" ]]; then
+            return 0
+        fi
+        return 1
+    fi
+
+    passwd --status "${USER_NAME}" &> "/dev/null" || return $?
+    return 0
+}
+
+function user_create_password_if() {
+    local USER_NAME="${1}"
+
+    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
+
+    if ! user_is_set_password "${USER_NAME}"; then
+        echo "Set password for \"${USER_NAME}\""
+        passwd "${USER_NAME}" || return $?
+        return 0
+    fi
+
+    return 0
+}
+
+### User API end
+
+
 ### System package manager begin
 
 ## @fn is_executable_available()
@@ -712,6 +822,57 @@ function pip_install_packages() {
     return 0
 }
 
+### termux specific API begin
+
+function termux_autorun_serves_at_boot() {
+    local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_directory_path)/.termux/boot"
+    local AUTORUN_SERVICES_SCRIPT="autorun_services_at_boot.sh"
+
+    local AUTORUN_SERVICES_SCRIPT_PATH="${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}"
+
+    create_file "#!${SHELL}
+termux-wake-lock
+. \"${PREFIX}/etc/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
+    chmod +x "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
+    return 0
+}
+
+function termux_set_symlinks_to_storage() {
+   local TARGET_DIRECTORY_PATH="${1}"
+   if [[ -z "${TARGET_DIRECTORY_PATH}" ]]; then
+       TARGET_DIRECTORY_PATH="."
+   fi
+
+   termux-setup-storage || return $? # Вылезет запрос доступа к накопителю (Android)
+
+   local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_directory_path)/storage"
+
+   local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
+   if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
+       ANDROID_INTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_INTERNAL_STORAGE_DIR_PATH}") || return $?
+       if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
+           ln -sf "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
+       fi
+   fi
+
+   # fixme utopia Проверить на смартфоне и планшете
+
+   # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
+   # В итоге хотим получить /storage/9C33-6BBD
+   local ANDROID_EXTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/external-1"
+   if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
+       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
+       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
+       if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
+           ln -sf "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
+       fi
+   fi
+
+   return 0
+}
+
+### termux specific API end
+
 ### System services begin
 
 function systemd_init() {
@@ -776,6 +937,7 @@ function runit_init() {
             # После exec ${SHELL} управление не возвращается
             echo "NEVER"
         fi
+        termux_autorun_serves_at_boot || return $?
         return 0
     fi
     return 0
@@ -871,165 +1033,9 @@ function firewall_accept_udp_traffic_for_port() {
 ### System firewall end
 
 
-### User API begin
 
-function user_get_current() {
-   local RESULT=""
-   RESULT=$(whoami) || return $?
-   echo "${RESULT}"
-   return 0
-}
-
-function user_add() {
-    useradd "${1}" > "/dev/null" || return $?
-    return 0
-}
-
-function user_is_available() {
-    local USER_NAME="${1}"
-
-    id "${USER_NAME}" &> "/dev/null" || return $?
-    return 0
-}
-
-function user_add_to_group() {
-    local USER_NAME="${1}"
-    local GROUP_NAME="${2}"
-
-    usermod -a -G "${GROUP_NAME}" "${USER_NAME}" > "/dev/null" || return $?
-    return $?
-}
-
-function user_is_added_to_group() {
-    local USER_NAME="${1}"
-    local GROUP_NAME="${2}"
-
-    local USER_GROUP_NAME_LIST=""
-    USER_GROUP_NAME_LIST=$(id "${USER_NAME}" -G -n 2> "/dev/null") || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
-    for USER_GROUP_NAME in USER_GROUP_NAME_LIST; do
-        if [[ "${USER_GROUP_NAME,,}" == "${GROUP_NAME,,}" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-function user_check_and_correct() {
-   local USER_NAME="${1}"
-
-    if [[ -z "${USER_NAME}" ]]; then
-        USER_NAME=$(user_get_current) || return $?
-    fi
-
-    if ! user_is_available "${USER_NAME}"; then
-        return 1
-    fi
-
-    echo "${USER_NAME}"
-    return 0
-}
-
-# https://unix.stackexchange.com/a/758316
-function user_get_home_directory_path() {
-    if is_termux; then # В termux возможен только один пользователь https://wiki.termux.com/wiki/Differences_from_Linux
-        echo ~
-        return 0
-    fi
-
-    local USER_NAME="${1}"
-    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
-
-    eval echo "~${USER_NAME}"
-    return 0
-}
-
-function user_is_set_password() {
-    local USER_NAME="${1}"
-
-    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
-
-    if is_termux; then
-        local USER_HOME_DIR_PATH=""
-        USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USER_NAME}") || return $?
-        # https://github.com/termux/termux-auth/blob/master/termux-auth.h#L13C30-L13C41
-        local USER_PASSWORD_FILE_PATH="${USER_HOME_DIR_PATH}/.termux_authinfo"
-        if [[ -f "$USER_PASSWORD_FILE_PATH" ]]; then
-            return 0
-        fi
-        return 1
-    fi
-
-    passwd --status "${USER_NAME}" &> "/dev/null" || return $?
-    return 0
-}
-
-function user_create_password_if() {
-    local USER_NAME="${1}"
-
-    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
-
-    if ! user_is_set_password "${USER_NAME}"; then
-        echo "Set password for \"${USER_NAME}\""
-        passwd "${USER_NAME}" || return $?
-        return 0
-    fi
-
-    return 0
-}
-
-### User API end
-
-### termux specific API begin
-
-function termux_autorun_serves_at_boot() {
-    local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_directory_path)/.termux/boot"
-    local AUTORUN_SERVICES_SCRIPT="autorun_serves_at_boot.sh"
-
-    local AUTORUN_SERVICES_SCRIPT_PATH="${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}"
-
-    create_file "#!${SHELL}
-termux-wake-lock
-. \"${PREFIX}/etc/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
-    chmod +x "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
-    return 0
-}
-
-function termux_set_symlinks_to_storage() {
-   local TARGET_DIRECTORY_PATH="${1}"
-   if [[ -z "${TARGET_DIRECTORY_PATH}" ]]; then
-      TARGET_DIRECTORY_PATH="."
-   fi
-
-   termux-setup-storage || return $? # Вылезет запрос доступа к накопителю (Android)
-
-   local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_directory_path)/storage"
-
-   local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
-   if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
-       ANDROID_INTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_INTERNAL_STORAGE_DIR_PATH}") || return $?
-       if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
-           ln -sf "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
-       fi
-   fi
-
-   # fixme utopia Проверить на смартфоне и планшете
-
-   # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
-   # В итоге хотим получить /storage/9C33-6BBD
-   local ANDROID_EXTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/external-1"
-   if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
-       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
-       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
-       if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
-           ln -sf "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
-       fi
-   fi
-}
-
-### termux specific API end
-
-
-
+# fixme utopia Добавим поддержку "X11Forwarding yes" в "$PREFIX/etc/ssh/sshd_config"
+# https://www.reddit.com/r/termux/comments/bd5kz4/x_windows_remote_display/
 function sshd_setup() {
     local SSHD="sshd"
 
@@ -1242,6 +1248,10 @@ function smbd_setup() {
 
     if ! is_service_active "${SMBD}"; then
         echo "FATAL: ${SMBD} not started"
+    fi
+
+    if is_termux; then
+        termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
 
     # https://www.samba.org/~tpot/articles/firewall.html
