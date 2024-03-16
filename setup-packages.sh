@@ -767,7 +767,15 @@ function runit_init() {
         # После установки termux-services рекомендовано перезапустить termux чтобы bash подхватил новые переменные окружения (нас интересует SVDIR)
         # https://github.com/termux/termux-services/tree/master
         # "Restart your shell so that the service-daemon is started"
-        service-daemon restart || exec ${SHELL} --login -c "${0}"
+
+        if [[ -z "${SVDIR}" ]]; then # После установки пакета termux-services в /etc/profile.d/ добавляется скрипт start-services.sh
+                                     # который устанавливает требуемые переменные окружения. Перезагрузим (команда exec) bash с полной
+                                     # инициализацией и запустим текущий скрипт заново
+            echo "RESTART BASH"
+            exec ${SHELL} --login -c "${0}"
+            # После exec ${SHELL} управление не возвращается
+            echo "NEVER"
+        fi
         return 0
     fi
     return 0
