@@ -284,6 +284,10 @@ fixme utopia Оформить в виде таблицы со скринами
 Для работы со службами используется [`runit`](https://wiki.termux.com/wiki/Termux-services).  
 Подробное руководство по runit с [официального сайта](https://smarden.org/runit/).
 
+https://wiki.gentoo.org/wiki/Runit
+
+https://docs.voidlinux.org/config/services/index.html
+
 ```bash
 
 PROJECT_BASE_DIR_PATH=$(echo ~)

@@ -19,6 +19,9 @@ import requests
 # fixme utopia Исправление для iptc который неадекватно работает на Ubuntu 22.04
 import semantic_version
 
+# Настройка firewall для вирт машин
+# http://rhd.ru/docs/manuals/enterprise/RHEL-4-Manual/security-guide/s1-firewall-ipt-fwd.html
+
 os.environ['XTABLES_LIBDIR'] = "/usr/lib/x86_64-linux-gnu/xtables/"
 
 import psutil
@@ -307,7 +310,8 @@ class TelegramClient:
     def send_file(self, file_path):
         _file_path = Path(file_path)
         files = {'document': (_file_path.get_filename(), open(_file_path.get(), 'rb'), "multipart/form-data")}
-        response = requests.post(self.__get_send_document_url(), data={"chat_id": self.__config["chat_id"]}, files=files)
+        response = requests.post(self.__get_send_document_url(), data={"chat_id": self.__config["chat_id"]},
+                                 files=files)
         print("Telegram send document: {}".format(response.content))
 
     def __get_send_message_url(self):
@@ -647,8 +651,9 @@ class OpenVpnServerConfigGenerator:
 
     def __add_client_route_to_vm_bridge_network(self):
         ip_network = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().network
-        self.__key_value_config.add_default("push", "\"route {} {}\"".format(ip_network.network_address, ip_network.netmask))
-        #self.__key_value_config.add_default("route", "{} {}".format(ip_network.network_address, ip_network.netmask))
+        self.__key_value_config.add_default("push",
+                                            "\"route {} {}\"".format(ip_network.network_address, ip_network.netmask))
+        # self.__key_value_config.add_default("route", "{} {}".format(ip_network.network_address, ip_network.netmask))
 
     def __add_dns_for_vm_bridge_network(self):
         ip = self.__open_vpn_config.get_vm_bridge_ip_address_and_mask().ip
@@ -1565,9 +1570,9 @@ class VirtualMachine:
         # -full-screen
         # -device virtio-vga-gl -display sdl,gl=on
         # /usr/share/ovmf/OVMF.fd
-        #return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
-        #return "-vnc 127.0.0.1:2 -soundhw hda"
-        #return "-vnc 127.0.0.1:2 -machine q35"
+        # return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
+        # return "-vnc 127.0.0.1:2 -soundhw hda"
+        # return "-vnc 127.0.0.1:2 -machine q35"
         return "-vnc 127.0.0.1:2"
 
     def __monitor(self):
@@ -1575,15 +1580,14 @@ class VirtualMachine:
         # https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor
         return "-monitor telnet:127.0.0.1:55555,server,nowait;"
 
-
     def __cpu(self):
         return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8"
 
     def __gpu(self):
-        #return "-vga std -display gtk"
+        # return "-vga std -display gtk"
 
-        return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
-        #return "-vga none -device vfio-pci,host=00:1f.3"
+        # return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
+        # return "-vga none -device vfio-pci,host=00:1f.3"
 
         # return "-device virtio-vga-gl -display sdl,gl=on"
 
@@ -1593,19 +1597,19 @@ class VirtualMachine:
         # https://listman.redhat.com/archives/vfio-users/2016-March/msg00088.html
         # ,display=auto,multifunction=on,x-vga=on,
         # x-igd-opregion=on,
-        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
-        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3"
-        #return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
-        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
-        #return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
-        #return "-device virtio-vga-gl -display sdl,gl=on"
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
+        return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,display=auto,multifunction=on"  # x-pci-sub-vendor-id=0x1025,x-pci-sub-device-id=0x1518,x-pci-vendor-id=0x8086,x-pci-device-id=0x2812
+        # return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
+        # return "-device virtio-vga-gl -display sdl,gl=on"
 
     def __usb(self):
         usb_device_array = [
             (0x045e, 0x00db),  # Клавиатура Microsoft # Natural Ergonomic Keyboard 4000 v 1.0
             (0x0bda, 0x8771),  # USB-Bluetooth 5.0 адаптер Ugreen # CM390
             (0x046d, 0xc05b),  # Мышка Logitec # B110
-            (0x258a, 0x0302)   # Клавиатура с тачпадом Harper # KBT-330
+            (0x258a, 0x0302)  # Клавиатура с тачпадом Harper # KBT-330
         ]
 
         result = []
@@ -1644,15 +1648,15 @@ class Daemon:
             TelegramClient().send_file(user_ovpn_file_path)
 
             watchdog_user_name = self.__open_vpn_config.get_watchdog_user_name()
-            watchdog_user_config_path = "/data2/utopia/src/HomeVpn/client-watchdog.ovpn" #OpenVpnClientConfigGenerator(my_ip_address_and_port,
-                                        #                             watchdog_user_name).generate()
+            watchdog_user_config_path = "/data2/utopia/src/HomeVpn/client-watchdog.ovpn"  # OpenVpnClientConfigGenerator(my_ip_address_and_port,
+            #                             watchdog_user_name).generate()
 
             # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
             #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
 
             try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
                 # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
-                #OpenVpnClient(watchdog_user_config_path).run()
+                # OpenVpnClient(watchdog_user_config_path).run()
                 print("watchdog disable!")
                 time.sleep(99999)
             except Exception as ex:
@@ -2048,6 +2052,86 @@ class ConfigParameterValueParser:
         return rf"{begin_capture}{begin_mark}(?:[^{unacceptable_symbols}]*(?:{back_slash_escape}|{escape})*)*{end_mark}{end_capture}{RegexConstants.SPACE_SYMBOLS}*$"
 
 
+class NoSection:
+    def __init__(self):
+        print("ttt")
+
+    def get_sections(self, content):
+        return [{"name": "", "index": [(0, len(content)-1)], "content": content}]
+
+
+class SectionWithoutSubsections:
+    def __init__(self):
+        print("ttt")
+
+    def get_sections(self, content):
+        return [{"name": "", "index": [(0, len(content)-1)], "content": content}]
+
+
+    def get_section_name_regex(self):
+        return r"[a-zA-Z_][a-zA-Z_0-9]{0,127}"
+
+
+    # local
+    # WHITESPACE_CHARACTER_SET = "[ \t]"
+    # local
+    # NEWLINE_CHARACTER_SET = "[\n\r]"
+    # local
+    # ONE_OR_MORE_NEW_LINES = "${NEWLINE_CHARACTER_SET}+"
+    # local
+    # ZERO_OR_MORE_NEW_LINES = "${NEWLINE_CHARACTER_SET}*"
+    # local
+    # ONE_OR_MORE_WHITESPACES = "${WHITESPACE_CHARACTER_SET}+"
+    # local
+    # ZERO_OR_MORE_WHITESPACES = "${WHITESPACE_CHARACTER_SET}*"
+    #
+    # local
+    # GROUP_HEADER = "\[${GROUP_NAME}\]${ZERO_OR_MORE_WHITESPACES}"
+    # local
+    # GROUP_HEADER_SEARCH_REGEX = "(?>^${GROUP_HEADER}|${NEWLINE_CHARACTER_SET}${GROUP_HEADER})"
+
+
+class Section:
+    def __init__(self):
+        print("ttt")
+
+    def get_sections(self, content):
+        # Сформировать при помощи регулярки посекционно без разбиения по подсекциям
+        # Разбить по подсекциям
+        return {}
+
+    # https://docs.python.org/3/library/re.html#finding-all-adverbs-and-their-positions
+    #   [
+    #     {
+    #        "name": (String) // Если секции не используются то заполнить пустой строкой, подсекции в таком случае невозможны
+    #        "index":
+    #        [
+    #          {
+    #            "begin": (Int32),
+    #            "end":   (Int32)
+    #          },
+    #          { ... }
+    #        ],
+    #        "content": (String) // Склеенные подстрочки по index
+    #        "subsection": // Может быть пусто
+    #        {
+    #          "name": (String)
+    #          "index":
+    #          [
+    #            {
+    #              "begin": (Int32),
+    #              "end":   (Int32)
+    #            },
+    #            { ... }
+    #          ],
+    #          "content": (String) // Склеенные подстрочки по index
+    #          "subsection": ... // Может быть пусто
+    #        }
+    #     },
+    #     { ... }
+    #   ]
+
+
 class ConfigParser:
     def __init__(self, name_parser=ConfigParameterNameParser(), delimiter_parser=ConfigNameValueDelimiterParser(),
                  value_parser=ConfigParameterValueParser(), from_string=FromString()):
@@ -2097,21 +2181,22 @@ class ConfigParser:
     def __get_regex_template(self, name_template, with_value_capture=True):
         return fr"{name_template}{self.__delimiter_parser.get_regex()}{self.__value_parser.get_regex(with_value_capture)}"
 
+    # ^([a-zA-Z_][\w]*)="([\s\S]*[^\\])"[\t ]*$|^([a-zA-Z_][\w]*)='([\s\S]*[^\\])'[\t ]*$|^([a-zA-Z_][\w]*)=([^"\t ].*)$
+    # ^([a-zA-Z_][\w]*)="([\s\S]*?[^\\])"|^([a-zA-Z_][\w]*)='([\s\S]*?[^\\])'|^([a-zA-Z_][\w]*)=([^"\t ].*)$
+    # ^([a-zA-Z_][\w]*)="((?:[^"]*(?:\\|\\")*)*)"[\t ]*$
+    # str.replace(r"\\", "")
+    # str.replace(r"\\"", "")
+    # str.replace(r"\\r", "")
+    # str.replace(r"\\r\n", "")
+    # str.replace(r"\\n\r", "")
+    # str.replace(r"\\n", "")
 
-# ^([a-zA-Z_][\w]*)="([\s\S]*[^\\])"[\t ]*$|^([a-zA-Z_][\w]*)='([\s\S]*[^\\])'[\t ]*$|^([a-zA-Z_][\w]*)=([^"\t ].*)$
-# ^([a-zA-Z_][\w]*)="([\s\S]*?[^\\])"|^([a-zA-Z_][\w]*)='([\s\S]*?[^\\])'|^([a-zA-Z_][\w]*)=([^"\t ].*)$
-# ^([a-zA-Z_][\w]*)="((?:[^"]*(?:\\|\\")*)*)"[\t ]*$
-# str.replace(r"\\", "")
-# str.replace(r"\\"", "")
-# str.replace(r"\\r", "")
-# str.replace(r"\\r\n", "")
-# str.replace(r"\\n\r", "")
-# str.replace(r"\\n", "")
+    # https://regex101.com/r/Dr9Dyt/1
+    # Проблема https://regex101.com/r/rdVI51/1
+    # https://regex101.com/r/YMUFSJ/1
+    # https://regex101.com/r/3PLIai/1
 
-# https://regex101.com/r/Dr9Dyt/1
-# Проблема https://regex101.com/r/rdVI51/1
-# https://regex101.com/r/YMUFSJ/1
-# https://regex101.com/r/3PLIai/1
+
 class ShellConfig:
     __SPACE_SYMBOLS = "[\t ]"
     __SPACE_SYMBOLS_ZERO_OR_MORE = f"{__SPACE_SYMBOLS}*"
@@ -2175,10 +2260,11 @@ class ShellConfig:
     def __is_integer(self, raw_string_value):
         return raw_string_value.trim().isdigit()
 
+    # https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
+    # https://stackoverflow.com/a/43512141
+    # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
 
-# https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
-# https://stackoverflow.com/a/43512141
-# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
+
 class CurrentOs:
     @staticmethod
     def is_windows(self):
@@ -2258,8 +2344,8 @@ class OsNameAndVersion:
     def compare(self):
         return False
 
+    # Изменить версию win для wine https://forum.winehq.org/viewtopic.php?t=14589
 
-# Изменить версию win для wine https://forum.winehq.org/viewtopic.php?t=14589
 
 class WindowsCommandLineWrapper:
     def get_command_line(self, cmd):
@@ -2270,9 +2356,10 @@ class LinuxCommandLineWrapper:
     def get_command_line(self, cmd):
         return cmd
 
+    # https://stackoverflow.com/questions/26809898/invoke-msys2-shell-from-command-prompt-or-powershell
+    # https://stackoverflow.com/questions/1681208/python-platform-independent-way-to-modify-path-environment-variable
 
-# https://stackoverflow.com/questions/26809898/invoke-msys2-shell-from-command-prompt-or-powershell
-# https://stackoverflow.com/questions/1681208/python-platform-independent-way-to-modify-path-environment-variable
+
 class Msys2CommandLineWrapper:
     MSYS2_DIR_DEFAULT = fr"C:\msys64"
 
@@ -2295,11 +2382,12 @@ class Msys2CommandLineWrapper:
     def __get_msys2_bin_dir(self):
         return fr"{self.__msys2_dir}\usr\bin"
 
+    # wine cmd /C ""notepad" "привет мир \'.txt""
+    # Файлы в win не могут содержать двоичные кавычки в названии
+    # fixme utopia Проверить экранирование одинарной кавычки на винде
+    # fixme utopia Использовать WindowsCommandLineWrapper?
 
-# wine cmd /C ""notepad" "привет мир \'.txt""
-# Файлы в win не могут содержать двоичные кавычки в названии
-# fixme utopia Проверить экранирование одинарной кавычки на винде
-# fixme utopia Использовать WindowsCommandLineWrapper?
+
 class WineCommandLineWrapper:
     WINE = "wine"
 
@@ -2315,8 +2403,8 @@ class CommandLineExecutor:
     def run(self, cmd):
         subprocess.check_call(self.__command_line.get_command_line(cmd), shell=True)
 
+    # https://www.blog.pythonlibrary.org/2010/03/03/finding-installed-software-using-python/
 
-# https://www.blog.pythonlibrary.org/2010/03/03/finding-installed-software-using-python/
 
 class WindowsInstallerInnoSetup:
     def __init__(self):
@@ -2327,12 +2415,13 @@ class WindowsInstallerMsi:
     def __init__(self):
         print("")
 
+    # inherit from interface PaketManagerInstaller
+    # Ubuntu / LinuxMint / Debian / termux
+    # https://stackoverflow.com/questions/57610644/linux-package-management-with-python
+    # https://habr.com/ru/articles/683716/
+    # https://askubuntu.com/a/548087
 
-# inherit from interface PaketManagerInstaller
-# Ubuntu / LinuxMint / Debian / termux
-# https://stackoverflow.com/questions/57610644/linux-package-management-with-python
-# https://habr.com/ru/articles/683716/
-# https://askubuntu.com/a/548087
+
 class AptPackageManagerInstaller:
     def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLineWrapper())):
         self.__package_name = package_name
@@ -2353,22 +2442,25 @@ class AptPackageManagerInstaller:
     def add_ppa(self):
         print("")
 
+    # https://phoenixnap.com/kb/install-rpm-packages-on-ubuntu
 
-# https://phoenixnap.com/kb/install-rpm-packages-on-ubuntu
+
 class RmpForUbuntuPackageManagerInstaller:
     def __init__(self):
         print("")
 
+    # inherit from interface PaketManagerInstallers
+    # CentOs
 
-# inherit from interface PaketManagerInstallers
-# CentOs
+
 class YumPackageManagerInstaller:
     def __init__(self):
         print("")
 
+    # inherit from interface PaketManagerInstallers
+    # ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
 
-# inherit from interface PaketManagerInstallers
-# ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
+
 class PackmanPackageManagerInstaller:
     def __init__(self):
         print("")
@@ -2389,8 +2481,9 @@ class PackmanPackageManagerInstaller:
     def enable_multilib(self):
         print("")
 
+    # fedora / centos / rhel
 
-# fedora / centos / rhel
+
 class DnfPackageManagerInstaller:
     def __init__(self):
         print("")
@@ -2398,15 +2491,17 @@ class DnfPackageManagerInstaller:
     def add_repo(self):
         print("")
 
+    # Если скачивает torrent, то закачивает торрент при помощи transmission
+    # (использовать https://pypi.org/project/python-magic/ для определения типа скачанного файла)
 
-# Если скачивает torrent, то закачивает торрент при помощи transmission
-# (использовать https://pypi.org/project/python-magic/ для определения типа скачанного файла)
+
 class Downloader:
     def __init__(self):
         print("")
 
+    # https://habr.com/ru/articles/658463/
 
-# https://habr.com/ru/articles/658463/
+
 class TransmissionDaemon:
     def __init__(self):
         print("")
@@ -2665,7 +2760,7 @@ def main():
         filename = "gitconfig.txt"
         up = {'document': (filename, open("/home/utopia/.gitconfig", 'rb'), "multipart/form-data")}
         site = "https://api.telegram.org/bot5296572881:AAFkHMbDlDvpWR2mEC3p2q0sb8ycOxbQmnI/sendDocument"
-        request = requests.post(site, files=up, data={ "chat_id": "-687389280" })
+        request = requests.post(site, files=up, data={"chat_id": "-687389280"})
 
         print(request.content)
 
@@ -2686,7 +2781,8 @@ def main():
         # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
         # return
         network_bridge = NetworkBridge(vm_bridge_name, config.get_vm_bridge_ip_address_and_mask(),
-                                       config.get_dns_config_dir(), config.get_or_default_internet_network_interface())
+                                       config.get_dns_config_dir(),
+                                       config.get_or_default_internet_network_interface())
         # network_bridge.create()
         # time.sleep(30)
         # print("network_bridge.close()")

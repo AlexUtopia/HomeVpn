@@ -116,10 +116,6 @@ if is_termux; then
     XFCE4_PACKAGE="xfce4 xfce4-terminal" # https://wiki.termux.com/wiki/Graphical_Environment
 fi
 
-RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
-if is_termux; then
-    RDP_CLIENT_PACKAGE="freerdp"
-fi
 RDP_SERVER_PACKAGE="xrdp"
 
 SSH_SERVER_PACKAGE="openssh-server"
@@ -152,7 +148,7 @@ if is_termux; then      # passwd для настройки доступа к ssh
     PASSWD_PACKAGE="termux-auth"
 fi
 
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_CLIENT_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
+DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
 ### Development packages end
 
 
@@ -1067,7 +1063,12 @@ function pycharm_install() {
 }
 
 function rdp_client_install_default() {
-    package_manager_install_packages "${RDP_CLIENT}" || return $?
+    local RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
+    if is_termux; then
+        RDP_CLIENT_PACKAGE="freerdp"
+    fi
+
+    package_manager_install_packages "${RDP_CLIENT_PACKAGE}" || return $?
     return 0
 }
 
@@ -1094,7 +1095,7 @@ function rdp_client_install() {
     if is_termux; then
         rdp_client_install_default || return $?
     else
-        rdp_client_install_nightly || rdp_client_install_default || return $?
+        rdp_client_install_nightly || rdp_client_install_default || return $? # fixme utopia Чтобы будем делать с Linux ARM?
     fi
 
     # https://interface31.ru/tech_it/2022/09/apt-key-is-deprecated-ili-upravlenie-klyuchami-v-sovremennyh-vypuskah-debian-i-ubunt.html
@@ -1117,7 +1118,7 @@ function wine_install_nightly() {
         OS_DISTRO_NAME=$(get_os_distro_name) || return $?
 
         local NAME="winehq"
-        local PACKAGE_NAME="${NAME}-staging"
+        local PACKAGE_NAME="${NAME}-stable"
         local KEY_FILE_URL="https://dl.winehq.org/wine-builds/winehq.key"
         local URIS="https://dl.winehq.org/wine-builds/${OS_DISTRO_NAME}"
         local SUITES="${OS_DISTRO_VERSION_CODENAME}"
