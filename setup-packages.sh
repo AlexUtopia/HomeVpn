@@ -1048,7 +1048,7 @@ function sshd_setup() {
 }
 
 function pycharm_install() {
-    local PYCHARM="pycharm-community-2023.3.4"
+    local PYCHARM="pycharm-community-2024.1.1"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
     local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
