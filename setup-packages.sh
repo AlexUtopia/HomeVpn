@@ -1030,10 +1030,10 @@ function firewall_accept_udp_traffic_for_port() {
 
 
 
-# fixme utopia Добавим поддержку "X11Forwarding yes" в "$PREFIX/etc/ssh/sshd_config"
+# fixme utopia Добавим поддержку "X11Forwarding yes" в "$PREFIX/etc/ssh/sshd_config" (termux)
 # https://www.reddit.com/r/termux/comments/bd5kz4/x_windows_remote_display/
 function sshd_setup() {
-    local SSHD="sshd"
+    local SSHD="ssh" # https://tokmakov.msk.ru/blog/item/441
 
     service_disable "${SSHD}"
 
@@ -1507,6 +1507,10 @@ function vnc_server_setup() {
 
 # https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
 function openvpn3_setup() {
+    if is_termux; then
+        return 0
+    fi
+
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
         OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
