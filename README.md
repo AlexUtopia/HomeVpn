@@ -107,7 +107,7 @@ PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
 RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
-${RUN_WITH_ADMIN_RIGHTS} apt update && apt -o Dpkg::Options::="--force-confnew" -y upgrade && apt update && apt -y install git &&
+${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -o Dpkg::Options::="--force-confnew" -y && apt update && apt -y install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
@@ -297,7 +297,7 @@ PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS=
 RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV=
-${RUN_WITH_ADMIN_RIGHTS} apt update && apt -o Dpkg::Options::="--force-confnew" -y upgrade && apt update && apt -y install git &&
+${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -o Dpkg::Options::="--force-confnew" -y  && apt update && apt -y install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&

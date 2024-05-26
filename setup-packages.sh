@@ -35,7 +35,7 @@ function is_termux() {
 
 ### Global config begin
 
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="dev" # min, dev, full
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
 
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
@@ -575,7 +575,7 @@ function apt_update_and_upgrade() {
     # https://wiki.ubuntu.com/MultiarchCross
     dpkg --add-architecture i386 || return $? # Для установки wine требуется добавить i386 архитектуру
     apt update || return $?
-    apt -o Dpkg::Options::="--force-confnew" -y upgrade  || return $?
+    apt upgrade -o Dpkg::Options::="--force-confnew" -y || return $?
     apt update || return $?
 
     if is_termux; then
@@ -1505,6 +1505,26 @@ function vnc_server_setup() {
     return 0
 }
 
+# https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
+function openvpn3_setup() {
+    if package_manager_is_apt; then
+        local OS_DISTRO_VERSION_CODENAME=""
+        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
+
+        local PACKAGE_NAME="openvpn3"
+        local KEY_FILE_URL="https://packages.openvpn.net/packages-repo.gpg"
+        local URIS="https://packages.openvpn.net/openvpn3/debian"
+        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
+        local COMPONENTS="main"
+        local ARCHITECTURES="amd64"
+        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+        package_manager_install_packages "${PACKAGE_NAME}" || return $?
+        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run openvpn3"
+        return 0
+    fi
+    return 1
+}
+
 function main_install_min_packages() {
     local PACKAGE_LIST="${1}"
 
@@ -1536,6 +1556,7 @@ function main_install_full_packages() {
 
     pycharm_install || return $?
 #    wine_install || return $?
+    openvpn3_setup || return $?
     return 0
 }
 
