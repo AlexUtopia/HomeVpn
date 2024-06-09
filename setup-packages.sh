@@ -869,26 +869,22 @@ function termux_set_symlinks_to_storage() {
    wait_for_dir_creation "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}" || return $?
 
    local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
-   if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
+   if wait_for_dir_creation "${ANDROID_INTERNAL_STORAGE_DIR_PATH}"; then
        ANDROID_INTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_INTERNAL_STORAGE_DIR_PATH}") || return $?
        if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
            create_symlink "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
        fi
-   else
-       ls -la "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}"
    fi
 
    # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
    # В итоге хотим получить /storage/9C33-6BBD
    local ANDROID_EXTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/external-1"
-   if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
+   if wait_for_dir_creation "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}"; then
        ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
        ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
        if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
            create_symlink "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
        fi
-   else
-       ls -la "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}"
    fi
 
    return 0
