@@ -1099,6 +1099,8 @@ function pycharm_install() {
         return 0
     fi
 
+    make_dirs "${INSTALL_DIRECTORY}" || return $?
+
     download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" || return $?
     return 0
 }
