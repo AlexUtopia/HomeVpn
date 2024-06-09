@@ -5,13 +5,10 @@
 
 # fixme utopia VNC сервер для Windows
 # fixme utopia RDP сервер для Linux / Android/termux
-# fixme utopia VNC сервер / SAMBA / SSH для Android/termux
+# fixme utopia VNC сервер для Android/termux
 # fixme utopia Проверка минимальной версии питона
-# fixme utopia Установка openvpn3 (нужно для работы)
 # fixme utopia Актуальный winetricks устанавливаем из репо https://github.com/Winetricks/winetricks
-# fixme utopia Настройка символических ссылок для папок termux в SAMBA шару (в том числе внешняя SDcard)
-# https://wiki.termux.com/wiki/Internal_and_external_storage
-# https://stackoverflow.com/questions/29789204/bash-how-to-get-real-path-of-a-symlink
+# fixme utopia Установка дополнений гостевой ОС?? требуется ли
 
 # https://unix.stackexchange.com/a/306115
 
@@ -72,6 +69,7 @@ COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, gr
 GPG_PACKAGE="gnupg"
 FINDUTILS_PACKAGE="findutils" # Утилита find
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
+WHITCH_PACKAGE="which"
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -93,7 +91,7 @@ if is_termux; then
     QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
 fi
 
-MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE}"
+MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHITCH_PACKAGE}"
 if is_termux; then
     MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
 fi
@@ -138,9 +136,9 @@ TELNET_CLIENT_PACKAGE="putty" # Для подключения к qemu monitor
 
 SAMBA_PACKAGE="samba"
 
-SYSTEMD_PACKAGE="systemd" # Утилита systemctl
+SERVICES_SUPERVISOR_PACKAGE= # "systemd" # Утилита systemctl
 if is_termux; then
-    SYSTEMD_PACKAGE="termux-services"
+    SERVICES_SUPERVISOR_PACKAGE="termux-services"
 fi
 
 PASSWD_PACKAGE="passwd" # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
@@ -148,7 +146,7 @@ if is_termux; then      # passwd для настройки доступа к ssh
     PASSWD_PACKAGE="termux-auth"
 fi
 
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SYSTEMD_PACKAGE} ${PASSWD_PACKAGE}"
+DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SERVICES_SUPERVISOR_PACKAGE} ${PASSWD_PACKAGE}"
 ### Development packages end
 
 
@@ -258,6 +256,14 @@ function make_dirs() {
     local DIR_PATH="${1}"
 
     mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
+    return 0
+}
+
+function create_symlink() {
+    local SOURCE_PATH="${1}"
+    local TARGET_PATH="${2}"
+
+    ln -sf "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
     return 0
 }
 
@@ -833,6 +839,8 @@ termux-wake-lock
     return 0
 }
 
+# https://wiki.termux.com/wiki/Internal_and_external_storage
+# https://stackoverflow.com/questions/29789204/bash-how-to-get-real-path-of-a-symlink
 function termux_set_symlinks_to_storage() {
    local TARGET_DIRECTORY_PATH="${1}"
    if [[ -z "${TARGET_DIRECTORY_PATH}" ]]; then
@@ -847,7 +855,7 @@ function termux_set_symlinks_to_storage() {
    if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
        ANDROID_INTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_INTERNAL_STORAGE_DIR_PATH}") || return $?
        if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
-           ln -sf "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
+           create_symlink "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
        fi
    fi
 
@@ -860,7 +868,7 @@ function termux_set_symlinks_to_storage() {
        ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
        ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
        if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
-           ln -sf "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
+           create_symlink "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
        fi
    fi
 
@@ -953,6 +961,35 @@ function runit_service_disable() {
     return 0
 }
 
+# https://wiki.termux.com/wiki/Termux-services
+function runit_create_log_run_file() {
+    local SERVICE_NAME="${1}"
+
+    local RUN_FILE_DIRECTOR_PATH="${SVDIR}/${SERVICE_NAME}/log"
+    local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
+
+    make_dirs "${RUN_FILE_DIRECTOR_PATH}"
+
+    create_symlink "${PREFIX}/share/termux-services/svlogger" "${RUN_FILE_PATH}" || return $?
+    return 0
+}
+
+function runit_create_run_file() {
+    local SERVICE_NAME="${1}"
+    local RUN_FILE_CONTENT="${2}"
+
+    local RUN_FILE_DIRECTOR_PATH="${SVDIR}/${SERVICE_NAME}"
+    local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
+
+    make_dirs "${RUN_FILE_DIRECTOR_PATH}"
+
+    create_file "${RUN_FILE_CONTENT}" "${RUN_FILE_PATH}" || return $?
+    chmod +x "${RUN_FILE_PATH}"
+
+    runit_create_log_run_file "${SERVICE_NAME}"
+    return 0
+}
+
 function service_init() {
     if is_termux; then
         runit_init || return $?
@@ -1034,6 +1071,10 @@ function firewall_accept_udp_traffic_for_port() {
 # https://www.reddit.com/r/termux/comments/bd5kz4/x_windows_remote_display/
 function sshd_setup() {
     local SSHD="ssh" # https://tokmakov.msk.ru/blog/item/441
+
+    if is_termux; then
+        SSHD="sshd"
+    fi
 
     service_disable "${SSHD}"
 
@@ -1209,6 +1250,11 @@ function smbd_make_config() {
     local SMBD_CONFIG_FILE_PATH
     SMBD_CONFIG_FILE_PATH=$(smbd_get_config_file_path) || return $?
 
+    # fixme utopia Задать обнаружение NetBios
+    # https://www.linux.org.ru/forum/admin/13225419
+    # https://en.wikipedia.org/wiki/NetBIOS#NetBIOS_name
+    # getprop ro.product.model
+    # getprop ro.product.manufacturer
 
     # https://learn.microsoft.com/en-us/answers/questions/1280211/symbolic-links-created-by-linux-are-not-displayed
     # fixme utopia Переписать?
@@ -1240,6 +1286,14 @@ function smbd_setup() {
     local SMBD="smbd"
 
     service_disable "${SMBD}"
+
+    if is_termux; then
+        local SMBD_EXECUTABLE_PATH=""
+        SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
+
+        runit_create_run_file "${SMBD}" "#!${SHELL}
+exec ${SMBD_EXECUTABLE_PATH} -F -d3 2>&1" || return $?
+    fi
 
     # make_samba_user_and_assign_rights || return $?
     samba_make_public_directory || return $?

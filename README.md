@@ -283,10 +283,19 @@ fixme utopia Оформить в виде таблицы со скринами
 
 Для работы со службами используется [`runit`](https://wiki.termux.com/wiki/Termux-services).  
 Подробное руководство по runit с [официального сайта](https://smarden.org/runit/).
+Руководство по runit для [Gentoo Linux](https://wiki.gentoo.org/wiki/Runit) и [Void Linux](https://docs.voidlinux.org/config/services/index.html).
 
-https://wiki.gentoo.org/wiki/Runit
+Например, логи sshd можно посмотреть так (sshd, заменить на интересующий демон)
 
-https://docs.voidlinux.org/config/services/index.html
+```bash
+
+cat "$PREFIX/var/log/sv/sshd/current"
+
+```
+
+Конфигурация запуска службы находится в директории `$SVDIR`, главный запускающий скрипт называется run.
+
+
 
 ```bash
 
