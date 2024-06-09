@@ -41,7 +41,7 @@ fi
 
 GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
 
-GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/share"
+GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
     GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
@@ -1295,6 +1295,8 @@ function smbd_setup() {
 
         runit_create_run_file "${SMBD}" "#!${SHELL}
 exec ${SMBD_EXECUTABLE_PATH} -F -d3 2>&1" || return $?
+
+        termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
 
     # make_samba_user_and_assign_rights || return $?
@@ -1305,10 +1307,6 @@ exec ${SMBD_EXECUTABLE_PATH} -F -d3 2>&1" || return $?
 
     if ! is_service_active "${SMBD}"; then
         echo "FATAL: ${SMBD} not started"
-    fi
-
-    if is_termux; then
-        termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
 
     # https://www.samba.org/~tpot/articles/firewall.html
