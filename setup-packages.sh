@@ -951,7 +951,7 @@ function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
     sv-enable "${SERVICE_NAME}" > "/dev/null"
-    if $?; then
+    if ! check_result_code $?; then
         sleep 3
         sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
     fi
