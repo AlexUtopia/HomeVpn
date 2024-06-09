@@ -849,6 +849,8 @@ function termux_set_symlinks_to_storage() {
 
    termux-setup-storage || return $? # Вылезет запрос доступа к накопителю (Android)
 
+   # fixme utopia Ждать пока пользователь разрешит или НЕ разрешит, ждём 10 секунд
+
    local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_directory_path)/storage"
 
    local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
@@ -950,10 +952,10 @@ function runit_init() {
 function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
-    sv-enable "${SERVICE_NAME}" > "/dev/null"
+    sv-enable "${SERVICE_NAME}" #> "/dev/null"
     if ! check_result_code $?; then
         sleep 3
-        sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
+        sv-enable "${SERVICE_NAME}" || return $?
     fi
     return 0
 }
@@ -1298,7 +1300,7 @@ function smbd_setup() {
         SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
 
         runit_create_run_file "${SMBD}" "#!${SHELL}
-exec ${SMBD_EXECUTABLE_PATH} -F -d3 2>&1" || return $?
+exec ${SMBD_EXECUTABLE_PATH} -i -d3 2>&1" || return $?
 
         termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
