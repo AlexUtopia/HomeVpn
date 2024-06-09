@@ -929,7 +929,7 @@ function runit_is_service_active() {
 
     # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
     local SERVICE_STATUS=""
-    SERVICE_STATUS=$(sv status "${SERVICE_NAME}" 2> "/dev/null") || return $?
+    SERVICE_STATUS=$(sv -w 5 status "${SERVICE_NAME}" 2> "/dev/null") || return $?
 
     if [[ "${SERVICE_STATUS,,}" == "run: "* ]]; then # https://stackoverflow.com/a/229606
         return 0
@@ -1308,6 +1308,10 @@ function smbd_setup() {
 
     service_disable "${SMBD}"
 
+    # make_samba_user_and_assign_rights || return $?
+    samba_make_public_directory || return $?
+    smbd_make_config || return $?
+
     if is_termux; then
         local SMBD_EXECUTABLE_PATH=""
         SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
@@ -1317,10 +1321,6 @@ exec ${SMBD_EXECUTABLE_PATH} -i -d3 2>&1" || return $?
 
         termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
-
-    # make_samba_user_and_assign_rights || return $?
-    samba_make_public_directory || return $?
-    smbd_make_config || return $?
 
     service_enable "${SMBD}" || return $?
 
