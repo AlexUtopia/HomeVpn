@@ -950,7 +950,11 @@ function runit_init() {
 function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
-    sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
+    sv-enable "${SERVICE_NAME}" > "/dev/null"
+    if $?; then
+        sleep 3
+        sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
+    fi
     return 0
 }
 

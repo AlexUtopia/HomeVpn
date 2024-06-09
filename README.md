@@ -82,7 +82,7 @@ fixme utopia Описать wine
 | GLOBAL_CONFIG_SETUP_PACKAGES_MODE         | Режим установки пакетов                             | `min`<br>`dev`<br>`full`    | `full` по умолчанию<br>см. таблицу 1.1                                                                                                   |
 | GLOBAL_CONFIG_ROOT_PREFIX                 | Корень файловой системы                             |                             | `/` по умолчанию<br>для Android/termux используется значение переменной окружения `PREFIX`                                               |
 | GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh                                                     |
-| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/share` по умолчанию                                                                                        |
+| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public` по умолчанию                                                                             |
 | GLOBAL_CONFIG_SMBD_TCP_PORTS              | TCP порты которые "слушает" SAMBA сервер            |                             | `139 445` по умолчанию<br>для Android/termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
 
 
