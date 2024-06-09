@@ -874,6 +874,8 @@ function termux_set_symlinks_to_storage() {
        if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
            create_symlink "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
        fi
+   else
+       ls -la "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}"
    fi
 
    # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
@@ -885,6 +887,8 @@ function termux_set_symlinks_to_storage() {
        if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
            create_symlink "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
        fi
+   else
+       ls -la "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}"
    fi
 
    return 0
