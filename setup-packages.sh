@@ -32,7 +32,7 @@ function is_termux() {
 
 ### Global config begin
 
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="dev" # min, dev, full
 
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
@@ -1605,7 +1605,7 @@ function main_install_dev_packages() {
     rdp_client_install || return $?
     sshd_setup || return $?
 #    vnc_server_setup || return $?
-#    smbd_setup || return $?
+    smbd_setup || return $?
     return 0
 }
 
