@@ -259,6 +259,22 @@ function make_dirs() {
     return 0
 }
 
+function wait_for_dir_creation() {
+   local TARGET_DIR_PATH="${1}"
+   local WAIT_SECONDS_COUNT=${2}
+   if [[ -z "${WAIT_SECONDS_COUNT}" ]]; then
+        WAIT_SECONDS_COUNT=10
+    fi
+
+   for (( i = 0; i < WAIT_SECONDS_COUNT; i++ )); do
+       if [[ -d "${TARGET_DIR_PATH}" ]]; then
+           return 0
+       fi
+       sleep 1
+   done
+   return 1
+}
+
 function create_symlink() {
     local SOURCE_PATH="${1}"
     local TARGET_PATH="${2}"
@@ -817,8 +833,7 @@ function pip_update() {
 }
 
 function pip_install_packages() {
-    for pip_package in ${1}
-    do
+    for pip_package in ${1}; do
         pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
     done
     return 0
@@ -847,11 +862,11 @@ function termux_set_symlinks_to_storage() {
        TARGET_DIRECTORY_PATH="."
    fi
 
-   termux-setup-storage || return $? # Вылезет запрос доступа к накопителю (Android)
-
-   # fixme utopia Ждать пока пользователь разрешит или НЕ разрешит, ждём 10 секунд
-
+   # Вылезет запрос доступа к накопителю (Android).
+   # Как только будет получено разрешение, в домашней директории появится директория storage
+   termux-setup-storage || return $?
    local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_directory_path)/storage"
+   wait_for_dir_creation "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}" || return $?
 
    local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
    if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
@@ -860,8 +875,6 @@ function termux_set_symlinks_to_storage() {
            create_symlink "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
        fi
    fi
-
-   # fixme utopia Проверить на смартфоне и планшете
 
    # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
    # В итоге хотим получить /storage/9C33-6BBD
@@ -952,10 +965,10 @@ function runit_init() {
 function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
-    sv-enable "${SERVICE_NAME}" #> "/dev/null"
+    sv-enable "${SERVICE_NAME}" > "/dev/null"
     if ! check_result_code $?; then
-        sleep 3
-        sv-enable "${SERVICE_NAME}" || return $?
+        sleep 5
+        sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
     fi
     return 0
 }
@@ -974,7 +987,7 @@ function runit_create_log_run_file() {
     local RUN_FILE_DIRECTOR_PATH="${SVDIR}/${SERVICE_NAME}/log"
     local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
 
-    make_dirs "${RUN_FILE_DIRECTOR_PATH}"
+    make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
 
     create_symlink "${PREFIX}/share/termux-services/svlogger" "${RUN_FILE_PATH}" || return $?
     return 0
@@ -987,12 +1000,12 @@ function runit_create_run_file() {
     local RUN_FILE_DIRECTOR_PATH="${SVDIR}/${SERVICE_NAME}"
     local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
 
-    make_dirs "${RUN_FILE_DIRECTOR_PATH}"
+    make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
 
     create_file "${RUN_FILE_CONTENT}" "${RUN_FILE_PATH}" || return $?
-    chmod +x "${RUN_FILE_PATH}"
+    chmod +x "${RUN_FILE_PATH}" || return $?
 
-    runit_create_log_run_file "${SERVICE_NAME}"
+    runit_create_log_run_file "${SERVICE_NAME}" || return $?
     return 0
 }
 
@@ -1329,11 +1342,9 @@ function desktop_environment_get_desktop_file_path() {
     local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=()
     get_directory_files DESKTOP_ENVIRONMENT_FILE_PATH_LIST "${DESKTOP_ENVIRONMENT_DIR_PATH}" || return $?
 
-    for ((i=0; i<=${#DESKTOP_ENVIRONMENT_FILE_PATH_LIST[@]}; i++));
-    do
+    for ((i=0; i<=${#DESKTOP_ENVIRONMENT_FILE_PATH_LIST[@]}; i++)); do
         DESKTOP_ENVIRONMENT_FILE_PATH="${DESKTOP_ENVIRONMENT_FILE_PATH_LIST[i]}"
-        for DESKTOP_ENVIRONMENT in ${DESKTOP_ENVIRONMENT_PRIORITY_LIST}
-        do
+        for DESKTOP_ENVIRONMENT in ${DESKTOP_ENVIRONMENT_PRIORITY_LIST}; do
             if [[ "${DESKTOP_ENVIRONMENT_FILE_PATH}" == *"${DESKTOP_ENVIRONMENT}.desktop" ]]; then
                echo "${DESKTOP_ENVIRONMENT_FILE_PATH}"
                return 0
@@ -1418,7 +1429,7 @@ autocutsel -fork
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
-    chmod +x "${XSTARTUP_FILE_PATH}"
+    chmod +x "${XSTARTUP_FILE_PATH}" || return $?
     return 0
 }
 
@@ -1454,8 +1465,7 @@ function vnc_server_get_config_info() {
     get_directory_files SYSTEMD_CONFIG_FILE_PATH_LIST "${SYSTEMD_CONFIG_DIR_PATH}" "${VNCD_BASENAME}@*.service" || return $?
 
     local DISPLAY_NUMBER="0"
-    for ((i=0; i<=${#SYSTEMD_CONFIG_FILE_PATH_LIST[@]}; i++));
-    do
+    for ((i=0; i<=${#SYSTEMD_CONFIG_FILE_PATH_LIST[@]}; i++)); do
         local SYSTEMD_CONFIG_FILE_PATH="${SYSTEMD_CONFIG_FILE_PATH_LIST[i]}"
 
         if [[ "${SYSTEMD_CONFIG_FILE_PATH}" =~ ${VNCD_SYSTEMD_INSTANCE_NAME_REGEX} ]]; then
