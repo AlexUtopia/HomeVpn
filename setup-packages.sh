@@ -7,7 +7,6 @@
 # fixme utopia RDP сервер для Linux / Android/termux
 # fixme utopia VNC сервер для Android/termux
 # fixme utopia Проверка минимальной версии питона
-# fixme utopia Актуальный winetricks устанавливаем из репо https://github.com/Winetricks/winetricks
 # fixme utopia Установка дополнений гостевой ОС?? требуется ли
 
 # https://unix.stackexchange.com/a/306115
@@ -60,6 +59,9 @@ TERMUX_SPECIFIC_PACKAGES="termux-tools termux-api proot"
 ### Minimal packages begin
 
 OPEN_VPN_PACKAGE="openvpn"
+if is_termux; then
+    OPEN_VPN_PACKAGE=""
+fi
 WGET_PACKAGE="wget"
 TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
@@ -69,7 +71,8 @@ COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, gr
 GPG_PACKAGE="gnupg"
 FINDUTILS_PACKAGE="findutils" # Утилита find
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
-WHITCH_PACKAGE="which"
+WHICH_PACKAGE="which"
+MAKE_PACKAGE="make"
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
@@ -91,7 +94,7 @@ if is_termux; then
     QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
 fi
 
-MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHITCH_PACKAGE}"
+MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
 if is_termux; then
     MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
 fi
@@ -1165,8 +1168,24 @@ function rdp_client_install() {
     return 0
 }
 
+function winetricks_install_default() {
+   local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/releases/latest"
+   local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/winetricks"
+
+   rm -rf "${INSTALL_DIRECTORY}" || return $?
+   make_dirs "${INSTALL_DIRECTORY}" || return $?
+
+   download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" --strip-components=1 || return $?
+   make -C "${INSTALL_DIRECTORY}" install || return $?
+   return 0
+}
+
 function wine_install_default() {
-    package_manager_install_packages "wine winetricks" || return $?
+    if is_termux; then
+        package_manager_install_packages "wine-stable" || return $?
+    fi
+
+    package_manager_install_packages "wine" || return $?
     return 0
 }
 
@@ -1187,7 +1206,7 @@ function wine_install_nightly() {
         local COMPONENTS="main"
         local ARCHITECTURES="amd64 i386"
         apt_add_sources "${NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
-        package_manager_install_packages "--install-recommends ${PACKAGE_NAME} winetricks" || return $?
+        package_manager_install_packages "--install-recommends ${PACKAGE_NAME}" || return $?
         echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\""
         return 0
     fi
@@ -1208,11 +1227,14 @@ function wine_install() {
         # fixme utopia Запуск из под box86/box64
         # fixme utopia Запуск ARM программ под ARM/wine?
         # https://github.com/termux/termux-packages/blob/master/x11-packages/wine-stable/build.sh
+        wine_install_default || return $?
         return 0
     else
         wine_install_32bit_dependencies || return $?
         wine_install_nightly || wine_install_default || return $?
     fi
+
+    winetricks_install_default || return $?
 
     # fixme utopia Install Mono and Gecko automatically
     # откуда версию Mono то взять? Курить внимательно appwiz.cpl
@@ -1629,7 +1651,7 @@ function main_install_full_packages() {
     main_install_dev_packages "${PACKAGE_LIST}" || return $?
 
     pycharm_install || return $?
-#    wine_install || return $?
+    wine_install || return $?
     openvpn3_setup || return $?
     return 0
 }
