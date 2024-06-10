@@ -1239,7 +1239,6 @@ function wine_install() {
         # fixme utopia Запуск ARM программ под ARM/wine?
         # https://github.com/termux/termux-packages/blob/master/x11-packages/wine-stable/build.sh
         wine_install_default || return $?
-        return 0
     else
         wine_install_32bit_dependencies || return $?
         wine_install_nightly || wine_install_default || return $?
