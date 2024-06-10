@@ -31,11 +31,21 @@ function is_termux() {
 
 ### Global config begin
 
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="dev" # min, dev, full
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
 
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
-    GLOBAL_CONFIG_ROOT_PREFIX="${PREFIX}"
+    GLOBAL_CONFIG_ROOT_PREFIX="${PREFIX}/.."
+fi
+
+GLOBAL_CONFIG_USR_PREFIX="/usr"
+if is_termux; then
+    GLOBAL_CONFIG_USR_PREFIX="${PREFIX}"
+fi
+
+GLOBAL_CONFIG_ETC_PREFIX="/etc"
+if is_termux; then
+    GLOBAL_CONFIG_ETC_PREFIX="${GLOBAL_CONFIG_USR_PREFIX}/etc"
 fi
 
 GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
@@ -227,7 +237,7 @@ function is_cygwin() {
 }
 
 function get_os_distro_name() {
-   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/os-release"
+   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/os-release"
 
    . "${OS_RELEASE_PATH}" || return $?
 
@@ -241,7 +251,7 @@ function get_os_distro_name() {
 }
 
 function get_os_distro_codename_or_version() {
-   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/os-release"
+   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/os-release"
 
    . "${OS_RELEASE_PATH}" || return $?
 
@@ -668,7 +678,7 @@ ${SIGNED_BY_PATH}" "${SOURCES_FILE_PATH}" || return $?
 
 
 function apt_get_key_file_path() {
-   local KEYRINGS_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/apt/keyrings"
+   local KEYRINGS_DIR_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/apt/keyrings"
 
    local NAME="${1}"
 
@@ -677,7 +687,7 @@ function apt_get_key_file_path() {
 }
 
 function apt_get_source_file_path() {
-   local APT_SOURCES_LIST_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/apt/sources.list.d"
+   local APT_SOURCES_LIST_DIR_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/apt/sources.list.d"
 
    local NAME="${1}"
 
@@ -852,7 +862,7 @@ function termux_autorun_serves_at_boot() {
 
     create_file "#!${SHELL}
 termux-wake-lock
-. \"${PREFIX}/etc/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
+. \"${GLOBAL_CONFIG_ETC_PREFIX}/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
     chmod +x "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
     return 0
 }
@@ -1169,14 +1179,14 @@ function rdp_client_install() {
 }
 
 function winetricks_install_default() {
-   local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/releases/latest"
+   local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20240105.tar.gz"
    local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/winetricks"
 
    rm -rf "${INSTALL_DIRECTORY}" || return $?
    make_dirs "${INSTALL_DIRECTORY}" || return $?
 
    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" --strip-components=1 || return $?
-   make -C "${INSTALL_DIRECTORY}" install || return $?
+   make -C "${INSTALL_DIRECTORY}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
    return 0
 }
 
@@ -1359,7 +1369,7 @@ exec ${SMBD_EXECUTABLE_PATH} -i -d3 2>&1" || return $?
 
 function desktop_environment_get_desktop_file_path() {
     local DESKTOP_ENVIRONMENT_PRIORITY_LIST="xfce cinnamon"
-    local DESKTOP_ENVIRONMENT_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/usr/share/xsessions"
+    local DESKTOP_ENVIRONMENT_DIR_PATH="${GLOBAL_CONFIG_USR_PREFIX}/share/xsessions"
 
     local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=()
     get_directory_files DESKTOP_ENVIRONMENT_FILE_PATH_LIST "${DESKTOP_ENVIRONMENT_DIR_PATH}" || return $?
@@ -1467,7 +1477,7 @@ function vnc_server_get_config_info() {
     local -n RESULT_REF=${1}
     local VNC_USER="${2}"
 
-    local SYSTEMD_CONFIG_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/etc/systemd/system"
+    local SYSTEMD_CONFIG_DIR_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/systemd/system"
     local VNCD_BASENAME="vncd"
     local VNCD_SYSTEMD_INSTANCE_NAME_REGEX="${VNCD_BASENAME}@(.+)-([0-9]+).service$"
 
