@@ -31,7 +31,7 @@ function is_termux() {
 
 ### Global config begin
 
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="dev" # min, dev, full
 
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
@@ -50,7 +50,7 @@ fi
 
 GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
 
-GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
+GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_USR_PREFIX}/smb_share_public" # fixme utopia Временно /usr
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
     GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
@@ -965,7 +965,7 @@ function runit_init() {
                                      # который устанавливает требуемые переменные окружения. Перезагрузим (команда exec) bash с полной
                                      # инициализацией и запустим текущий скрипт заново
             echo "RESTART BASH"
-            exec ${SHELL} --login -c "${0}"
+            exec ${SHELL} --login -c "${0}" # fixme utopia Надо расследовать циклические перезагрузки скрипта на Android/termux
             # После exec ${SHELL} управление не возвращается
             echo "NEVER"
         fi
@@ -1349,7 +1349,7 @@ function smbd_setup() {
         SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
 
         runit_create_run_file "${SMBD}" "#!${SHELL}
-exec ${SMBD_EXECUTABLE_PATH} -i -d3 2>&1" || return $?
+exec ${SMBD_EXECUTABLE_PATH} -i -d4 2>&1" || return $?
 
         termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
