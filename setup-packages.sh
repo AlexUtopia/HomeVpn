@@ -31,7 +31,7 @@ function is_termux() {
 
 ### Global config begin
 
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="dev" # min, dev, full
+GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
 
 GLOBAL_CONFIG_ROOT_PREFIX=""
 if is_termux; then
@@ -1349,7 +1349,7 @@ function smbd_setup() {
         SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
 
         runit_create_run_file "${SMBD}" "#!${SHELL}
-exec ${SMBD_EXECUTABLE_PATH} -i -d4 2>&1" || return $?
+exec ${SMBD_EXECUTABLE_PATH} --foreground --no-process-group --debug-stdout --debuglevel=3 2>&1" || return $?
 
         termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
