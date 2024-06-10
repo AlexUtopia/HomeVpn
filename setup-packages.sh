@@ -1193,6 +1193,7 @@ function winetricks_install_default() {
 function wine_install_default() {
     if is_termux; then
         package_manager_install_packages "wine-stable" || return $?
+        return 0
     fi
 
     package_manager_install_packages "wine" || return $?
