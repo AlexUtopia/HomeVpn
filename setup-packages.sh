@@ -370,14 +370,20 @@ function prepare_for_create_file() {
 }
 
 function create_file() {
-   local CONTENT="${1}"
-   local FILE_PATH="${2}"
-   local REWRITE_IF_EXIST="${3}"
+    local CONTENT="${1}"
+    local FILE_PATH="${2}"
+    local REWRITE_IF_EXIST="${3}"
 
-   prepare_for_create_file "${FILE_PATH}" "${REWRITE_IF_EXIST}" || return $?
+    prepare_for_create_file "${FILE_PATH}" "${REWRITE_IF_EXIST}" || return $?
 
-   ${SHELL} -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
-   return 0
+    ${SHELL} -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
+    return 0
+}
+
+function set_file_as_executable() {
+    local FILE_PATH="${1}"
+    chmod +x "${FILE_PATH}" > "/dev/null" || return $?
+    return 0
 }
 
 ### Misc API end
@@ -868,7 +874,7 @@ function termux_autorun_serves_at_boot() {
     create_file "#!${SHELL}
 termux-wake-lock
 . \"${GLOBAL_CONFIG_ETC_PREFIX}/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
-    chmod +x "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
+    set_file_as_executable "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
     return 0
 }
 
@@ -1034,11 +1040,11 @@ function runit_create_run_file() {
     make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
 
     create_file "${RUN_FILE_CONTENT}" "${RUN_FILE_PATH}" || return $?
-    chmod +x "${RUN_FILE_PATH}" || return $?
+    set_file_as_executable "${RUN_FILE_PATH}" || return $?
 
     if [[ -n "${FINISH_FILE_CONTENT}" ]]; then
         create_file "${FINISH_FILE_CONTENT}" "${FINISH_FILE_PATH}" || return $?
-        chmod +x "${FINISH_FILE_PATH}" || return $?
+        set_file_as_executable "${FINISH_FILE_PATH}" || return $?
     fi
 
     runit_create_log_run_file "${SERVICE_NAME}" || return $?
@@ -1486,7 +1492,7 @@ autocutsel -fork
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
-    chmod +x "${XSTARTUP_FILE_PATH}" || return $?
+    set_file_as_executable "${XSTARTUP_FILE_PATH}" || return $?
     return 0
 }
 
