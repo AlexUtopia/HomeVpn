@@ -8,6 +8,7 @@
 # fixme utopia VNC сервер для Android/termux
 # fixme utopia Проверка минимальной версии питона
 # fixme utopia Установка дополнений гостевой ОС?? требуется ли
+# fixme utopia Настройка nmbd
 
 # https://unix.stackexchange.com/a/306115
 
@@ -18,7 +19,7 @@ set -x # Раскомментировать для отладки
 # sudo: tsu / sudo
 # https://github.com/termux/termux-tools/blob/master/scripts/su.in
 function is_admin_rights_available() {
-
+    su --version || return $?
     return 0
 }
 
@@ -77,7 +78,7 @@ TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id
+COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id, sort
 GPG_PACKAGE="gnupg"
 FINDUTILS_PACKAGE="findutils" # Утилита find
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
@@ -307,21 +308,25 @@ function check_result_code() {
 # https://www.gnu.org/software/bash/manual/html_node/The-Shopt-Builtin.html
 # https://unix.stackexchange.com/questions/34325/sorting-the-output-of-find-print0-by-piping-to-the-sort-command
 # https://stackoverflow.com/a/69375372
-function get_directory_files() {
+function get_directory_paths() {
     local -n RESULT_REF=${1}
     local DIR_PATH="${2}"
-    local FILE_NAME_WILDCARDS="${3}"
-    if [[ -z "${FILE_NAME_WILDCARDS}" ]]; then
-        FILE_NAME_WILDCARDS="*"
+    local TYPE="${3}"
+    if [[ -z "${TYPE}" ]]; then
+        TYPE="f"
+    fi
+    local PATH_WILDCARDS="${4}"
+    if [[ -z "${PATH_WILDCARDS}" ]]; then
+        PATH_WILDCARDS="*"
     fi
 
     local MAXDEPTH=1
     local NULL_SYMBOL=$'\0'
 
     while IFS= read -r -d "${NULL_SYMBOL}" FILE_PATH; do
-        echo "${FILE_PATH}"
+        # echo "${FILE_PATH}" fixme utopia del?
         RESULT_REF+=("${FILE_PATH}")
-    done < <(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${FILE_NAME_WILDCARDS}" -type f -print0 | sort -z -V)
+    done < <(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${PATH_WILDCARDS}" -type "${TYPE}" -print0 | sort -z -V)
     return 0
 }
 
@@ -344,7 +349,7 @@ function deactivate_file_if_exists() {
         FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
 
         local DEACTIVATE_FILE_PATH="${FILE_DIR_PATH}/unused_since_${CURRENT_DATE_TIME}_${FILE_NAME}"
-        echo "File exist (${FILE_PATH}), rename to ${DEACTIVATE_FILE_PATH}"
+        echo "File exist (\"${FILE_PATH}\"), rename to \"${DEACTIVATE_FILE_PATH}\""
         mv "${FILE_PATH}" "${DEACTIVATE_FILE_PATH}" || return $?
     fi
 }
@@ -454,7 +459,7 @@ function user_add_to_group() {
     local GROUP_NAME="${2}"
 
     usermod -a -G "${GROUP_NAME}" "${USER_NAME}" > "/dev/null" || return $?
-    return $?
+    return 0
 }
 
 function user_is_added_to_group() {
@@ -907,6 +912,11 @@ function termux_set_symlinks_to_storage() {
 
 ### System services begin
 
+function systemd_get_base_dir_path() {
+   echo "${GLOBAL_CONFIG_ETC_PREFIX}/systemd/system"
+   return 0
+}
+
 function systemd_init() {
     return 0
 }
@@ -950,6 +960,12 @@ function runit_is_service_active() {
     return 1
 }
 
+
+function runit_get_base_dir_path() {
+    echo "${SVDIR}"
+    return 0
+}
+
 # https://wiki.termux.com/wiki/Termux-services
 # https://smarden.org/runit/
 # https://wiki.termux.com/wiki/Termux:Boot
@@ -961,7 +977,7 @@ function runit_init() {
         # https://github.com/termux/termux-services/tree/master
         # "Restart your shell so that the service-daemon is started"
 
-        if [[ -z "${SVDIR}" ]]; then # После установки пакета termux-services в /etc/profile.d/ добавляется скрипт start-services.sh
+        if [[ -z "$(runit_get_base_dir_path)" ]]; then # После установки пакета termux-services в /etc/profile.d/ добавляется скрипт start-services.sh
                                      # который устанавливает требуемые переменные окружения. Перезагрузим (команда exec) bash с полной
                                      # инициализацией и запустим текущий скрипт заново
             echo "RESTART BASH"
@@ -997,7 +1013,7 @@ function runit_service_disable() {
 function runit_create_log_run_file() {
     local SERVICE_NAME="${1}"
 
-    local RUN_FILE_DIRECTOR_PATH="${SVDIR}/${SERVICE_NAME}/log"
+    local RUN_FILE_DIRECTOR_PATH="$(runit_get_base_dir_path)/${SERVICE_NAME}/log"
     local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
 
     make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
@@ -1009,14 +1025,21 @@ function runit_create_log_run_file() {
 function runit_create_run_file() {
     local SERVICE_NAME="${1}"
     local RUN_FILE_CONTENT="${2}"
+    local FINISH_FILE_CONTENT="${3}"
 
-    local RUN_FILE_DIRECTOR_PATH="${SVDIR}/${SERVICE_NAME}"
+    local RUN_FILE_DIRECTOR_PATH="$(runit_get_base_dir_path)/${SERVICE_NAME}"
     local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
+    local FINISH_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/finish"
 
     make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
 
     create_file "${RUN_FILE_CONTENT}" "${RUN_FILE_PATH}" || return $?
     chmod +x "${RUN_FILE_PATH}" || return $?
+
+    if [[ -n "${FINISH_FILE_CONTENT}" ]]; then
+        create_file "${FINISH_FILE_CONTENT}" "${FINISH_FILE_PATH}" || return $?
+        chmod +x "${FINISH_FILE_PATH}" || return $?
+    fi
 
     runit_create_log_run_file "${SERVICE_NAME}" || return $?
     return 0
@@ -1348,8 +1371,10 @@ function smbd_setup() {
         local SMBD_EXECUTABLE_PATH=""
         SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
 
-        runit_create_run_file "${SMBD}" "#!${SHELL}
-exec ${SMBD_EXECUTABLE_PATH} --foreground --no-process-group --debug-stdout --debuglevel=3 2>&1" || return $?
+        runit_create_run_file "${SMBD}" \
+"#!${SHELL}
+exec ${SMBD_EXECUTABLE_PATH} --foreground --no-process-group --debug-stdout --debuglevel=3 2>&1 || exit $?
+exit 0" || return $?
 
         termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
     fi
@@ -1372,7 +1397,7 @@ function desktop_environment_get_desktop_file_path() {
     local DESKTOP_ENVIRONMENT_DIR_PATH="${GLOBAL_CONFIG_USR_PREFIX}/share/xsessions"
 
     local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=()
-    get_directory_files DESKTOP_ENVIRONMENT_FILE_PATH_LIST "${DESKTOP_ENVIRONMENT_DIR_PATH}" || return $?
+    get_directory_paths DESKTOP_ENVIRONMENT_FILE_PATH_LIST "${DESKTOP_ENVIRONMENT_DIR_PATH}" || return $?
 
     for ((i=0; i<=${#DESKTOP_ENVIRONMENT_FILE_PATH_LIST[@]}; i++)); do
         DESKTOP_ENVIRONMENT_FILE_PATH="${DESKTOP_ENVIRONMENT_FILE_PATH_LIST[i]}"
@@ -1477,9 +1502,18 @@ function vnc_server_get_config_info() {
     local -n RESULT_REF=${1}
     local VNC_USER="${2}"
 
-    local SYSTEMD_CONFIG_DIR_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/systemd/system"
+    local INIT_SYSTEM_BASE_DIR_PATH=""
+    local INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE=""
+    if is_termux; then
+        INIT_SYSTEM_BASE_DIR_PATH="$(runit_get_base_dir_path)"
+        INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE="d"
+    else
+        INIT_SYSTEM_BASE_DIR_PATH="$(systemd_get_base_dir_path)"
+        INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE="f"
+    fi
+
     local VNCD_BASENAME="vncd"
-    local VNCD_SYSTEMD_INSTANCE_NAME_REGEX="${VNCD_BASENAME}@(.+)-([0-9]+).service$"
+    local VNCD_INSTANCE_NAME_REGEX="${VNCD_BASENAME}@(.+)-([0-9]+).service$"
 
     local VNC_USER_HOME_DIRECTORY_PATH=""
     VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path "${VNC_USER}") || return $?
@@ -1493,36 +1527,35 @@ function vnc_server_get_config_info() {
     RESULT_REF["USER_HOME_DIRECTORY_PATH"]="${VNC_USER_HOME_DIRECTORY_PATH}"
     RESULT_REF["XSTARTUP_FILE_PATH"]="${VNC_XSTARTUP_FILE_PATH}"
 
-    local SYSTEMD_CONFIG_FILE_PATH_LIST=()
-    get_directory_files SYSTEMD_CONFIG_FILE_PATH_LIST "${SYSTEMD_CONFIG_DIR_PATH}" "${VNCD_BASENAME}@*.service" || return $?
+    local INIT_SYSTEM_CONFIG_PATH_LIST=()
+    get_directory_paths INIT_SYSTEM_CONFIG_PATH_LIST "${INIT_SYSTEM_BASE_DIR_PATH}" "${VNCD_BASENAME}@*.service" "${INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE}" || return $?
 
     local DISPLAY_NUMBER="0"
-    for ((i=0; i<=${#SYSTEMD_CONFIG_FILE_PATH_LIST[@]}; i++)); do
-        local SYSTEMD_CONFIG_FILE_PATH="${SYSTEMD_CONFIG_FILE_PATH_LIST[i]}"
+    for ((i=0; i<=${#INIT_SYSTEM_CONFIG_PATH_LIST[@]}; i++)); do
+        local INIT_SYSTEM_CONFIG_PATH="${INIT_SYSTEM_CONFIG_PATH_LIST[i]}"
 
-        if [[ "${SYSTEMD_CONFIG_FILE_PATH}" =~ ${VNCD_SYSTEMD_INSTANCE_NAME_REGEX} ]]; then
-            local VNCD_SYSTEMD_INSTANCE_NAME="${BASH_REMATCH[0]}"
-            local VNCD_SYSTEMD_INSTANCE_USER="${BASH_REMATCH[1]}"
-            local VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER="${BASH_REMATCH[2]}"
+        if [[ "${INIT_SYSTEM_CONFIG_PATH}" =~ ${VNCD_INSTANCE_NAME_REGEX} ]]; then
+            local VNCD_INSTANCE_NAME="${BASH_REMATCH[0]}"
+            local VNCD_INSTANCE_USER="${BASH_REMATCH[1]}"
+            local VNCD_INSTANCE_DISPLAY_NUMBER="${BASH_REMATCH[2]}"
 
-            if [[ "${VNCD_SYSTEMD_INSTANCE_USER}" == "${VNC_USER}" ]]; then
-
-                RESULT_REF["SYSTEMD_NAME"]="${VNCD_SYSTEMD_INSTANCE_NAME}"
-                RESULT_REF["SYSTEMD_CONFIG_PATH"]="${SYSTEMD_CONFIG_FILE_PATH}"
-                RESULT_REF["DISPLAY_NUMBER"]="${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}"
+            if [[ "${VNCD_INSTANCE_USER}" == "${VNC_USER}" ]]; then
+                RESULT_REF["INSTANCE_NAME"]="${VNCD_INSTANCE_NAME}"
+                RESULT_REF["INSTANCE_CONFIG_PATH"]="${INIT_SYSTEM_CONFIG_PATH}"
+                RESULT_REF["DISPLAY_NUMBER"]="${VNCD_INSTANCE_DISPLAY_NUMBER}"
                 return 0
             else
-                if (( "${DISPLAY_NUMBER} < ${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}" )); then
-                    DISPLAY_NUMBER="${VNCD_SYSTEMD_INSTANCE_DISPLAY_NUMBER}"
+                if (( "${DISPLAY_NUMBER} < ${VNCD_INSTANCE_DISPLAY_NUMBER}" )); then
+                    DISPLAY_NUMBER="${VNCD_INSTANCE_DISPLAY_NUMBER}"
                 fi
             fi
         fi
     done
     DISPLAY_NUMBER="$(("${DISPLAY_NUMBER} + 1"))"
-    local VNCD_SYSTEMD_INSTANCE_NAME="${VNCD_BASENAME}@${VNC_USER}-${DISPLAY_NUMBER}.service"
-    local VNCD_SYSTEMD_INSTANCE_CONFIG_PATH="${SYSTEMD_CONFIG_DIR_PATH}/${VNCD_SYSTEMD_INSTANCE_NAME}"
-    RESULT_REF["SYSTEMD_NAME"]="${VNCD_SYSTEMD_INSTANCE_NAME}"
-    RESULT_REF["SYSTEMD_CONFIG_PATH"]="${VNCD_SYSTEMD_INSTANCE_CONFIG_PATH}"
+    local VNCD_INSTANCE_NAME="${VNCD_BASENAME}@${VNC_USER}-${DISPLAY_NUMBER}.service"
+    local VNCD_INSTANCE_CONFIG_PATH="${INIT_SYSTEM_BASE_DIR_PATH}/${VNCD_INSTANCE_NAME}"
+    RESULT_REF["INSTANCE_NAME"]="${VNCD_INSTANCE_NAME}"
+    RESULT_REF["INSTANCE_CONFIG_PATH"]="${VNCD_INSTANCE_CONFIG_PATH}"
     RESULT_REF["DISPLAY_NUMBER"]="${DISPLAY_NUMBER}"
     return 0
 }
@@ -1535,7 +1568,7 @@ function vnc_server_create_systemd_config() {
     local VNC_USER="${VNC_SERVER_CONFIG["USER"]}"
     local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
     local VNC_DISPLAY=":${VNC_SERVER_CONFIG["DISPLAY_NUMBER"]}"
-    local VNCD_SYSTEMD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG["SYSTEMD_CONFIG_PATH"]}"
+    local VNCD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG["INSTANCE_CONFIG_PATH"]}"
 
 
     # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options
@@ -1556,7 +1589,26 @@ ExecStart=${VNC_SERVER_EXECUTABLE_PATH} -localhost no ${VNC_DISPLAY}
 ExecStop=${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY}
 
 [Install]
-WantedBy=multi-user.target" "${VNCD_SYSTEMD_INSTANCE_CONFIG_PATH}" || return $?
+WantedBy=multi-user.target" "${VNCD_INSTANCE_CONFIG_PATH}" || return $?
+    return 0
+}
+
+function vnc_server_create_runit_config() {
+    local -n VNC_SERVER_CONFIG=${1}
+
+    local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG["EXECUTABLE_PATH"]}"
+    local VNC_DISPLAY=":${VNC_SERVER_CONFIG["DISPLAY_NUMBER"]}"
+    local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
+
+    runit_create_run_file "${VNCD_INSTANCE_NAME}" \
+"#!${SHELL}
+exec ${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} 2>&1 || exit $?
+exec ${VNC_SERVER_EXECUTABLE_PATH} -fg ${VNC_DISPLAY} 2>&1 || exit $?
+exit 0" \
+\
+"#!${SHELL}
+exec ${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} 2>&1 || exit $?
+exit 0" || return $?
     return 0
 }
 
@@ -1576,11 +1628,11 @@ function vnc_server_setup() {
     local VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
-    local VNCD_SYSTEMD_INSTANCE_NAME="${VNC_SERVER_CONFIG["SYSTEMD_NAME"]}"
+    local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
     local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
 
-    service_disable "${VNCD_SYSTEMD_INSTANCE_NAME}"
+    service_disable "${VNCD_INSTANCE_NAME}"
 
     vnc_server_create_xstartup "${VNC_XSTARTUP_FILE_PATH}" || return $?
 
@@ -1588,10 +1640,10 @@ function vnc_server_setup() {
 
     vnc_create_password_if "${VNC_USER_HOME_DIRECTORY_PATH}" || return $?
 
-    service_enable "${VNCD_SYSTEMD_INSTANCE_NAME}" || return $?
+    service_enable "${VNCD_INSTANCE_NAME}" || return $?
 
-    if ! is_service_active "${VNCD_SYSTEMD_INSTANCE_NAME}"; then
-      echo "FATAL: ${VNCD_SYSTEMD_INSTANCE_NAME} not started"
+    if ! is_service_active "${VNCD_INSTANCE_NAME}"; then
+      echo "FATAL: ${VNCD_INSTANCE_NAME} not started"
     fi
 
     # 1) systemd
@@ -1650,7 +1702,7 @@ function main_install_dev_packages() {
 
     rdp_client_install || return $?
     sshd_setup || return $?
-#    vnc_server_setup || return $?
+    vnc_server_setup || return $?
     smbd_setup || return $?
     return 0
 }
