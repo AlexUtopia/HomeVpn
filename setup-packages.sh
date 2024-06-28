@@ -1633,7 +1633,7 @@ function vnc_create_password_if() {
 }
 
 function vnc_server_setup() {
-    local VNC_SERVER_CONFIG=()
+    declare -A VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
     for K in "${!VNC_SERVER_CONFIG[@]}"; do echo $K --- ${VNC_SERVER_CONFIG[$K]}; done
