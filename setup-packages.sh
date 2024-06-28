@@ -1564,6 +1564,7 @@ function vnc_server_get_config_info() {
     RESULT_REF["INSTANCE_NAME"]="${VNCD_INSTANCE_NAME}"
     RESULT_REF["INSTANCE_CONFIG_PATH"]="${VNCD_INSTANCE_CONFIG_PATH}"
     RESULT_REF["DISPLAY_NUMBER"]="${DISPLAY_NUMBER}"
+    for K in "${!RESULT_REF[@]}"; do echo $K --- ${RESULT_REF[$K]}; done
     return 0
 }
 
@@ -1634,6 +1635,8 @@ function vnc_create_password_if() {
 function vnc_server_setup() {
     local VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
+
+    for K in "${!VNC_SERVER_CONFIG[@]}"; do echo $K --- ${VNC_SERVER_CONFIG[$K]}; done
 
     local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
