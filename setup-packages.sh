@@ -1570,13 +1570,13 @@ function vnc_server_get_config_info() {
 
 
 function vnc_server_create_systemd_config() {
-    local -n VNC_SERVER_CONFIG=${1}
+    local -n VNC_SERVER_CONFIG_REF=${1}
 
-    local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG["EXECUTABLE_PATH"]}"
-    local VNC_USER="${VNC_SERVER_CONFIG["USER"]}"
-    local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
-    local VNC_DISPLAY=":${VNC_SERVER_CONFIG["DISPLAY_NUMBER"]}"
-    local VNCD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG["INSTANCE_CONFIG_PATH"]}"
+    local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG_REF["EXECUTABLE_PATH"]}"
+    local VNC_USER="${VNC_SERVER_CONFIG_REF["USER"]}"
+    local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG_REF["USER_HOME_DIRECTORY_PATH"]}"
+    local VNC_DISPLAY=":${VNC_SERVER_CONFIG_REF["DISPLAY_NUMBER"]}"
+    local VNCD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG_REF["INSTANCE_CONFIG_PATH"]}"
 
 
     # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options
@@ -1602,11 +1602,11 @@ WantedBy=multi-user.target" "${VNCD_INSTANCE_CONFIG_PATH}" || return $?
 }
 
 function vnc_server_create_runit_config() {
-    local -n VNC_SERVER_CONFIG=${1}
+    local -n VNC_SERVER_CONFIG_REF=${1}
 
-    local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG["EXECUTABLE_PATH"]}"
-    local VNC_DISPLAY=":${VNC_SERVER_CONFIG["DISPLAY_NUMBER"]}"
-    local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
+    local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG_REF["EXECUTABLE_PATH"]}"
+    local VNC_DISPLAY=":${VNC_SERVER_CONFIG_REF["DISPLAY_NUMBER"]}"
+    local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG_REF["INSTANCE_NAME"]}"
 
     runit_create_run_file "${VNCD_INSTANCE_NAME}" \
 "#!${SHELL}
@@ -1633,7 +1633,7 @@ function vnc_create_password_if() {
 }
 
 function vnc_server_setup() {
-    declare -A VNC_SERVER_CONFIG=()
+    local declare -A VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
     for K in "${!VNC_SERVER_CONFIG[@]}"; do echo $K --- ${VNC_SERVER_CONFIG[$K]}; done
