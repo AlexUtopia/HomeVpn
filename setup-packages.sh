@@ -5,10 +5,11 @@
 
 # fixme utopia VNC сервер для Windows
 # fixme utopia RDP сервер для Linux / Android/termux
-# fixme utopia VNC сервер для Android/termux
 # fixme utopia Проверка минимальной версии питона
 # fixme utopia Установка дополнений гостевой ОС?? требуется ли
 # fixme utopia Настройка nmbd
+# fixme utopia gvfs для Android/termux
+# fixme utopia Инструкция по scp
 
 # https://unix.stackexchange.com/a/306115
 
@@ -311,13 +312,13 @@ function check_result_code() {
 function get_directory_paths() {
     local -n RESULT_REF=${1}
     local DIR_PATH="${2}"
-    local TYPE="${3}"
-    if [[ -z "${TYPE}" ]]; then
-        TYPE="f"
-    fi
-    local PATH_WILDCARDS="${4}"
+    local PATH_WILDCARDS="${3}"
     if [[ -z "${PATH_WILDCARDS}" ]]; then
         PATH_WILDCARDS="*"
+    fi
+    local TYPE="${4}"
+    if [[ -z "${TYPE}" ]]; then
+        TYPE="f"
     fi
 
     local MAXDEPTH=1
@@ -327,6 +328,12 @@ function get_directory_paths() {
         # echo "${FILE_PATH}" fixme utopia del?
         RESULT_REF+=("${FILE_PATH}")
     done < <(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${PATH_WILDCARDS}" -type "${TYPE}" -print0 | sort -z -V)
+    return 0
+}
+
+function set_file_as_executable() {
+    local FILE_PATH="${1}"
+    chmod +x "${FILE_PATH}" > "/dev/null" || return $?
     return 0
 }
 
@@ -377,12 +384,6 @@ function create_file() {
     prepare_for_create_file "${FILE_PATH}" "${REWRITE_IF_EXIST}" || return $?
 
     ${SHELL} -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
-    return 0
-}
-
-function set_file_as_executable() {
-    local FILE_PATH="${1}"
-    chmod +x "${FILE_PATH}" > "/dev/null" || return $?
     return 0
 }
 
@@ -1642,7 +1643,11 @@ function vnc_server_setup() {
 
     vnc_server_create_xstartup "${VNC_XSTARTUP_FILE_PATH}" || return $?
 
-    vnc_server_create_systemd_config VNC_SERVER_CONFIG || return $?
+    if is_termux; then
+        vnc_server_create_runit_config VNC_SERVER_CONFIG || return $?
+    else
+        vnc_server_create_systemd_config VNC_SERVER_CONFIG || return $?
+    fi
 
     vnc_create_password_if "${VNC_USER_HOME_DIRECTORY_PATH}" || return $?
 
