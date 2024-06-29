@@ -11,6 +11,13 @@
 # fixme utopia gvfs для Android/termux
 # fixme utopia Инструкция по scp
 
+# fixme utopia Настройка микрофона в браузере
+# Звук с микрофона использовать для браузера, например (не забыть выдать разрешение на микрофон для Termux:API, проверть точно ли нужно это разрешение)
+# $PREFIX/etc/pulse/default.pa
+# load-module module-sles-source
+# https://github.com/termux/termux-app/issues/1448
+# https://www.reddit.com/r/termux/comments/icp29x/help_using_pulseaudio_on_termux/
+
 # https://unix.stackexchange.com/a/306115
 
 set -x # Раскомментировать для отладки
