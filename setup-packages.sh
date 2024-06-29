@@ -1610,12 +1610,8 @@ function vnc_server_create_runit_config() {
 
     runit_create_run_file "${VNCD_INSTANCE_NAME}" \
 "#!${SHELL}
-exec ${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} 2>&1 || exit $?
+${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} 2>&1
 exec ${VNC_SERVER_EXECUTABLE_PATH} -fg -localhost no ${VNC_DISPLAY} 2>&1 || exit $?
-exit 0" \
-\
-"#!${SHELL}
-exec ${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} 2>&1 || exit $?
 exit 0" || return $?
     return 0
 }
