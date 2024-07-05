@@ -912,8 +912,9 @@ function termux_set_symlinks_to_storage() {
 
    # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
    # В итоге хотим получить /storage/9C33-6BBD
+   sleep 1
    local ANDROID_EXTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/external-1"
-   if wait_for_dir_creation "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}"; then
+   if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
        ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
        ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
        if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
