@@ -90,7 +90,10 @@ COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, gr
 GPG_PACKAGE="gnupg"
 FINDUTILS_PACKAGE="findutils" # Утилита find
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
-WHICH_PACKAGE="which"
+WHICH_PACKAGE="debianutils"
+if is_termux; then
+    WHICH_PACKAGE="which"
+fi
 MAKE_PACKAGE="make"
 
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
@@ -1168,7 +1171,7 @@ function sshd_setup() {
 }
 
 function pycharm_install() {
-    local PYCHARM="pycharm-community-2024.1.1"
+    local PYCHARM="pycharm-community-2024.1.4"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
     local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
