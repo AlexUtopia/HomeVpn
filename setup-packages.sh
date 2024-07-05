@@ -59,7 +59,7 @@ fi
 
 GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
 
-GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_USR_PREFIX}/smb_share_public" # fixme utopia Временно /usr
+GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
     GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
@@ -301,7 +301,9 @@ function create_symlink() {
     local SOURCE_PATH="${1}"
     local TARGET_PATH="${2}"
 
-    ln -sf "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
+    # В termux почему-то опция -f у ln не всегда срабатывает, поэтому удалим символическую ссылку вручную
+    rm -rf "${TARGET_PATH}" > "/dev/null" || return $?
+    ln -s "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
     return 0
 }
 
@@ -1011,7 +1013,14 @@ function runit_service_enable() {
     sv-enable "${SERVICE_NAME}" > "/dev/null"
     if ! check_result_code $?; then
         sleep 5
-        sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
+        sv-enable "${SERVICE_NAME}" > "/dev/null"
+        if ! check_result_code $?; then
+            # Иногда почему-то случается вылет runit и далее служба не может запуститься,
+            # поэтому запустим runit заново
+            . "${GLOBAL_CONFIG_ETC_PREFIX}/profile.d/start-services.sh" > "/dev/null" || return $?
+            sleep 5
+            sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
+        fi
     fi
     return 0
 }
