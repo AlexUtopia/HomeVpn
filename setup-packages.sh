@@ -58,6 +58,7 @@ if is_termux; then
 fi
 
 GLOBAL_CONFIG_VNC_USER=$(logname) # в termux переменная окружения USER не установлена
+GLOBAL_CONFIG_SAMBA_USER=$(logname) # в termux переменная окружения USER не установлена
 
 GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
@@ -1380,7 +1381,7 @@ allow insecure wide links = yes
 [public]
 path = \"${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}\"
 guest ok = yes
-force user = nobody
+force user = ${GLOBAL_CONFIG_SAMBA_USER}
 browsable = yes
 writable = yes
 " "${SMBD_CONFIG_FILE_PATH}" || return $?
