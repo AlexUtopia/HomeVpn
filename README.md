@@ -83,7 +83,7 @@ fixme utopia Описать wine
 | GLOBAL_CONFIG_ROOT_PREFIX                 | Корень файловой системы                             |                             | `/` по умолчанию<br>для Android/termux используется значение переменной окружения `$PREFIX/..`                                           |
 | GLOBAL_CONFIG_USR_PREFIX                  | Префикс для директории usr                          |                             | `/usr` по умолчанию<br>для Android/termux используется значение переменной окружения `$PREFIX`                                           |
 | GLOBAL_CONFIG_ETC_PREFIX                  | Префикс для директории etc                          |                             | `/etc` по умолчанию<br>для Android/termux используется значение переменной окружения `$PREFIX/etc`                                       |
-| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh                                                     |
+| GLOBAL_CONFIG_VNC_USER                    | Пользователь для которого будет настроен VNC сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh (выхлоп команды logname)                            |
 | GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH | Путь до публичной директории SAMBA сервера          |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public` по умолчанию                                                                             |
 | GLOBAL_CONFIG_SMBD_TCP_PORTS              | TCP порты которые "слушает" SAMBA сервер            |                             | `139 445` по умолчанию<br>для Android/termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
 
@@ -549,6 +549,19 @@ https://superuser.com/questions/1094931/ssh-tunnel-on-windows-10-to-linux-samba
 xtigervncviewer <ip адрес>:1
 
 ```
+
+Выполнить графическое приложение с root правами можно так
+
+https://wiki.archlinux.org/title/Running_GUI_applications_as_root#Xhost
+
+https://wiki.archlinux.org/title/Running_GUI_applications_as_root#Using_xhost
+
+```bash
+
+xhost +SI:localuser:root 
+
+```
+
 
 ### 4.4.2 VNC клиент Android
 

@@ -57,7 +57,7 @@ if is_termux; then
     GLOBAL_CONFIG_ETC_PREFIX="${GLOBAL_CONFIG_USR_PREFIX}/etc"
 fi
 
-GLOBAL_CONFIG_VNC_USER=$(whoami) # в termux переменная окружения USER не установлена
+GLOBAL_CONFIG_VNC_USER=$(logname) # в termux переменная окружения USER не установлена
 
 GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
@@ -86,7 +86,7 @@ TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id, sort
+COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id, sort, logname
 GPG_PACKAGE="gnupg"
 FINDUTILS_PACKAGE="findutils" # Утилита find
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
@@ -147,9 +147,9 @@ if is_termux; then
 fi
 
 VNC_CLIENT_PACKAGE="tigervnc-viewer"
-VNC_SERVER_PACKAGE="tigervnc-standalone-server tigervnc-xorg-extension"
+VNC_SERVER_PACKAGE="tigervnc-standalone-server tigervnc-xorg-extension x11-xserver-utils" # x11-xserver-utils - Debian/Ubuntu only https://pkgs.org/search/?q=x11-xserver-utils
 if is_termux; then
-    VNC_SERVER_PACKAGE="tigervnc"
+    VNC_SERVER_PACKAGE="tigervnc xorg-xhost"
 fi
 
 AUXILIARY_UTILITIES="htop cpu-checker util-linux pciutils usbutils lshw" # Утилиты htop kvm-ok, lscpu, lspci, lsusb, lshw
@@ -957,12 +957,14 @@ function systemd_service_enable() {
     local SERVICE_NAME="${1}"
 
     systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
+    systemctl start "${SERVICE_NAME}" > "/dev/null" || return $?
     return 0
 }
 
 function systemd_service_disable() {
     local SERVICE_NAME="${1}"
 
+    systemctl stop "${SERVICE_NAME}" > "/dev/null" || return $?
     systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
     return 0
 }
@@ -1166,6 +1168,7 @@ function sshd_setup() {
 
     if ! is_service_active "${SSHD}"; then
         echo "FATAL: ${SSHD} not started"
+        return 1
     fi
     return 0
 }
@@ -1410,6 +1413,7 @@ exit 0" || return $?
 
     if ! is_service_active "${SMBD}"; then
         echo "FATAL: ${SMBD} not started"
+        return 1
     fi
 
     # https://www.samba.org/~tpot/articles/firewall.html
@@ -1584,7 +1588,6 @@ function vnc_server_get_config_info() {
     RESULT_REF["INSTANCE_NAME"]="${VNCD_INSTANCE_NAME}"
     RESULT_REF["INSTANCE_CONFIG_PATH"]="${VNCD_INSTANCE_CONFIG_PATH}"
     RESULT_REF["DISPLAY_NUMBER"]="${DISPLAY_NUMBER}"
-    for K in "${!RESULT_REF[@]}"; do echo $K --- ${RESULT_REF[$K]}; done
     return 0
 }
 
@@ -1603,7 +1606,7 @@ function vnc_server_create_systemd_config() {
     # https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-vnc-on-ubuntu-22-04
     # https://wiki.archlinux.org/title/Systemd_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)#%D0%A2%D0%B8%D0%BF%D1%8B_%D1%81%D0%BB%D1%83%D0%B6%D0%B1
     create_file "[Unit]
-Description=Start TightVNC server at startup
+Description=Start VNC server at startup
 After=syslog.target network.target
 
 [Service]
@@ -1652,8 +1655,6 @@ function vnc_server_setup() {
     local declare -A VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
-    for K in "${!VNC_SERVER_CONFIG[@]}"; do echo $K --- ${VNC_SERVER_CONFIG[$K]}; done
-
     local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
     local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
@@ -1673,7 +1674,8 @@ function vnc_server_setup() {
     service_enable "${VNCD_INSTANCE_NAME}" || return $?
 
     if ! is_service_active "${VNCD_INSTANCE_NAME}"; then
-      echo "FATAL: ${VNCD_INSTANCE_NAME} not started"
+        echo "FATAL: ${VNCD_INSTANCE_NAME} not started"
+        return 1
     fi
 
     # 1) systemd
