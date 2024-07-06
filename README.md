@@ -632,6 +632,8 @@ fixme utopia Дописать
 
 https://waydro.id/
 
+https://www.altlinux.org/Waydroid
+
 ## 4.9 Запуск Android приложений на Windows
 
 https://learn.microsoft.com/en-us/windows/android/wsa/
