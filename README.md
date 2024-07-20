@@ -47,6 +47,18 @@
 | SSH клиент                 | Удалённый доступ к ОС Linux                                                                                                                                                                                                                                                                         | +                    | [openssh-client](https://www.openssh.com/)                                                                                                     | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                             | [putty](https://www.putty.org/)                                                                                                                                                                                                                                                              | [openssh](https://packages.msys2.org/base/openssh)                                                                                                   | [openssh](https://www.cygwin.com/packages/summary/openssh.html)                                         | ?                                                                                   |
 | SSH сервер                 | Предоставление удалённого управления для ОС Linux                                                                                                                                                                                                                                                   | +                    | [openssh-server](https://www.openssh.com/)                                                                                                     | [openssh](https://packages.termux.dev/apt/termux-main/pool/main/o/openssh/)<br>[package build script](https://github.com/termux/termux-packages/tree/master/packages/openssh)                                                                                                                                                                                                             | -                                                                                                                                                                                                                                                                                            | см. SSH клиент                                                                                                                                       | см. SSH клиент                                                                                          | ?                                                                                   |
 
+fixme utopia Отдельный раздел про virtio-fs
+
+https://virtio-fs.gitlab.io/howto-qemu.html
+
+https://www.qemu.org/docs/master/system/devices/vhost-user-input.html
+
+https://www.qemu.org/docs/master/system/devices/vhost-user.html#shared-memory-object
+
+https://habr.com/ru/companies/intel/articles/165903/
+
+https://wiki.gentoo.org/wiki/Virtiofs
+
 fixme utopia Описать min / dev / full в таблице 1.1  
 fixme utopia Описать wine
 

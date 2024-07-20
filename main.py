@@ -857,7 +857,7 @@ class BridgeFirewall:
     # @details см. https://wiki.gentoo.org/wiki/QEMU/Bridge_with_Wifi_Routing и https://wiki.gentoo.org/wiki/QEMU/Options#Virtual_network_cable_.28TAP.29
     """
 
-    def __init__(self, bridge_if, internet_if):
+    def __init__(self, bridge_if, internet_if, block_internet_access=False):
         if bridge_if is None or not bridge_if.exists():
             raise Exception("Bridge interface NOT FOUND")
 
@@ -865,7 +865,8 @@ class BridgeFirewall:
             raise Exception("Internet interface NOT FOUND")
 
         self.__bridge_name = str(bridge_if)
-        self.__internet_if_name = str(internet_if)
+        self.__internet_if = internet_if
+        self.__block_internet_access = block_internet_access
 
     def setup(self):
         self.__setup_filter_bridge_to_internet()
@@ -893,7 +894,7 @@ class BridgeFirewall:
 
         rule = iptc.Rule()
         rule.in_interface = self.__bridge_name
-        rule.out_interface = self.__internet_if_name
+        rule.out_interface = str(self.__internet_if)
         target = iptc.Target(rule, "ACCEPT")
         rule.target = target
 
@@ -902,16 +903,24 @@ class BridgeFirewall:
         else:
             chain.insert_rule(rule)
         table.commit()
+        print(iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False))
 
     def __setup_nat_postrouting_masquerade(self, clear=False):
         # sudo iptables -t nat -A POSTROUTING -o {self.__internet_if_name} -j MASQUERADE
+
+        # Запретить выход в интернет
+        # sudo iptables -t nat -A POSTROUTING -o wlp0s20f3 -d 192.168.0.0/24 -j MASQUERADE
         # sudo iptables -t nat -L -v -n
 
         table = iptc.Table(iptc.Table.NAT)
         chain = iptc.Chain(table, "POSTROUTING")
 
         rule = iptc.Rule()
-        rule.out_interface = self.__internet_if_name
+        rule.out_interface = str(self.__internet_if)
+
+        if self.__block_internet_access:
+            rule.dst = str(self.__internet_if.get_ipv4_interface_if().network)
+
         target = iptc.Target(rule, "MASQUERADE")
         rule.target = target
 
@@ -920,6 +929,7 @@ class BridgeFirewall:
         else:
             chain.insert_rule(rule)
         table.commit()
+        print(iptc.easy.dump_table(iptc.Table.NAT, ipv6=False))
 
     def __setup_filter_internet_to_bridge(self, clear=False):
         # sudo iptables -t filter -A FORWARD -i {self.__internet_if_name} -o {self.__bridge_name} -m state --state RELATED,ESTABLISHED -j ACCEPT
@@ -929,7 +939,7 @@ class BridgeFirewall:
         chain = iptc.Chain(table, "FORWARD")
 
         rule = iptc.Rule()
-        rule.in_interface = self.__internet_if_name
+        rule.in_interface = str(self.__internet_if)
         rule.out_interface = self.__bridge_name
         target = iptc.Target(rule, "ACCEPT")
         rule.target = target
@@ -943,12 +953,13 @@ class BridgeFirewall:
         else:
             chain.insert_rule(rule)
         table.commit()
+        print(iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False))
 
 
 # https://en.wikipedia.org/wiki/Hostname
 # Название должно полностью подчиняться правилам формирования host имени
 # tolower case
-# без точек в имени dnsmasq их не понимает https://serverfault.com/a/229349
+# без точек в имени, dnsmasq их не понимает https://serverfault.com/a/229349
 class VmName:
     # https://stackoverflow.com/questions/106179/regular-expression-to-match-dns-hostname-or-ip-address
     __REGEX = ""
@@ -1330,7 +1341,7 @@ class DnsDhcpProvider:
 
 class NetworkBridge:
     def __init__(self, name, bridge_ip_address_and_mask,
-                 dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None):
+                 dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None, block_internet_access=False):
         self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__bridge_ip_address_and_mask = ipaddress.ip_interface(bridge_ip_address_and_mask)
 
@@ -1341,6 +1352,7 @@ class NetworkBridge:
             self.__internet_network_interface = None
 
         self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir)
+        self.__block_internet_access = block_internet_access
         atexit.register(self.close)
 
     def create(self):
@@ -1384,11 +1396,12 @@ class NetworkBridge:
         if self.__internet_network_interface is None:
             self.__internet_network_interface = NetworkInterface.get_internet_if()
         print("Internet network interface: {}".format(self.__internet_network_interface))
-        BridgeFirewall(self.__interface, self.__internet_network_interface).setup()
+        BridgeFirewall(self.__interface, self.__internet_network_interface, self.__block_internet_access).setup()
 
     def __clear_firewall(self):
         try:
-            BridgeFirewall(self.__interface, self.__internet_network_interface).clear_at_exit()
+            BridgeFirewall(self.__interface, self.__internet_network_interface,
+                           self.__block_internet_access).clear_at_exit()
         except Exception as ex:
             print("[WARNING] Clear firewall FAIL: {}".format(ex))
 
@@ -1584,6 +1597,7 @@ class VirtualMachine:
         return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8"
 
     def __gpu(self):
+        # Использовать для установки ОС
         # return "-vga std -display gtk"
 
         # return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
@@ -1823,6 +1837,12 @@ class RegexConstants:
     SPACE_SYMBOLS_ONE_OR_MORE = fr"{SPACE_SYMBOLS}+"
     INT64_INTEGER_WITHOUT_SING = fr"[0-9]{{1,{INT64_DECIMAL_DIGITS_COUNT}}}"
     INT64_INTEGER = fr"{INT64_INTEGER_WITHOUT_SING}|\+{INT64_INTEGER_WITHOUT_SING}|-{INT64_INTEGER_WITHOUT_SING}"
+    WHITESPACE_CHARACTER_SET = r"[ \t]"
+    NEWLINE_CHARACTER_SET = r"[\n\r]"
+    ONE_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}+"
+    ZERO_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}*"
+    ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
+    ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
 
 
 class EscapeLiteral:
@@ -1997,14 +2017,33 @@ class FromString:
         return value_as_string
 
 
+# \[(?=[\w\.]{1,16}\])(?>\.?[\w]+)+\]
+# https://regex101.com/r/ZLjLC2/1
 class ConfigParameterNameParser:
-    __NAME_LENGTH_MAX = 64
+    __NAME_LENGTH_MIN = 1
 
-    def get_regex(self):
-        return fr"^([a-zA-Z_][\w]{{0,{self.__NAME_LENGTH_MAX - 1}}})"
+    def __init__(self, name_length_max=64, match_start_of_string=True):
+        self.__name_length_max = name_length_max
+        self.__match_start_of_string = match_start_of_string
+        if self.__name_length_max < self.__NAME_LENGTH_MIN:
+            self.__name_length_max = self.__NAME_LENGTH_MIN
+
+    def get_regex(self, capture=True):
+        capture_begin = "(" if capture else ""
+        capture_end = ")" if capture else ""
+        start_of_string = "^" if self.__match_start_of_string else ""
+
+        return fr"{start_of_string}{capture_begin}[a-zA-Z_][a-zA-Z_0-9]{{0,{self.__name_length_max - self.__NAME_LENGTH_MIN}}}{capture_end}"
 
     def get_regex_for_name(self, name):
         return fr"^{name}"
+
+    def check_name(self, name):
+        regex = re.compile(self.get_regex(capture=False))
+        match = regex.match(name)
+        if match is None:
+            return False
+        return True
 
 
 class ConfigNameValueDelimiterParser:
@@ -2053,42 +2092,45 @@ class ConfigParameterValueParser:
 
 
 class NoSection:
-    def __init__(self):
-        print("ttt")
+    def get_sections(self, content):
+        return {"": {"index": [(0, len(content))], "content": content}}
+
+
+class SectionWithoutSubsections(NoSection):
+    def __init__(self, parameter_name_parser=ConfigParameterNameParser(match_start_of_string=False)):
+        super().__init__()
+        self.__parameter_name_parser = parameter_name_parser
 
     def get_sections(self, content):
-        return [{"name": "", "index": [(0, len(content)-1)], "content": content}]
+        result = {}  # fixme utopia Нужно сохранть порядок следования секций чтобы правильно вычислить положение отностительных подсекций для ini файлов
+        last_section_name = None
+        for match in re.finditer(self.get_section_name_regex(), content, flags=re.MULTILINE):
+            section_name = match.group(0)
+            data_index_begin = len(content) if len(content) == match.end() else match.end() + 1
 
+            if last_section_name is not None:
+                result[last_section_name]["index"][-1][1] = match.start()
 
-class SectionWithoutSubsections:
-    def __init__(self):
-        print("ttt")
+            if section_name in result:
+                result[section_name]["index"].append((data_index_begin, None))
+            else:
+                result.update({section_name: {"index": [(data_index_begin, None)]}})
+            last_section_name = section_name
 
-    def get_sections(self, content):
-        return [{"name": "", "index": [(0, len(content)-1)], "content": content}]
+        if last_section_name is not None:
+            result[last_section_name]["index"][-1][1] = len(content)
 
+        if len(result) == 0:
+            return NoSection.get_sections(content)
+
+        for section_name, description in result.items():
+            for index_begin, index_end in description["index"]:
+                description["content"] += content[index_begin:index_end]
+
+        return result
 
     def get_section_name_regex(self):
-        return r"[a-zA-Z_][a-zA-Z_0-9]{0,127}"
-
-
-    # local
-    # WHITESPACE_CHARACTER_SET = "[ \t]"
-    # local
-    # NEWLINE_CHARACTER_SET = "[\n\r]"
-    # local
-    # ONE_OR_MORE_NEW_LINES = "${NEWLINE_CHARACTER_SET}+"
-    # local
-    # ZERO_OR_MORE_NEW_LINES = "${NEWLINE_CHARACTER_SET}*"
-    # local
-    # ONE_OR_MORE_WHITESPACES = "${WHITESPACE_CHARACTER_SET}+"
-    # local
-    # ZERO_OR_MORE_WHITESPACES = "${WHITESPACE_CHARACTER_SET}*"
-    #
-    # local
-    # GROUP_HEADER = "\[${GROUP_NAME}\]${ZERO_OR_MORE_WHITESPACES}"
-    # local
-    # GROUP_HEADER_SEARCH_REGEX = "(?>^${GROUP_HEADER}|${NEWLINE_CHARACTER_SET}${GROUP_HEADER})"
+        return fr"^\[{self.__parameter_name_parser.get_regex()}\]{RegexConstants.ZERO_OR_MORE_WHITESPACES}$"
 
 
 class Section:
@@ -2578,10 +2620,12 @@ def help_usage():
         "  or\n"
         "vm_create <vm name> <image size in gibibytes>\n"
         "  or\n"
-        "vm_install <vm name> <path to iso disk with os distributive>\n"
+        "vm_install <vm name> <path to iso disk with os distributive> <bi>\n"
         "  or\n"
-        "vm_run <vm name>\n"
+        "vm_run <vm name> <bi>\n"
         "\n"
+        "\n"
+        "  bi - block internet access - optional parameter"
         "\n"
         "  config - get config parameter value by name from open-vpn.config.json\n"
         "    available <config-parameter-name> see in open-vpn.config.json\n"
@@ -2597,7 +2641,7 @@ def help_usage():
         "\n"
         "  vm_install - install os on vm image created by vm_create command\n"
         "\n"
-        "  vm_run - run vn by name, see vm_create and vm_install commands\n"
+        "  vm_run - run vm by name, see vm_create and vm_install commands\n"
     )
 
 
@@ -2657,6 +2701,11 @@ def main():
         if len(sys.argv) >= 3:
             vm_name = str(sys.argv[2])
             path_to_os_iso_disk = Path(sys.argv[3])
+
+            block_internet_access = False
+            if len(sys.argv) == 5 and str(sys.argv[4]).lower() == "bi":
+                block_internet_access = True
+
             if not path_to_os_iso_disk.exists():
                 raise Exception("VM installer \"{}\" NOT FOUND".format(path_to_os_iso_disk))
 
@@ -2666,7 +2715,7 @@ def main():
                 config.get_local_network_interface())
 
             network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(), local_network_interface)
+                                           config.get_dns_config_dir(), local_network_interface, block_internet_access=block_internet_access)
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
@@ -2682,9 +2731,14 @@ def main():
         if len(sys.argv) >= 2:
             vm_name = str(sys.argv[2])
 
+            block_internet_access = False
+            if len(sys.argv) == 4 and str(sys.argv[3]).lower() == "bi":
+                block_internet_access = True
+
             config = OpenVpnConfig()
             network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(), config.get_internet_network_interface())
+                                           config.get_dns_config_dir(), config.get_internet_network_interface(),
+                                           block_internet_access=block_internet_access)
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
@@ -2745,6 +2799,8 @@ def main():
             return
 
     elif command == "test":
+        print(NetworkInterface.get_internet_if().get_ipv4_interface_if().network.netmask)
+        return
         print("XXX")
 
         user_name = "utopia"
