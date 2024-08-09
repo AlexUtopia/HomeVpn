@@ -3,7 +3,9 @@
 # Понять что мы исполняемся внутри вирт машины
 # https://unix.stackexchange.com/questions/89714/easy-way-to-determine-the-virtualization-technology-of-a-linux-machine
 
-# fixme utopia VNC сервер для Windows
+# ВНИМАНИЕ!!! Пакет coreutils должен быть предустановлен
+
+# fixme utopia VNC сервер для Windows (для tigervnc пишут что сервер не поддерживается)
 # fixme utopia RDP сервер для Linux / Android/termux
 # fixme utopia Проверка минимальной версии питона
 # fixme utopia Установка дополнений гостевой ОС?? требуется ли
@@ -31,11 +33,41 @@ function is_admin_rights_available() {
     return 0
 }
 
+function get_os_name() {
+    local RESULT=""
+    RESULT=$(uname -o) || return $?
+    echo "${RESULT,,}"
+    return 0
+}
+
+OS_NAME=$(get_os_name)
+
+function is_linux() {
+   if [[ "${OS_NAME}" == *"linux"* ]]; then
+       return 0
+   fi
+   return 1
+}
+
 function is_termux() {
-    if [[ -n "${TERMUX_VERSION}" ]]; then
-        return 0
-    fi
-    return 1
+   if [[ "${OS_NAME}" == *"android"* ]]; then
+       return 0
+   fi
+   return 1
+}
+
+function is_msys() {
+   if [[ "${OS_NAME}" == *"msys"* ]]; then
+       return 0
+   fi
+   return 1
+}
+
+function is_cygwin() {
+   if [[ "${OS_NAME}" == *"cygwin"* ]]; then
+       return 0
+   fi
+   return 1
 }
 
 ### Global config begin
@@ -78,21 +110,32 @@ TERMUX_SPECIFIC_PACKAGES="termux-tools termux-api proot"
 
 ### Minimal packages begin
 
-OPEN_VPN_PACKAGE="openvpn"
-if is_termux; then
-    OPEN_VPN_PACKAGE=""
-fi
 WGET_PACKAGE="wget"
 TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
+if is_msys; then
+    PROCPS_PACKAGE="procps-ng" # fixme utopia Для Windows это бесполезный пакет?
+fi
 IPTABLES_PACKAGE="iptables" # Настройки фaйервола
+if is_msys; then
+    IPTABLES_PACKAGE=""
+fi
 IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-COREUTILS_PACKAGE="coreutils" # Утилита uname, mkdir, echo, mv, chmod, groups, id, sort, logname
-GPG_PACKAGE="gnupg"
+if is_msys; then
+    IPROUTE2_PACKAGE=""
+fi
+GPG_PACKAGE="gnupg" # Используется для добавления новых репозиториев для пакетного менеджера apt
 FINDUTILS_PACKAGE="findutils" # Утилита find
+
+# fixme utopia Надо уходить от этого пакета в пользу универсального парсера конфигов на питоне
 PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
+if is_msys; then
+    PCREGREP_PACKAGE="pcre"
+fi
 WHICH_PACKAGE="debianutils"
 if is_termux; then
+    WHICH_PACKAGE="which"
+elif is_msys; then
     WHICH_PACKAGE="which"
 fi
 MAKE_PACKAGE="make"
@@ -100,24 +143,32 @@ MAKE_PACKAGE="make"
 PYTHON3_PACKAGE="python3 python3-pip python3-venv"
 if is_termux; then
     PYTHON3_PACKAGE="python python-pip"
+elif is_msys; then
+    PYTHON3_PACKAGE="python python-pip"
 fi
 
 SSH_CLIENT_PACKAGE="openssh-client"
 if is_termux; then
+    SSH_CLIENT_PACKAGE="openssh"
+elif is_msys; then
     SSH_CLIENT_PACKAGE="openssh"
 fi
 
 DNSMASQ_PACKAGE="dnsmasq-base" # DNS/DHCP сервер для сетевых адаптеров виртуальных машин qemu
 if is_termux; then
     DNSMASQ_PACKAGE=""
+elif is_msys; then
+    DNSMASQ_PACKAGE=""
 fi
 
 QEMU_SYSTEM_PACKAGE="qemu qemu-system qemu-kvm"
 if is_termux; then
     QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
+elif is_msys; then
+    QEMU_SYSTEM_PACKAGE="qemu"
 fi
 
-MINIMAL_PACKAGES="${OPEN_VPN_PACKAGE} ${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${COREUTILS_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
+MINIMAL_PACKAGES="${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
 if is_termux; then
     MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
 fi
@@ -127,9 +178,10 @@ fi
 
 ### Development packages begin
 
-GIT_PACKAGE="git"
 AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
 if is_termux; then
+    AUTOCUTSEL_PACKAGE=""
+elif is_msys; then
     AUTOCUTSEL_PACKAGE=""
 fi
 
@@ -141,38 +193,58 @@ if is_termux; then
 fi
 
 RDP_SERVER_PACKAGE="xrdp"
+if is_msys; then
+    RDP_SERVER_PACKAGE=""
+fi
 
 SSH_SERVER_PACKAGE="openssh-server"
 if is_termux; then
     SSH_SERVER_PACKAGE="openssh"
+elif is_msys; then
+    SSH_SERVER_PACKAGE="openssh"
 fi
 
 VNC_CLIENT_PACKAGE="tigervnc-viewer"
+if is_msys; then
+    VNC_CLIENT_PACKAGE="" # Пакет надо компилировать из исходников
+fi
+
 VNC_SERVER_PACKAGE="tigervnc-standalone-server tigervnc-xorg-extension x11-xserver-utils" # x11-xserver-utils - Debian/Ubuntu only https://pkgs.org/search/?q=x11-xserver-utils
 if is_termux; then
     VNC_SERVER_PACKAGE="tigervnc xorg-xhost"
+elif is_msys; then
+    VNC_SERVER_PACKAGE="" # Под Windows tigervnc server больше не поддерживается, см. https://github.com/TigerVNC/tigervnc?tab=readme-ov-file#windows-specific
 fi
 
 AUXILIARY_UTILITIES="htop cpu-checker util-linux pciutils usbutils lshw" # Утилиты htop kvm-ok, lscpu, lspci, lsusb, lshw
 if is_termux; then
     AUXILIARY_UTILITIES="htop util-linux pciutils"
+elif is_msys; then
+    AUXILIARY_UTILITIES=""
 fi
 
 TELNET_CLIENT_PACKAGE="putty" # Для подключения к qemu monitor
 
 SAMBA_PACKAGE="samba"
+if is_msys; then
+    SAMBA_PACKAGE="" # Настроим сетевую директорию средствами Windows
+fi
 
 SERVICES_SUPERVISOR_PACKAGE= # "systemd" # Утилита systemctl
 if is_termux; then
     SERVICES_SUPERVISOR_PACKAGE="termux-services"
+elif is_msys; then
+    SERVICES_SUPERVISOR_PACKAGE="" # fixme utopia cygrunsrv?
 fi
 
 PASSWD_PACKAGE="passwd" # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
 if is_termux; then      # passwd для настройки доступа к ssh серверу по паролю
     PASSWD_PACKAGE="termux-auth"
+elif is_msys; then
+    PASSWD_PACKAGE=""
 fi
 
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SERVICES_SUPERVISOR_PACKAGE} ${PASSWD_PACKAGE}"
+DEV_PACKAGES="${MINIMAL_PACKAGES} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SERVICES_SUPERVISOR_PACKAGE} ${PASSWD_PACKAGE}"
 ### Development packages end
 
 
@@ -181,25 +253,36 @@ DEV_PACKAGES="${MINIMAL_PACKAGES} ${GIT_PACKAGE} ${AUTOCUTSEL_PACKAGE} ${NANO_PA
 DOUBLE_COMMANDER_PACKAGE="doublecmd-qt"
 if is_termux; then
     DOUBLE_COMMANDER_PACKAGE=""
+elif is_msys; then
+    DOUBLE_COMMANDER_PACKAGE="" # Скачаем и установим приложение вручную
 fi
 
 MIDNIGHT_COMMANDER_PACKAGE="mc"
 
 FIREFOX_PACKAGE="firefox"
+if is_msys; then
+    FIREFOX_PACKAGE="" # Скачаем и установим приложение вручную
+fi
 
 OPEN_JDK_PACKAGE="openjdk-19-jdk" # Для запуска pycharm IDE
 if is_termux; then
     OPEN_JDK_PACKAGE="openjdk-17"
+elif is_msys; then
+    OPEN_JDK_PACKAGE="" # Скачаем и установим приложение вручную
 fi
 
 QT_CREATOR_PACKAGE="qtcreator"
 if is_termux; then
+    QT_CREATOR_PACKAGE="qt-creator"
+elif is_msys; then
     QT_CREATOR_PACKAGE="qt-creator"
 fi
 
 LIBREOFFICE_PACKAGE="libreoffice"
 if is_termux; then
     LIBREOFFICE_PACKAGE=""
+elif is_msys; then
+    LIBREOFFICE_PACKAGE="" # Скачаем и установим приложение вручную
 fi
 
 TRANSMISSION_PACKAGE="transmission"
@@ -211,43 +294,6 @@ FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_
 PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1"
 
 ### System API begin
-
-function get_os_name() {
-    local RESULT=""
-    RESULT=$(uname -o) || return $?
-    echo "${RESULT,,}"
-    return 0
-}
-
-function is_linux() {
-  local SYSTEM_NAME=""
-  SYSTEM_NAME=$(get_os_name) || return $?
-
-   if [[ "${SYSTEM_NAME}" == *"linux"* ]]; then
-       return 0
-   fi
-   return 1
-}
-
-function is_msys() {
-  local SYSTEM_NAME=""
-  SYSTEM_NAME=$(get_os_name) || return $?
-
-   if [[ "${SYSTEM_NAME}" == *"msys"* ]]; then
-       return 0
-   fi
-   return 1
-}
-
-function is_cygwin() {
-  local SYSTEM_NAME=""
-  SYSTEM_NAME=$(get_os_name) || return $?
-
-   if [[ "${SYSTEM_NAME}" == *"cygwin"* ]]; then
-       return 0
-   fi
-   return 1
-}
 
 function get_os_distro_name() {
    local OS_RELEASE_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/os-release"
@@ -777,12 +823,12 @@ function apt_add_sources() {
 
 
 function pacman_update_and_upgrade() {
-    pacman -Syu || return $?
+    pacman -Syu --noconfirm || return $?
     return 0
 }
 
 function pacman_install_packages() {
-    pacman -S ${1} || return $?
+    pacman -S --noconfirm  ${1} || return $?
     return 0
 }
 
@@ -1692,6 +1738,32 @@ function vnc_server_setup() {
     return 0
 }
 
+# https://community.openvpn.net/openvpn/wiki/OpenvpnSoftwareRepos#DebianUbuntu:UsingOpenVPNaptrepositories
+function openvpn_setup() {
+    if is_termux; then
+        return 0
+    fi
+
+    if package_manager_is_apt; then
+        local OS_DISTRO_VERSION_CODENAME=""
+        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
+
+        local PACKAGE_NAME="openvpn"
+        local KEY_FILE_URL="https://swupdate.openvpn.net/repos/repo-public.gpg"
+        local URIS="https://build.openvpn.net/debian/openvpn/stable"
+        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
+        local COMPONENTS="main"
+        local ARCHITECTURES="amd64"
+        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+        package_manager_install_packages "${PACKAGE_NAME}" || return $?
+        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run ${PACKAGE_NAME}"
+        return 0
+    fi
+
+    # fixme utopia Дописать для прочих менеджеров пакетов
+    return 1
+}
+
 # https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
 function openvpn3_setup() {
     if is_termux; then
@@ -1750,6 +1822,8 @@ function main_install_min_packages() {
     service_init || return $?
     pip_update || return $?
     pip_install_packages "${PIP_PACKAGES}" || return $?
+
+    openvpn_setup || return $?
     return 0
 }
 

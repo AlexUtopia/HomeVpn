@@ -107,6 +107,14 @@ fixme utopia Описать wine
 [Пакеты](https://pkgs.org/) для различных Linux дистрибутивов.  
 Для работы со службами используется [`systemd`](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options).
 
+
+Таблица 2.1 - Шпаргалка по менеджерам пакетов
+
+| Действие                      | apt | pacman |
+|-------------------------------| --- | ------ |
+| Получить список файлов пакета | dpkg -L <package-name> | pacman -Ql <package-name> |
+
+
 ### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)
 
 Пакетный менеджер [apt](https://wiki.debian.org/Apt).  
@@ -154,10 +162,10 @@ PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
 RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
-${RUN_WITH_ADMIN_RIGHTS} pacman -Syu --noconfirm && pacman -S git &&
+${RUN_WITH_ADMIN_RIGHTS} pacman -Syu --noconfirm && pacman -S --noconfirm git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
-    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
     ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
@@ -190,7 +198,7 @@ RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
 ${RUN_WITH_ADMIN_RIGHTS} yum check-update && yum -y update && yum install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
-    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
     ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
@@ -222,7 +230,7 @@ RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
 ${RUN_WITH_ADMIN_RIGHTS} dnf check-update && dnf -y upgrade && dnf install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
-    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
     ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
@@ -254,7 +262,7 @@ RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV="${RUN_WITH_ADMIN_RIGHTS} -E"
 ${RUN_WITH_ADMIN_RIGHTS} zypper refresh && zypper update -y && zypper install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
-    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
     ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
@@ -324,7 +332,7 @@ RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV=
 ${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -o Dpkg::Options::="--force-confnew" -y  && apt update && apt -y install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
-    git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
+    git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
     ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
     popd
 else
@@ -580,7 +588,7 @@ xhost +SI:localuser:root
 
 fixme utopia Установка bVNC описана выше
 
-bVNC / RealVNC
+bVNC
 
 ### 4.4.3 VNC клиент Android/termux
 
