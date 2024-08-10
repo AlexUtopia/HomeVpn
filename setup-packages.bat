@@ -14,7 +14,7 @@ set "MSYS2_CONSOLE=%MSYS2_INSTALL_DIR_PATH%\msys2_shell.cmd"
 
 
 rem 1) Скачаем msys2
-bitsadmin /transfer download_msys2_job /download "%MSYS2_DOWNLOAD_URL%" "%MSYS2_FILE_PATH%"
+bitsadmin /transfer download_msys2_job /download "%MSYS2_DOWNLOAD_URL%" "%MSYS2_INSTALLER_FILE_PATH%"
 if %ERRORLEVEL% NEQ 0 (
     echo Download MSYS2 FAIL: %ERRORLEVEL%
     exit /b %ERRORLEVEL%

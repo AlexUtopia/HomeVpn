@@ -379,11 +379,7 @@ fixme utopia Дописать
 
 set "SETUP_SCRIPT_DOWNLOAD_URL=https://raw.githubusercontent.com/AlexUtopia/HomeVpn/main/setup-packages.bat"
 set "SETUP_SCRIPT_FILE_PATH=%PUBLIC%\Downloads\setup-packages.bat"
-bitsadmin /transfer download_setup_script_job /download "%SETUP_SCRIPT_DOWNLOAD_URL%" "%SETUP_SCRIPT_FILE_PATH%"
-if %ERRORLEVEL% NEQ 0 (
-    exit /b %ERRORLEVEL%
-)
-"%SETUP_SCRIPT_FILE_PATH%"
+bitsadmin /transfer download_setup_script_job /download "%SETUP_SCRIPT_DOWNLOAD_URL%" "%SETUP_SCRIPT_FILE_PATH%" && call "%SETUP_SCRIPT_FILE_PATH%"
 
 ```
 
