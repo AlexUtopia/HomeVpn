@@ -165,7 +165,7 @@ QEMU_SYSTEM_PACKAGE="qemu qemu-system qemu-kvm"
 if is_termux; then
     QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
 elif is_msys; then
-    QEMU_SYSTEM_PACKAGE="qemu"
+    QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
 fi
 
 MINIMAL_PACKAGES="${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
@@ -223,7 +223,7 @@ elif is_msys; then
     AUXILIARY_UTILITIES=""
 fi
 
-TELNET_CLIENT_PACKAGE="putty" # Для подключения к qemu monitor
+TELNET_CLIENT_PACKAGE="${MINGW_PACKAGE_PREFIX}-putty" # Для подключения к qemu monitor
 
 SAMBA_PACKAGE="samba"
 if is_msys; then
@@ -275,7 +275,7 @@ QT_CREATOR_PACKAGE="qtcreator"
 if is_termux; then
     QT_CREATOR_PACKAGE="qt-creator"
 elif is_msys; then
-    QT_CREATOR_PACKAGE="qt-creator"
+    QT_CREATOR_PACKAGE="${MINGW_PACKAGE_PREFIX}-qt-creator"
 fi
 
 LIBREOFFICE_PACKAGE="libreoffice"
@@ -286,6 +286,9 @@ elif is_msys; then
 fi
 
 TRANSMISSION_PACKAGE="transmission"
+if is_msys; then
+    TRANSMISSION_PACKAGE="${MINGW_PACKAGE_PREFIX}-transmission-qt"
+fi
 
 FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE} ${TRANSMISSION_PACKAGE}"
 ### Full packages end
@@ -909,7 +912,7 @@ function package_manager_is_package_installed() {
 ### System package manager end
 
 function pip_update() {
-    if is_termux; then
+    if is_termux || is_msys; then
         return 0
     fi
     python3 -m pip install pip --force-reinstall --ignore-installed || return $?
@@ -1125,6 +1128,8 @@ function service_init() {
     if is_termux; then
         runit_init || return $?
         return 0
+    elif is_msys; then
+        return 0
     fi
 
     systemd_init || return $?
@@ -1241,6 +1246,8 @@ function rdp_client_install_default() {
     local RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
     if is_termux; then
         RDP_CLIENT_PACKAGE="freerdp"
+    elif is_msys; then
+        RDP_CLIENT_PACKAGE="${MINGW_PACKAGE_PREFIX}-freerdp"
     fi
 
     package_manager_install_packages "${RDP_CLIENT_PACKAGE}" || return $?
@@ -1267,7 +1274,7 @@ function rdp_client_install_nightly() {
 }
 
 function rdp_client_install() {
-    if is_termux; then
+    if is_termux || is_msys; then
         rdp_client_install_default || return $?
     else
         rdp_client_install_nightly || rdp_client_install_default || return $? # fixme utopia Чтобы будем делать с Linux ARM?
@@ -1333,6 +1340,10 @@ function wine_install_32bit_dependencies() {
 }
 
 function wine_install() {
+    if is_msys; then
+        return 0
+    fi
+
     if is_termux; then
         # fixme utopia Будем устанавливать в termux для архитектуры amd64/i386? Проверить в termux
         # fixme utopia Запуск из под box86/box64
@@ -1373,20 +1384,16 @@ function smbd_get_config_file_path() {
 }
 
 function samba_make_user_and_assign_rights() {
-    if ! is_termux; then
-        # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
+    # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
+    local SAMBA_USER="${1}"
+    local SAMBASHARE_GROUP="sambashare"
 
-        local SAMBA_USER="${1}"
-        local SAMBASHARE_GROUP="sambashare"
+    if ! user_is_available "${SAMBA_USER}"; then
+        user_add "${SAMBA_USER}" || return $?
+    fi
 
-        if ! user_is_available "${SAMBA_USER}"; then
-            user_add "${SAMBA_USER}" || return $?
-        fi
-
-        if ! user_is_added_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}"; then
-            user_add_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}" || return $?
-        fi
-        return 0
+    if ! user_is_added_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}"; then
+        user_add_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}" || return $?
     fi
     return 0
 }
@@ -1400,7 +1407,7 @@ function samba_make_public_directory() {
 function smbd_make_config() {
     # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
 
-    local SMBD_CONFIG_FILE_PATH
+    local SMBD_CONFIG_FILE_PATH=""
     SMBD_CONFIG_FILE_PATH=$(smbd_get_config_file_path) || return $?
 
     # fixme utopia Задать обнаружение NetBios
@@ -1435,6 +1442,11 @@ writable = yes
 }
 
 function smbd_setup() {
+    if is_msys; then
+        # fixme utopia Дописать для windows https://stackoverflow.com/questions/1537065/how-can-i-create-a-shared-folder-from-the-windows-command-line
+        return 0
+    fi
+
     # https://ubuntu.com/tutorials/install-and-configure-samba#1-overview
     local SMBD="smbd"
 
@@ -1699,6 +1711,10 @@ function vnc_create_password_if() {
 }
 
 function vnc_server_setup() {
+    if is_msys; then
+        return 0
+    fi
+
     local declare -A VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
@@ -1741,7 +1757,7 @@ function vnc_server_setup() {
 # https://community.openvpn.net/openvpn/wiki/OpenvpnSoftwareRepos#DebianUbuntu:UsingOpenVPNaptrepositories
 function openvpn_setup() {
     if is_termux; then
-        return 0
+        return 0 # fixme utopia Или скомпилировать или скачать openvpn https://openvpn.net/community-downloads/ (но сможем ли мы сконфигурировать эту версию?)
     fi
 
     if package_manager_is_apt; then
@@ -1767,7 +1783,7 @@ function openvpn_setup() {
 # https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
 function openvpn3_setup() {
     if is_termux; then
-        return 0
+        return 0 # fixme utopia Или скомпилировать или скачать openvpn-connect
     fi
 
     if package_manager_is_apt; then
@@ -1791,7 +1807,8 @@ function openvpn3_setup() {
 # https://docs.waydro.id/usage/install-on-desktops#ubuntu-debian-and-derivatives
 # https://repo.waydro.id/
 function waydroid_setup() {
-    if is_termux; then
+    # https://learn.microsoft.com/en-us/windows/android/wsa/
+    if is_termux || is_msys; then
         return 0
     fi
 
@@ -1848,6 +1865,7 @@ function main_install_full_packages() {
     wine_install || return $?
     openvpn3_setup || return $?
     waydroid_setup || return $?
+    # fixme utopia Для MSYS2 rdp_server_setup || return $?
     return 0
 }
 

@@ -101,7 +101,7 @@ fixme utopia Описать wine
 | GLOBAL_CONFIG_SMBD_TCP_PORTS               | TCP порты которые "слушает" SAMBA сервер              |                             | `139 445` по умолчанию<br>для Android/termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
 
 
-## 2.2 Разворот проекта в Linux
+## 2.2 Разворот проекта на Linux
 
 [Шпаргалка](https://distrowatch.com/dwres.php?resource=package-management) по менеджерам пакетов.  
 [Пакеты](https://pkgs.org/) для различных Linux дистрибутивов.  
@@ -110,9 +110,10 @@ fixme utopia Описать wine
 
 Таблица 2.1 - Шпаргалка по менеджерам пакетов
 
-| Действие                      | apt | pacman |
-|-------------------------------| --- | ------ |
-| Получить список файлов пакета | dpkg -L <package-name> | pacman -Ql <package-name> |
+| Действие                      | apt / dpkg                        | pacman                            |
+|-------------------------------|-----------------------------------|-----------------------------------|
+| Получить список файлов пакета | `dpkg -L <package-name>`          | `pacman -Ql <package-name>`       |
+| Получить список файлов пакета | `apt search <package-for-search>` | `pacman -Ss <package-for-search>` |
 
 
 ### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)
@@ -282,7 +283,7 @@ fixme utopia Дописать
 
 
 
-## 2.3 Android
+## 2.3 Разворот проекта на Android
 
 ### 2.3.1 Установка приложений
 
@@ -370,9 +371,31 @@ fixme utopia Дописать с примерами записи экрана
 fixme utopia Дописать
 
 
-## 2.4 Windows (MSYS2)
+## 2.4 Разворот проекта на Windows
 
-fixme utopia Скачать батник для разворота MSYS2 со страницы проекта на github?
+### 2.4.1 Windows/MSYS2
+
+```batch
+
+set "SETUP_SCRIPT_DOWNLOAD_URL=https://raw.githubusercontent.com/AlexUtopia/HomeVpn/main/setup-packages.bat"
+set "SETUP_SCRIPT_FILE_PATH=%PUBLIC%\Downloads\setup-packages.bat"
+bitsadmin /transfer download_setup_script_job /download "%SETUP_SCRIPT_DOWNLOAD_URL%" "%SETUP_SCRIPT_FILE_PATH%"
+if %ERRORLEVEL% NEQ 0 (
+    exit /b %ERRORLEVEL%
+)
+"%SETUP_SCRIPT_FILE_PATH%"
+
+```
+
+
+### 2.4.2 Windows/Cygwin
+
+fixme utopia В процессе изысканий
+
+### 2.4.3 Windows/WSL2
+
+fixme utopia В процессе изысканий
+
 
 ## 2.5 Настройка серверной части HomeVpn
 
