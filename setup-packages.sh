@@ -3,6 +3,9 @@
 # Понять что мы исполняемся внутри вирт машины
 # https://unix.stackexchange.com/questions/89714/easy-way-to-determine-the-virtualization-technology-of-a-linux-machine
 
+# Узнать зависимости pip пакетов
+# https://stackoverflow.com/a/67111193
+
 # ВНИМАНИЕ!!! Пакет coreutils должен быть предустановлен
 
 # fixme utopia VNC сервер для Windows (для tigervnc пишут что сервер не поддерживается)
@@ -12,6 +15,9 @@
 # fixme utopia Настройка nmbd
 # fixme utopia gvfs для Android/termux
 # fixme utopia Инструкция по scp
+# fixme utopia [Windows/MSYS2] Настройка шареной папки + настройка RDP сервера (RDPWrapper)
+# fixme utopia 7zip заместо tar? Но у 7zip нет опции --strip-components
+# fixme utopia Делать ли upgrade pip? И как его правильно делать?
 
 # fixme utopia Настройка микрофона в браузере
 # Звук с микрофона использовать для браузера, например (не забыть выдать разрешение на микрофон для Termux:API, проверть точно ли нужно это разрешение)
@@ -93,6 +99,9 @@ GLOBAL_CONFIG_VNC_USER=$(logname) # в termux переменная окруже�
 GLOBAL_CONFIG_SAMBA_USER=$(logname) # в termux переменная окружения USER не установлена
 
 GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
+if is_msys; then
+    GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${SYSTEMDRIVE}/smb_share_public"
+fi
 GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
 if is_termux; then
     GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
@@ -110,7 +119,7 @@ TERMUX_SPECIFIC_PACKAGES="termux-tools termux-api proot"
 
 ### Minimal packages begin
 
-WGET_PACKAGE="wget"
+CURL_PACKAGE="curl"
 TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
 if is_msys; then
@@ -168,7 +177,7 @@ elif is_msys; then
     QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
 fi
 
-MINIMAL_PACKAGES="${WGET_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
+MINIMAL_PACKAGES="${CURL_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
 if is_termux; then
     MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
 fi
@@ -294,7 +303,7 @@ FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_
 ### Full packages end
 
 
-PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1"
+PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1 requests==2.32.3 grequests==0.7.0 PySocks==1.7.1"
 
 ### System API begin
 
@@ -477,8 +486,14 @@ function download_file_to_directory() {
 
     make_dirs "${DIRECTORY_PATH}" || return $?
     pushd "${DIRECTORY_PATH}" || return $?
-    wget "${URL}" || return $?
-    popd || return $?
+
+    curl -L "${URL}"
+    local CURL_RESULT=$?
+    if !check_result_code ${CURL_RESULT}; then
+        popd
+        return ${CURL_RESULT}
+    fi
+
     return 0
 }
 
@@ -490,11 +505,15 @@ function download_file_to_directory() {
 function download_file() {
     local URL="${1}"
     local FILE_PATH="${2}"
-    local FILE_DIRECTORY_PATH=""
-    FILE_DIRECTORY_PATH=$(dirname "${FILE_PATH}") || return $?
 
-    make_dirs "${FILE_DIRECTORY_PATH}" || return $?
-    wget -O "${FILE_PATH}" "${URL}" || return $?
+    if [[ "${FILE_PATH}" == "-" ]]; then
+        curl -L "${URL}" || return $?
+    else
+        local FILE_DIRECTORY_PATH=""
+        FILE_DIRECTORY_PATH=$(dirname "${FILE_PATH}") || return $?
+        make_dirs "${FILE_DIRECTORY_PATH}" || return $?
+        curl -L --output "${FILE_PATH}" "${URL}" || return $?
+    fi
     return 0
 }
 
@@ -814,7 +833,7 @@ function apt_add_sources() {
 
     apt update
     local APT_UPDATE_RESULT=$?
-    if ! check_result_code ${APT_UPDATE_RESULT}; then
+    if !check_result_code ${APT_UPDATE_RESULT}; then
         rm -f "${SOURCE_FILE_PATH}" "${KEY_FILE_PATH}"
         return ${APT_UPDATE_RESULT}
     fi
@@ -915,7 +934,7 @@ function pip_update() {
     if is_termux || is_msys; then
         return 0
     fi
-    python3 -m pip install pip --force-reinstall --ignore-installed || return $?
+    python3 -m pip install --upgrade pip || return $?
     return 0
 }
 
@@ -1067,10 +1086,10 @@ function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
     sv-enable "${SERVICE_NAME}" > "/dev/null"
-    if ! check_result_code $?; then
+    if !check_result_code $?; then
         sleep 5
         sv-enable "${SERVICE_NAME}" > "/dev/null"
-        if ! check_result_code $?; then
+        if !check_result_code $?; then
             # Иногда почему-то случается вылет runit и далее служба не может запуститься,
             # поэтому запустим runit заново
             . "${GLOBAL_CONFIG_ETC_PREFIX}/profile.d/start-services.sh" > "/dev/null" || return $?
@@ -1226,7 +1245,7 @@ function sshd_setup() {
 }
 
 function pycharm_install() {
-    local PYCHARM="pycharm-community-2024.1.4"
+    local PYCHARM="pycharm-community-2024.2"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
     local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
@@ -1441,9 +1460,26 @@ writable = yes
     return 0
 }
 
+# fixme utopia Дописать для windows https://stackoverflow.com/questions/1537065/how-can-i-create-a-shared-folder-from-the-windows-command-line
+# https://habr.com/ru/companies/varonis/articles/281691/
+# https://stackoverflow.com/a/9422811
+# https://stackoverflow.com/questions/5944180/how-do-you-run-a-command-as-an-administrator-from-the-windows-command-line
+# https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-special-identities-groups
+# https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-special-identities-groups#everyone
+# https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-r2-and-2012/hh750728(v=ws.11)
+# https://stackoverflow.com/questions/5944180/how-do-you-run-a-command-as-an-administrator-from-the-windows-command-line
+function windows_net_share_setup() {
+    # Название группы Everyone необходимо уточнять через её SID (S-1-1-0), "Все" - это локализованное имя
+    # whoami /groups
+    # https://learn.microsoft.com/ru-ru/windows/win32/com/runas
+
+    # runas /user:"Администратор" "net share public=\"${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}\" /GRANT:Все,FULL" || return $?
+    return 0
+}
+
 function smbd_setup() {
     if is_msys; then
-        # fixme utopia Дописать для windows https://stackoverflow.com/questions/1537065/how-can-i-create-a-shared-folder-from-the-windows-command-line
+        windows_net_share_setup || return $?
         return 0
     fi
 

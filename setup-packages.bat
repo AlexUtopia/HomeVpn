@@ -9,7 +9,7 @@ rem Запуск команды msys2 на исполнение из под cmd 
 set "PROJECT_NAME=HomeVpn"
 set "MSYS2_DOWNLOAD_URL=https://github.com/msys2/msys2-installer/releases/download/2024-07-27/msys2-x86_64-20240727.exe"
 set "MSYS2_INSTALLER_FILE_PATH=%PUBLIC%\Downloads\msys2-x86_64.exe"
-set "MSYS2_INSTALL_DIR_PATH=C:\msys64"
+set "MSYS2_INSTALL_DIR_PATH=%SYSTEMDRIVE%:\msys64"
 set "MSYS2_CONSOLE=%MSYS2_INSTALL_DIR_PATH%\msys2_shell.cmd"
 
 

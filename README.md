@@ -97,7 +97,7 @@ fixme utopia Описать wine
 | GLOBAL_CONFIG_ETC_PREFIX                   | Префикс для директории etc                            |                             | `/etc` по умолчанию<br>для Android/termux используется значение переменной окружения `$PREFIX/etc`                                       |
 | GLOBAL_CONFIG_VNC_USER                     | Пользователь для которого будет настроен VNC сервер   |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh (выхлоп команды logname)                            |
 | GLOBAL_CONFIG_SAMBA_USER                   | Пользователь для которого будет настроен SAMBA сервер |                             | По умолчанию текущий пользователь от имени которого запущен скрипт setup-packages.sh (выхлоп команды logname)                            |
-| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH  | Путь до публичной директории SAMBA сервера            |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public` по умолчанию                                                                             |
+| GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH  | Путь до публичной директории SAMBA сервера            |                             | `${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public` по умолчанию<br>Для MSYS2 `%SYSTEMDRIVE%\smb_share_public`                               |
 | GLOBAL_CONFIG_SMBD_TCP_PORTS               | TCP порты которые "слушает" SAMBA сервер              |                             | `139 445` по умолчанию<br>для Android/termux `1139 4445` (в связи с [ограничениями Android](https://android.stackexchange.com/a/205562)) |
 
 
@@ -374,6 +374,8 @@ fixme utopia Дописать
 ## 2.4 Разворот проекта на Windows
 
 ### 2.4.1 Windows/MSYS2
+
+Запустим cmd.exe от имени администратора (правой кнопкой мыши "Запустить от имени администратора") и вставим туда следующий код
 
 ```batch
 
