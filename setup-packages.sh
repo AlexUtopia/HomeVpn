@@ -232,7 +232,10 @@ elif is_msys; then
     AUXILIARY_UTILITIES=""
 fi
 
-TELNET_CLIENT_PACKAGE="${MINGW_PACKAGE_PREFIX}-putty" # Для подключения к qemu monitor
+TELNET_CLIENT_PACKAGE="putty" # Для подключения к qemu monitor
+if is_msys; then
+    TELNET_CLIENT_PACKAGE="${MINGW_PACKAGE_PREFIX}-putty"
+fi
 
 SAMBA_PACKAGE="samba"
 if is_msys; then

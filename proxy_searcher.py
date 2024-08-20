@@ -2,6 +2,17 @@ import grequests
 
 from pprint import pprint
 
+# В итоге нам надо сделать PAC файл
+# https://superuser.com/questions/1338200/proxy-server-configuration-using-networkmanager-nmcli
+# https://findproxyforurl.com/pac-functions/
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Proxy_servers_and_tunneling/Proxy_Auto-Configuration_PAC_file
+
+# Где хранить локальный pac file
+# https://askubuntu.com/questions/1511848/how-do-i-configure-the-network-manager-to-use-a-custom-pac-file
+# https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/desktop_migration_and_administration_guide/configuration-overview-gsettings-dconf#terminology-explained
+
+# https://man.archlinux.org/man/nm-settings.5
+
 
 # https://github.com/spyoungtech/grequests
 # https://github.com/levigross/grequests/issues/69
@@ -9,6 +20,16 @@ from pprint import pprint
 
 # https://requests.readthedocs.io/en/latest/api/#requests.request
 # https://www.w3schools.com/python/ref_requests_response.asp
+
+# network manager (более универсальный вариант) vs gsettings
+# (для гномподобных рабочих окружений подходит для настройки прокси для всех сетевых подключений)
+# https://networkmanager.dev/docs/api/latest/
+# https://python-sdbus-networkmanager.readthedocs.io/en/latest/quickstart.html
+
+# Настройка proxy для windows
+# https://stackoverflow.com/questions/64360503/how-to-change-proxy-setting-in-windows-from-script
+# https://learn.microsoft.com/en-us/previous-versions/troubleshoot/browsers/connectivity-navigation/optimize-pac-performance
+# https://superuser.com/a/826013/2121020
 
 def exception_handler(request, exception):
     print("Request failed")
