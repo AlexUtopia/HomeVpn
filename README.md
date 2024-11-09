@@ -126,7 +126,7 @@ fixme utopia Описать wine
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
 PROJECT_NAME="HomeVpn"
-PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_URL="git@github.com:AlexUtopia/${PROJECT_NAME}.git"
 PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
@@ -158,7 +158,7 @@ fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
 PROJECT_NAME="HomeVpn"
-PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_URL="git@github.com:AlexUtopia/${PROJECT_NAME}.git"
 PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
@@ -191,7 +191,7 @@ fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
 PROJECT_NAME="HomeVpn"
-PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_URL="git@github.com:AlexUtopia/${PROJECT_NAME}.git"
 PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
@@ -223,7 +223,7 @@ fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
 PROJECT_NAME="HomeVpn"
-PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_URL="git@github.com:AlexUtopia/${PROJECT_NAME}.git"
 PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
@@ -255,7 +255,7 @@ fixme utopia Скрипт НЕ ПРОВЕРЕН
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
 PROJECT_NAME="HomeVpn"
-PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_URL="git@github.com:AlexUtopia/${PROJECT_NAME}.git"
 PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS="sudo"
@@ -325,7 +325,7 @@ cat "$PREFIX/var/log/sv/sshd/current"
 
 PROJECT_BASE_DIR_PATH=$(echo ~)
 PROJECT_NAME="HomeVpn"
-PROJECT_URL="https://github.com/AlexUtopia/${PROJECT_NAME}.git"
+PROJECT_URL="git@github.com:AlexUtopia/${PROJECT_NAME}.git"
 PROJECT_BRANCH="main"
 PROJECT_DIR_PATH="${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}"
 RUN_WITH_ADMIN_RIGHTS=

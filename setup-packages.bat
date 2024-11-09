@@ -36,7 +36,7 @@ if %ERRORLEVEL% EQU 0 (
 rem 3) Скачаем и настроим HomeVpn
 call "%MSYS2_CONSOLE%" -no-start -clang64 -defterm -c ^"set -x; PROJECT_BASE_DIR_PATH=$(echo ~); ^
 PROJECT_NAME=^"%PROJECT_NAME%^"; ^
-PROJECT_URL=^"https://github.com/AlexUtopia/${PROJECT_NAME}.git^"; ^
+PROJECT_URL=^"git@github.com:AlexUtopia/${PROJECT_NAME}.git^"; ^
 PROJECT_BRANCH=^"main^"; ^
 PROJECT_DIR_PATH=^"${PROJECT_BASE_DIR_PATH}/${PROJECT_NAME}^"; ^
 RUN_WITH_ADMIN_RIGHTS=; ^
