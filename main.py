@@ -1551,7 +1551,7 @@ class VirtualMachine:
 
     @staticmethod
     def __ram_size():  # fixme utopia Использовать psutil
-        return "-m 16384"
+        return "-m 8192"
 
     def __network(self):
         self.__tap.create()
@@ -1594,7 +1594,7 @@ class VirtualMachine:
         return "-monitor telnet:127.0.0.1:55555,server,nowait;"
 
     def __cpu(self):
-        return "-cpu host -smp 8,sockets=1,cores=4,threads=2,maxcpus=8"
+        return "-cpu host -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
 
     def __gpu(self):
         # Использовать для установки ОС
@@ -1603,7 +1603,7 @@ class VirtualMachine:
         # return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
         # return "-vga none -device vfio-pci,host=00:1f.3"
 
-        # return "-device virtio-vga-gl -display sdl,gl=on"
+        return "-device virtio-vga-gl -display sdl,gl=on"
 
         # return "-nographic"
 
@@ -1612,7 +1612,7 @@ class VirtualMachine:
         # ,display=auto,multifunction=on,x-vga=on,
         # x-igd-opregion=on,
         # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
-        return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,display=auto,multifunction=on"  # x-pci-sub-vendor-id=0x1025,x-pci-sub-device-id=0x1518,x-pci-vendor-id=0x8086,x-pci-device-id=0x2812
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,display=auto,multifunction=on"  # x-pci-sub-vendor-id=0x1025,x-pci-sub-device-id=0x1518,x-pci-vendor-id=0x8086,x-pci-device-id=0x2812
         # return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
         # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
         # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
@@ -1639,6 +1639,92 @@ class VirtualMachine:
         return "-drive file=\"{}\",media=cdrom,if=ide".format(self.__virtio.get_win_drivers())
 
 
+class UdpWatchdog:
+    __IPTABLES_RULE_MATCH = "string"
+
+    def __init__(self, open_vpn_config, my_external_ip_address_and_port):
+        self.__is_init = False
+        self.__secret_message = "testtest" # fixme utopia Сгенерировать uuid?
+        self.__counter = int(0)
+        self.__open_vpn_config = open_vpn_config
+        self.__my_external_ip_address_and_port = my_external_ip_address_and_port
+        atexit.register(self.clear_at_exit)
+
+    # fixme utopia Если три раза подряд метод __check_drop_packets_counter() возвращал False, то вернуть False
+    def watch(self):
+        if not self.__is_init:
+            self.__setup_firewall()
+            self.__is_init = True
+
+        try:
+            self.__send_upd_packet_to_my_external_ip_address_and_port()
+        except Exception as ex:
+            print("[Watchdog] Send UDP packet FAIL: {}".format(ex))
+            return False
+
+        time.sleep(1)
+        return self.__check_drop_packets_counter()
+
+    def clear_at_exit(self):
+        try:
+            if self.__is_init:
+                self.__setup_firewall(clear=True)
+        except Exception:
+            return
+
+    def __send_upd_packet_to_my_external_ip_address_and_port(self):
+        ip_address = self.__my_external_ip_address_and_port.get_ip_address()
+        udp_port = self.__my_external_ip_address_and_port.get_port()
+
+        sock_tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock_tx.sendto(self.__get_secret_message_for_send(), (str(ip_address), udp_port))
+        self.__counter = self.__counter + 1
+
+    def __get_secret_message_for_send(self):
+        return bytes("{}/{}".format(self.__secret_message, self.__counter), "utf-8")
+
+    def __setup_firewall(self, clear=False):
+        # iptables -I INPUT -p udp -m string --string "testtest" --algo bm -j DROP
+        table = iptc.Table(iptc.Table.FILTER)
+        chain = iptc.Chain(table, "INPUT")
+
+        rule = iptc.Rule()
+        rule.protocol = "udp"
+
+        # fixme utopia Задать параметр to
+        # https://ipset.netfilter.org/iptables-extensions.man.html#lbCE
+        match = iptc.Match(rule, self.__IPTABLES_RULE_MATCH)
+        match.string = str(self.__secret_message)
+        match.algo = "bm"
+        rule.add_match(match)
+
+        target = iptc.Target(rule, "DROP")
+        rule.target = target
+
+        if clear:
+            chain.delete_rule(rule)
+        else:
+            chain.insert_rule(rule)
+        table.commit()
+        print(iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False))
+
+    def __check_drop_packets_counter(self):
+        drop_packets_counter = self.__get_drop_packets_counter()
+        result = drop_packets_counter == self.__counter
+        print("[Watchdog] send_packets={} | drop_packets={} | {}".format(drop_packets_counter, self.__counter,
+                                                                         "GOOD" if result else "BAD"))
+        return result
+
+    def __get_drop_packets_counter(self):
+        table = iptc.Table(iptc.Table.FILTER)
+        table.refresh()
+        chain = iptc.Chain(table, 'INPUT')
+        for rule in chain.rules:
+            for match in rule.matches:
+                if match.name == self.__IPTABLES_RULE_MATCH:
+                    return rule.get_counters()[0]
+
+
 class Daemon:
     SLEEP_BEFORE_RECONNECT_SEC = 30
     SLEEP_AFTER_SERVER_START_SEC = 5
@@ -1649,11 +1735,41 @@ class Daemon:
     def run(self):
         open_vpn_server_port = self.__open_vpn_config.get_server_port()
 
-        while True:
-            my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
+        my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
 
-            TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(
-                my_ip_address_and_port)
+        TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(
+            my_ip_address_and_port)
+
+        UDP_IP = my_ip_address_and_port.get_ip_address()
+        UDP_PORT = my_ip_address_and_port.get_port()
+        print("UDP target IP:", UDP_IP)
+        print("UDP target port:", UDP_PORT)
+
+        # sock_rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # sock_rx.bind((str("0.0.0.0"), open_vpn_server_port))
+
+        udp_watchdog = UdpWatchdog(self.__open_vpn_config, my_ip_address_and_port)
+
+        i = 0
+        while True:
+            udp_watchdog.watch()
+            time.sleep(5)
+            continue
+
+            MESSAGE = f"test flush {i}"
+
+            print("send message:", MESSAGE)
+
+            sock_tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+            sock_tx.sendto(bytes(MESSAGE, "utf-8"), (str(UDP_IP), UDP_PORT))
+
+            # Receive data from the socket
+            data, addr = sock_rx.recvfrom(1024)
+            print(f"Received packet from {addr}: {data.decode('utf-8')}")
+
+            i = i + 1
+            time.sleep(5)
+            continue
 
             self.__init()
 
@@ -2715,7 +2831,8 @@ def main():
                 config.get_local_network_interface())
 
             network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(), local_network_interface, block_internet_access=block_internet_access)
+                                           config.get_dns_config_dir(), local_network_interface,
+                                           block_internet_access=block_internet_access)
 
             vm_registry = VmRegistry(config.get_vm_registry_path())
             vm_meta_data = vm_registry.get_with_verifying(vm_name)
@@ -2754,7 +2871,8 @@ def main():
                                                                      vm_rdp_forwarding.add_with_retry()))
             tcp_forwarding_thread.start()
 
-            vm = VirtualMachine(network_bridge, vm_meta_data)
+            virtio = Virtio(config)
+            vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio)
             vm.run()
             tcp_forwarding_thread.join()
             return
