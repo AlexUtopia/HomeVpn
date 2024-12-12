@@ -13,6 +13,7 @@ import urllib.parse
 import netaddr
 import os_release
 import randmac
+import unittest
 
 import requests
 
@@ -26,9 +27,11 @@ os.environ['XTABLES_LIBDIR'] = "/usr/lib/x86_64-linux-gnu/xtables/"
 
 import psutil
 import stun
-import iptc
+import iptc  # fixme utopia Перейти на nftables, iptables оставить под конфигом проекта
+# https://habr.com/ru/companies/ruvds/articles/580648/
 import socket
 import platform
+import cpuinfo
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -377,9 +380,6 @@ class OpenVpnConfig:
 
     def get_easy_rsa_version(self):
         return self.get_config_parameter_strong("easy_rsa_version")
-
-    def get_watchdog_user_name(self):
-        return self.get_config_parameter_strong("watchdog_user_name")
 
     def get_my_current_ip_address_and_port(self):
         return self.get_config_parameter_strong("my_current_ip_address_and_port")
@@ -1641,10 +1641,11 @@ class VirtualMachine:
 
 class UdpWatchdog:
     __IPTABLES_RULE_MATCH = "string"
+    __CONTER_MISMATCH = 3
 
     def __init__(self, open_vpn_config, my_external_ip_address_and_port):
         self.__is_init = False
-        self.__secret_message = "testtest" # fixme utopia Сгенерировать uuid?
+        self.__secret_message = "testtest"  # fixme utopia Сгенерировать uuid?
         self.__counter = int(0)
         self.__open_vpn_config = open_vpn_config
         self.__my_external_ip_address_and_port = my_external_ip_address_and_port
@@ -1710,8 +1711,20 @@ class UdpWatchdog:
 
     def __check_drop_packets_counter(self):
         drop_packets_counter = self.__get_drop_packets_counter()
-        result = drop_packets_counter == self.__counter
-        print("[Watchdog] send_packets={} | drop_packets={} | {}".format(drop_packets_counter, self.__counter,
+        if drop_packets_counter is None:
+            # fixme utopia По идее здесь надо заново настраивать файервол
+            print("[Watchdog] drop_packets_counter is null: {}".format(
+                iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)))
+            self.__setup_firewall()
+            return False
+
+        conters_match = self.__counter == drop_packets_counter
+        # fixme utopia Облогировать
+        result = conters_match if conters_match else self.__counter <= drop_packets_counter + self.__CONTER_MISMATCH
+
+        # fixme utopia Нужно выравнивать счётчики (т.е. self.__counter = drop_packets_counter) если разница между ними константна некоторое время
+
+        print("[Watchdog] send_packets={} | drop_packets={} | {}".format(self.__counter, drop_packets_counter,
                                                                          "GOOD" if result else "BAD"))
         return result
 
@@ -1723,7 +1736,511 @@ class UdpWatchdog:
             for match in rule.matches:
                 if match.name == self.__IPTABLES_RULE_MATCH:
                     return rule.get_counters()[0]
+        return None
 
+
+# fixme utopia Необходимо проверять параметры загрузки linux kernel (см. /proc/cmdline)
+# Нам нужен парсер командной строки для linux kernel
+class Iommu:
+    # fixme utopia Вырубить виртуализацию в биос и проверить появится ли
+    __IOMMU_SYS_FD_PATH = "/sys/class/iommu/"
+
+    # проверить что в /etc/default/grub есть intel_iommu=on iommu=pt и в dmesg есть
+    # iommu: Default domain type: Passthrough
+    def check(self):
+        return os.path.exists(self.__IOMMU_SYS_FD_PATH) and os.path.isdir(self.__IOMMU_SYS_FD_PATH)
+
+    def is_intel(self):
+        return self.check() and self.__is_cpu_vendor("intel")
+
+    def is_amd(self):
+        return self.check() and self.__is_cpu_vendor("amd")
+
+    def is_arm(self):
+        return self.check() and self.__is_cpu_vendor("arm")
+
+    # https://docs.kernel.org/admin-guide/kernel-parameters.html
+    def get_kernel_parameters(self):
+        if self.is_intel():
+            return "intel_iommu=on iommu=pt"
+        elif self.is_amd():
+            return "amd_iommu=on iommu=pt"
+        return ""
+
+    def __is_cpu_vendor(self, cpu_vendor):
+        try:
+            return str(cpu_vendor) in str(cpuinfo.get_cpu_info()['vendor_id_raw']).lower()
+        except Exception:
+            return False
+
+
+class BitUtils:
+    DECIMAL_BASE = 10
+    HEX_BASE = 16
+    TETRAD_IN_BYTE = 2
+    BITS_IN_TETRAD = 4
+    LSB_TETRAD_MASK = 0x0F
+    MSB_TETRAD_MASK = 0xF0
+    BITS_IN_BYTE = BITS_IN_TETRAD * TETRAD_IN_BYTE
+    UINT8_MIN = 0
+    UINT8_MAX = 0xFF
+    INT8_MIN = -128
+    INT8_MAX = 127
+    UINT16_MIN = 0
+    UINT16_MAX = 0xFFFF
+    INT16_MIN = -32768
+    INT16_MAX = 32767
+    UINT8_MASK = UINT8_MAX
+    UINT16_MASK = UINT16_MAX
+    BIT_COUNT_MAX = sys.maxsize.bit_length() + 1
+    BASE_DIGIT_LIST = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    BASE_MIN = 2
+    BASE_MAX = len(BASE_DIGIT_LIST)
+    DIGIT_COUNT_MIN = 1
+
+    @staticmethod
+    def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
+        BitUtils.__check_base(base)
+        result = 0
+        if type(val) is str:
+            result = int(val, base)
+        elif type(val) is int:
+            result = val
+        else:
+            raise Exception("Value unknown type: {}".format(str(val)))
+        BitUtils.check_int(result, bit_count, signed)
+        return result
+
+    @staticmethod
+    def get_regex(val_max, base):
+        BitUtils.__check_int_type(val_max)
+        val_max = abs(val_max)
+
+        val_max_as_str = BitUtils.to_string(val_max, base)
+        digit_count = len(val_max_as_str)
+
+        # Заполнение всех digits нулями, пробелами или ничем
+
+        # Правило для первого элемента, последнего элемента, и всех прочих
+
+        # регулярка для val_max = 157, заполнение нулями
+        # [0-1](?(?<=1)[0-5]|[0-9])(?(?<=15)[0-6]|[0-9])
+        # [1-10](?(?<=1)[0-5]|(?(?<=0)[1-90]|[0-5]))(?(?<=15)[0-6]|[0-9])
+
+        # регулярка для val_max = 157, заполнение пробелами
+        # [1-1 ](?(?<=1)[0-5]|(?(?<= )[1-9 ]|[0-5]))(?(?<=15)[0-6]|[0-9])
+
+        # регулярка для val_max = 157, заполнение ничем
+        # ограничение по максимальной разрядности
+        # [1-1]{0,1}+(?(?<=1)[0-5]|[0-9]){0,1}+(?(?<=15)[0-6]|[0-9])
+        # добавляется ревнивая квантификация и оптимизация условия 2.1
+
+        # диапазон 0 до val_max
+        #
+
+        # Система счисления запись
+        return ""
+
+    @staticmethod
+    def check_int(val, bit_count, signed):
+        BitUtils.__check_int_type(val)
+        val_min = BitUtils.get_int_min_value(bit_count, signed)
+        val_max = BitUtils.get_int_max_value(bit_count, signed)
+        BitUtils.__check_range(val, val_min, val_max)
+
+    @staticmethod
+    def to_string(val, base, to_lower=False):
+        BitUtils.__check_int_type(val)
+        BitUtils.__check_base(base)
+        if val == 0:
+            return "0"
+
+        result = ""
+        if val < 0:
+            result += "-"
+            val = abs(val)
+
+        while val > 0:
+            result += BitUtils.BASE_DIGIT_LIST[val % base]
+            val = val / base
+        result = result[::-1]
+        if to_lower:
+            return result.lower()
+        return result
+
+    @staticmethod
+    def get_max_by_base(base, digit_count):
+        BitUtils.__check_base(base)
+        # BitUtils.__check_digit_count(digit_count)
+
+        digit_value_max = BitUtils.get_digit_value_max(base)
+        result = 0
+        while digit_count > 0:
+            result = (result * base) + digit_value_max
+            digit_count = digit_count - 1
+        return result
+
+    @staticmethod
+    def get_digit_value_max(base):
+        BitUtils.__check_base(base)
+        return base - 1
+
+    @staticmethod
+    def get_digit_count_max(base):
+        BitUtils.__check_base(base)
+        int_max = BitUtils.get_int_max_value(BitUtils.BIT_COUNT_MAX, signed=False)
+        # Теоретически может быть -1 (int64 = 0xFFFFFFFFFFFFFFFF), например, для Python2
+        return BitUtils.get_digit_count(int_max, base)
+
+    @staticmethod
+    def get_digit_count(val, base):
+        BitUtils.__check_int_type(val)
+        BitUtils.__check_base(base)
+        if val == 0:
+            return 1
+        val = abs(val)
+
+        result = 0
+        while val > 0:
+            val = val / base
+            result = result + 1
+        return result
+
+    @staticmethod
+    def get_min_by_base(base, digit_count):
+        return 0
+
+    @staticmethod
+    def get_int_min_max_value(bit_count, signed):
+        return BitUtils.get_int_min_value(bit_count, signed), BitUtils.get_int_max_value(bit_count, signed)
+
+    @staticmethod
+    def get_int_min_value(bit_count, signed):
+        BitUtils.__check_bit_count(bit_count)
+        if signed:
+            return ~0 << bit_count - 1
+        return 0
+
+    @staticmethod
+    def get_int_max_value(bit_count, signed):
+        BitUtils.__check_bit_count(bit_count)
+        if signed:
+            return ~(~0 << bit_count - 1)
+        return ~(~0 << bit_count)
+
+    @staticmethod
+    def __check_bit_count(bit_count):
+        BitUtils.__check_int_type(bit_count)
+        bit_count_min = 1
+        bit_count_max = BitUtils.BIT_COUNT_MAX
+        BitUtils.__check_range(bit_count, bit_count_min, bit_count_max)
+
+    @staticmethod
+    def __check_base(base):
+        BitUtils.__check_int_type(base)
+        BitUtils.__check_range(base, BitUtils.BASE_MIN, BitUtils.BASE_MAX)
+
+    @staticmethod
+    def __check_int_type(val):
+        if type(val) is not int:
+            raise Exception("Value unknown type, must be int: {}".format(str(val)))
+
+    @staticmethod
+    def __check_range(val, val_min, val_max):
+        if val_min > val_max:
+            raise Exception("Value min ({}) more value max ({}))".format(val_min, val_max))
+        if val_min > val > val_max:
+            raise Exception("Value invalid range: {}, (min={}, max={})".format(str(val), val_min, val_max))
+
+
+# https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf
+class PciClassCode:
+    BASE_CLASS_BACKWARD_COMPATIBILITY = 0x00
+    BASE_CLASS_BACKWARD_COMPATIBILITY_ALL_EXCEPT_VGA = 0x00
+    BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
+    BASE_CLASS_VGA = 0x03
+
+    REGEX = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
+
+    def __init__(self, class_code):
+        self.__class_code = BitUtils.get_int_with_check(class_code, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+
+    def __str__(self):
+        return str(self.__class_code)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __format__(self, format_spec):
+        return f"{{:{format_spec}}}".format(self.__class_code)
+
+    def get_base_class(self):
+        return (self.__class_code >> BitUtils.BITS_IN_BYTE) & BitUtils.LSB_TETRAD_MASK
+
+    def get_sub_class(self):
+        return self.__class_code & BitUtils.LSB_TETRAD_MASK
+
+    # https://github.com/xiaoran007/pypci/blob/v0.0.4/src/pypci/backend/pci.py#L74
+    def is_vga(self):
+        return self.get_base_class() == self.BASE_CLASS_VGA or (
+                self.get_base_class() == self.BASE_CLASS_VGA and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
+
+
+# https://github.com/pciutils/pciutils/blob/master/pci.ids
+class PciVendorId:
+    INTEL = 0x8086
+
+    def __init__(self, vendor_id):
+        self.__vendor_id = BitUtils.get_int_with_check(vendor_id, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+
+    def __str__(self):
+        return str(self.__vendor_id)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __format__(self, format_spec):
+        return f"{{:{format_spec}}}".format(self.__vendor_id)
+
+    def is_intel(self):
+        return self.__vendor_id == self.INTEL
+
+
+# https://en.wikipedia.org/wiki/PCI_configuration_space
+# fixme utopia SR-IOV capability
+# https://forums.servethehome.com/index.php?threads/quick-check-if-your-pcie-device-has-sr-iov-capability.39675/
+class Pci:
+    __ADDRESS = "address"  # [[[[<domain>]:]<bus>]:][<slot>][.[<func>]]
+    __CLASS_NAME = "class_name"
+    __CLASS_CODE = "class_code"
+    __DEVICE_NAME = "device_name"
+    __VENDOR_ID = "vendor_id"
+    __DEVICE_ID = "device_id"
+    __REVISION = "revision"
+    __SUBSYSTEM_NAME = "subsystem_name"
+    __SUBSYSTEM_VENDOR_ID = "subsystem_vendor_id"
+    __SUBSYSTEM_ID = "subsystem_id"
+    __IOMMU_GROUP = "iommu_group"
+    __KERNEL_MODULE = "kernel_module"
+
+    __REGEX_HEX8 = "[0-9a-fA-F]{2}"  # fixme utopia Использовать BitUtils.get_regex
+    __REGEX_HEX16 = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
+
+    __REGEX = f"(?P<{__ADDRESS}>{__REGEX_HEX8}:{__REGEX_HEX8}\.\d+) (?P<{__CLASS_NAME}>.*) \[(?P<{__CLASS_CODE}>{PciClassCode.REGEX})\]: (?P<{__DEVICE_NAME}>.*) \[(?P<{__VENDOR_ID}>{__REGEX_HEX16}):(?P<{__DEVICE_ID}>{__REGEX_HEX16})\] \(rev (?P<{__REVISION}>{__REGEX_HEX8})\)|Subsystem: (?P<{__SUBSYSTEM_NAME}>.*) \[(?P<{__SUBSYSTEM_VENDOR_ID}>{__REGEX_HEX16}):(?P<{__SUBSYSTEM_ID}>{__REGEX_HEX16})\]|IOMMU group: (?P<{__IOMMU_GROUP}>[\d]+)|Kernel driver in use: (?P<{__KERNEL_MODULE}>.*)"
+
+    # https://pkgs.org/search/?q=pciutils
+    # https://man7.org/linux/man-pages/man8/lspci.8.html
+    __CMD_LINE = "lspci -nnk -vvv"
+
+    def __init__(self):
+        self.address = ""
+        self.class_name = ""
+        self.class_code = PciClassCode(0)
+        self.device_name = ""
+        self.vendor_id = PciVendorId(0)
+        self.device_id = 0
+        self.revision = 0
+        self.subsystem_name = ""
+        self.subsystem_vendor_id = PciVendorId(0)
+        self.subsystem_id = 0
+        self.iommu_group = None
+        self.kernel_module = ""
+
+    def __str__(self):
+        return str({
+            self.__ADDRESS: self.address,
+            self.__CLASS_CODE: self.class_name,
+            self.__DEVICE_NAME: self.class_code,
+            self.__VENDOR_ID: self.vendor_id,
+            self.__DEVICE_ID: self.device_id,
+            self.__REVISION: self.revision,
+            self.__SUBSYSTEM_NAME: self.subsystem_name,
+            self.__SUBSYSTEM_VENDOR_ID: self.subsystem_vendor_id,
+            self.__SUBSYSTEM_ID: self.subsystem_id,
+            self.__IOMMU_GROUP: self.iommu_group,
+            self.__KERNEL_MODULE: self.kernel_module
+        })
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __setitem__(self, key, value):
+        value_native = value
+        if key == self.__CLASS_CODE:
+            value_native = PciClassCode(value)
+        elif key == self.__VENDOR_ID:
+            value_native = PciVendorId(value)
+        elif key == self.__DEVICE_ID:
+            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+        elif key == self.__REVISION:
+            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEX_BASE)
+        elif key == self.__SUBSYSTEM_VENDOR_ID:
+            value_native = PciVendorId(value)
+        elif key == self.__SUBSYSTEM_ID:
+            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+        elif key == self.__IOMMU_GROUP:
+            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.DECIMAL_BASE)
+        setattr(self, key, value_native)
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def get_id(self):
+        return f"{self.vendor_id:04x}:{self.device_id:04x}"
+
+    def get_kernel_parameters(self):
+        return ""
+
+    def get_vfio_pci_options_table(self):
+        return {"multifunction": "on"}
+
+    def get_qemu_parameters(self):
+        return ""
+
+    class PciList(list):
+
+        def get_iommu_group_list(self):
+            result = set()
+            for pci in self:
+                if pci.iommu_group is not None:
+                    result.add(pci.iommu_group)
+            return result
+
+        def get_pci_table_by_iommu_group(self):
+            result = {}
+            for pci in self:
+                if pci.iommu_group in result:
+                    result[pci.iommu_group].append(pci)
+                else:
+                    result.update({pci.iommu_group: Pci.PciList([pci])})
+            return result
+
+        def get_pci_list_by_iommu_group(self, iommu_group):
+            pci_table_by_iommu_group = self.get_pci_table_by_iommu_group()
+            if iommu_group in pci_table_by_iommu_group:
+                return pci_table_by_iommu_group[iommu_group]
+            return Pci.PciList()
+
+        def get_vga_list(self):
+            result = Pci.PciList()
+            for pci in self:
+                if pci.class_code.is_vga():
+                    result.append(pci)
+            return result
+
+
+    # def get_qemu_parameters():
+    # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
+
+    @staticmethod
+    def get_list():
+        result = Pci.PciList()
+
+        lspci_out = Pci.__run_lspci()
+
+        for match in re.finditer(Pci.__REGEX, lspci_out, flags=re.MULTILINE):
+            for key, value in match.groupdict().items():
+                if value is not None:
+                    if key == Pci.__ADDRESS:
+                        result.append(Pci())
+
+                    pci = result[-1]
+                    pci[key] = value
+
+        return result
+
+    @staticmethod
+    def __run_lspci():
+        cmd_result = subprocess.run(Pci.__CMD_LINE, shell=True, capture_output=True, text=True)
+        if cmd_result.returncode:
+            return ""
+        return cmd_result.stdout
+
+
+class VfioPci:
+    def __init__(self, pci_or_list):
+        self.__pci_or_list = pci_or_list
+
+    def get_kernel_parameters(self):
+        if self.__pci_or_list is None:
+            return ""
+
+        if isinstance(self.__pci_or_list, list):
+            if len(self.__pci_or_list) == 0:
+                return ""
+            return "vfio_pci.ids={}".format(",".join(VfioPci.__serialize(pci) for pci in self.__pci_or_list))
+        else:
+            return "vfio_pci.ids={}".format(VfioPci.__serialize(self.__pci_or_list))
+
+    def get_qemu_parameters(self):
+        return
+
+    @staticmethod
+    def __serialize(pci):
+        return str(pci.get_id()) if isinstance(pci, Pci) else (str(pci))
+
+
+class Vfio:
+    @staticmethod
+    def get_kernel_parameters(pci_or_list):
+        return " ".join([Vfio.__get_vfio(), Vfio.__get_mdev(), Vfio.__get_vfio_pci(pci_or_list)])
+
+    @staticmethod
+    def __get_vfio():
+        return "vfio"
+
+    @staticmethod
+    def __get_mdev():
+        return "mdev"
+
+    @staticmethod
+    def __get_vfio_pci(pci_or_list):
+        if pci_or_list is None:
+            return ""
+
+        if type(pci_or_list) is list:
+            if len(pci_or_list) == 0:
+                return ""
+            return "vfio_pci.ids={}".format(",".join(Vfio.__serialize(pci) for pci in pci_or_list))
+        else:
+            return "vfio_pci.ids={}".format(Vfio.__serialize(pci_or_list))
+
+    @staticmethod
+    def __serialize(pci):
+        return str(pci.get_id()) if isinstance(pci, Pci) else (str(pci))
+
+
+class VgaPciIntel(Pci):
+    # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
+    def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
+        return "i915.modeset=0 video=efifb:off"
+
+    # fixme utopia Если iommu не включено, т.е. у self.__pci.iommu_group is None, то бросить исключение
+    # def get_qemu_parameters():
+    # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
+
+
+# fixme utopia Parser for command line
+#   -<key1> <value1> -<key2> "<value1>" -<key2> '<value1>' -<key2> --<key3>=<value3> --<key3>="<value3>" --<key3>='<value3>'
+# fixme utopia Parser for subvalue
+#   <value>,<subkey1>=<subvalue1>,<subkey>=<subvalue2>,
+#
+
+# Рендер/парсинг для опций
+# - shell
+#   - минус/пробел
+#   - минус-минус равно
+#   - qemu suboptions, разделитель запятая
+# - kernel parameters
+#   - опция=значение,
+#   - сабопция для модуля ядра опция.параметр=значение
+#   - опция
+# {
+#   "option0": "value",
+#   "option1": { "suboption1_0": { "suboption1_0_0": "value" } }
+#   "": [ "pos_value0", "pos_value1" ] // Позиционные аргументы
+# }
+#
 
 class Daemon:
     SLEEP_BEFORE_RECONNECT_SEC = 30
@@ -1753,7 +2270,7 @@ class Daemon:
         i = 0
         while True:
             udp_watchdog.watch()
-            time.sleep(5)
+            time.sleep(10)
             continue
 
             MESSAGE = f"test flush {i}"
@@ -1776,10 +2293,6 @@ class Daemon:
             user_name = "utopia"
             user_ovpn_file_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate()
             TelegramClient().send_file(user_ovpn_file_path)
-
-            watchdog_user_name = self.__open_vpn_config.get_watchdog_user_name()
-            watchdog_user_config_path = "/data2/utopia/src/HomeVpn/client-watchdog.ovpn"  # OpenVpnClientConfigGenerator(my_ip_address_and_port,
-            #                             watchdog_user_name).generate()
 
             # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
             #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
@@ -2302,8 +2815,11 @@ class ConfigParser:
         return self.__from_string.get(self.get_value_as_is(name, content))
 
     def get_value_as_is(self, name, content):
+        print(self.get_regex_for_search_value_by_name(name))
         regex = re.compile(self.get_regex_for_search_value_by_name(name), re.MULTILINE)
         regex_result = regex.search(content)
+        print("FFFF" + regex_result.group(0))
+        print("FFFF" + regex_result.group(1))
         if regex_result is None:
             return None
 
@@ -2353,6 +2869,19 @@ class ConfigParser:
     # Проблема https://regex101.com/r/rdVI51/1
     # https://regex101.com/r/YMUFSJ/1
     # https://regex101.com/r/3PLIai/1
+
+
+class UnitTest_ConfigParser(unittest.TestCase):
+
+    def test_split(self):
+        REF_TABLE = {
+            "a=b\nc=d\nhello=123": {"a": "b", "c": "d", "hello": 123}
+        }
+
+        config_parser = ConfigParser()
+        for content, key_value in REF_TABLE.items():
+            for key, value in key_value.items():
+                self.assertEqual(config_parser.get_value(key, content), value)
 
 
 class ShellConfig:
@@ -2425,27 +2954,27 @@ class ShellConfig:
 
 class CurrentOs:
     @staticmethod
-    def is_windows(self):
+    def is_windows():
         # https://docs.python.org/3/library/sys.html#sys.platform
         return sys.platform.lower().startswith('win')
 
     @staticmethod
-    def is_msys(self):
+    def is_msys():
         # https://docs.python.org/3/library/sys.html#sys.platform
         return sys.platform.lower().startswith('msys')
 
     @staticmethod
-    def is_linux(self):
+    def is_linux():
         # https://docs.python.org/3/library/sys.html#sys.platform
         return sys.platform.lower().startswith('linux')
 
     @staticmethod
-    def is_termux(self):
+    def is_termux():
         # https://termux.dev/en/
-        return self.is_android()
+        return CurrentOs.is_android()
 
     @staticmethod
-    def is_android(self):
+    def is_android():
         try:
             cmd_result = subprocess.run("uname -o", shell=True, capture_output=True, text=True)
             if cmd_result.returncode:
@@ -2455,38 +2984,106 @@ class CurrentOs:
             return False
 
     @staticmethod
-    def get_linux_kernel_version(self):
+    def get_linux_kernel_version():
         # https://docs.python.org/3/library/os.html#os.uname
         return semantic_version.Version(platform.release())
 
     @staticmethod
-    def get_windows_version(self):
+    def get_windows_version():
         os_version_info_ex = sys.getwindowsversion()
         # fixme utopia Добавить информацию про wProductType
         return semantic_version.Version(major=os_version_info_ex.major, minor=os_version_info_ex.minor,
                                         build=os_version_info_ex.build)
 
     @staticmethod
-    def get_linux_distro_name(self):
+    def get_linux_distro_name():
         # https://pypi.org/project/os-release/
         # https://www.freedesktop.org/software/systemd/man/os-release.html
         return os_release.id()
 
     @staticmethod
-    def get_linux_distro_version(self):
+    def get_linux_distro_version():
         # https://pypi.org/project/os-release/
         # https://www.freedesktop.org/software/systemd/man/os-release.html
         return semantic_version.Version(version_string=os_release.version_id())
 
+    # fixme utopia Проверить на Ubuntu 32bit
+    # https://askubuntu.com/questions/768415/where-can-i-find-32-bit-version-of-ubuntu
     @staticmethod
-    def is32bit(self):
-        return not self.is64bit()
+    def is32bit():
+        return platform.architecture()[0].lower() == "32bit"
 
     @staticmethod
-    def is64bit(self):
+    def is64bit():
         # https://www.fastwebhost.in/blog/how-to-find-if-linux-is-running-on-32-bit-or-64-bit/
         # https://wiki.termux.com/wiki/FAQ
-        return platform.architecture()[0] == "64bit"
+        return platform.architecture()[0].lower() == "64bit"
+
+
+class Power:
+    # https://pythonassets.com/posts/shutdown-reboot-and-log-off-on-windows-and-linux/
+    @staticmethod
+    def reboot():
+        if CurrentOs.is_linux():
+            Power.__reboot_linux()
+        elif CurrentOs.is_windows():
+            Power.__reboot_windows()
+        else:
+            print("[Power] reboot not supported")
+
+    @staticmethod
+    def __reboot_linux():
+        subprocess.check_call(["reboot"], shell=True)
+
+    @staticmethod
+    def __reboot_windows():
+        subprocess.check_call(["shutdown", "/r", "/t", "0"], shell=True)
+
+
+class Grub:
+    def update(self):
+        subprocess.check_call(["update-grub"], shell=True)
+
+    def set_cmd_line_linux(self, cmd):
+        return False
+
+    def revert_cmd_line_linux(self):
+        return False
+
+
+# GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt vfio mdev vfio_pci.ids=8086:9a49,8086:a082,8086:a0c8,8086:a0a3,8086:a0a4 i915.modeset=0 video=efifb:off"
+
+# fixme utopia Будем использовать systemd
+class UnixCrontab:
+    def __init__(self):
+        print("UnixCrontab")
+
+
+class Startup:
+    def __init__(self):
+        print("Startup")
+
+
+class VmSingleGpuPassthrough:
+    def __init__(self):
+        self.__grub = Grub()
+        self.__startup = Startup()
+        print("VmSingleGpuPassthrough")
+
+    def run(self):
+        self.__grub.set_cmd_line_linux("iommu on")
+        self.__grub.update()
+        # sys.executable доступ к интепретатору
+        self.__startup.after_rebot_script()
+        Power.reboot()
+
+    def after_reboot(self):
+        # vw start with single gpu passthrough
+        # if vw exit
+        self.__startup.remove_after_rebot_script()
+        self.__grub.revert_cmd_line_linux()
+        self.__grub.update()
+        Power.reboot()
 
 
 class OsNameAndVersion:
@@ -2916,8 +3513,25 @@ def main():
             help_usage()
             return
 
+    elif command == "vm_run_pp":
+        pci_list = Pci.get_list()
+
+        pci_vga_list = pci_list.get_vga_list()
+        if len(pci_vga_list) > 1:
+            print("Many VGA!!!") # fixme utopia Дать выбрать какой VGA пробрасывать
+
+        pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(pci_vga_list[0].iommu_group)
+
+        vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
+        print(vfio_pci.get_kernel_parameters())
+
+
+
+
     elif command == "test":
-        print(NetworkInterface.get_internet_if().get_ipv4_interface_if().network.netmask)
+        print(Pci.get_list())
+
+        # print(NetworkInterface.get_internet_if().get_ipv4_interface_if().network.netmask)
         return
         print("XXX")
 
@@ -2965,6 +3579,8 @@ def main():
         # time.sleep(30)
         vm = VirtualMachine(network_bridge)
         vm.run()
+    elif command == "unittest":
+        unittest.main()
 
 
 if __name__ == '__main__':

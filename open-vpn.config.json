@@ -9,7 +9,6 @@
   "easy_rsa_config_dir": "/home/utopia/openvpn/HomeVpn/easy-rsa",
   "easy_rsa_pki_dir": "/home/utopia/openvpn/HomeVpn/easy-rsa/pki",
   "easy_rsa_script_path": "/home/utopia/openvpn/HomeVpn/easy-rsa/easyrsa",
-  "watchdog_user_name": "watchdog",
   "my_current_ip_address_and_port": "./my_current_ip_address_and_port.txt",
   "vm_bridge_ip_address_and_mask": "172.20.0.5/16",
   "vm_registry_path": "./vm/registry.json",
