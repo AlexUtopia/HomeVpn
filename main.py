@@ -1776,7 +1776,9 @@ class Iommu:
 
 class BitUtils:
     DECIMAL_BASE = 10
-    HEX_BASE = 16
+    HEXADECIMAL_BASE = 16
+    OCTAL_BASE = 8
+    BINARY_BASE = 2
     TETRAD_IN_BYTE = 2
     BITS_IN_TETRAD = 4
     LSB_TETRAD_MASK = 0x0F
@@ -1797,6 +1799,40 @@ class BitUtils:
     BASE_MIN = 2
     BASE_MAX = len(BASE_DIGIT_LIST)
     DIGIT_COUNT_MIN = 1
+
+    @staticmethod
+    def is_decimal(val_as_string):
+        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.DECIMAL_BASE, prefix=""),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def is_hexadecimal(val_as_string):
+        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.HEXADECIMAL_BASE, prefix="0x"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def is_binary(val_as_string):
+        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.BINARY_BASE, prefix="0b"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def is_octal(val_as_string):
+        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.
+                                                            OCTAL_BASE, prefix="0"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def get_regex_for_check_int(base=DECIMAL_BASE, prefix=""):
+        BitUtils.__check_base(base)
+        return f"(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}"
 
     @staticmethod
     def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
@@ -1963,7 +1999,8 @@ class PciClassCode:
     REGEX = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
 
     def __init__(self, class_code):
-        self.__class_code = BitUtils.get_int_with_check(class_code, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+        self.__class_code = BitUtils.get_int_with_check(class_code, bit_count=16, signed=False,
+                                                        base=BitUtils.HEXADECIMAL_BASE)
 
     def __str__(self):
         return str(self.__class_code)
@@ -1991,7 +2028,8 @@ class PciVendorId:
     INTEL = 0x8086
 
     def __init__(self, vendor_id):
-        self.__vendor_id = BitUtils.get_int_with_check(vendor_id, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+        self.__vendor_id = BitUtils.get_int_with_check(vendor_id, bit_count=16, signed=False,
+                                                       base=BitUtils.HEXADECIMAL_BASE)
 
     def __str__(self):
         return str(self.__vendor_id)
@@ -2071,13 +2109,15 @@ class Pci:
         elif key == self.__VENDOR_ID:
             value_native = PciVendorId(value)
         elif key == self.__DEVICE_ID:
-            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False,
+                                                       base=BitUtils.HEXADECIMAL_BASE)
         elif key == self.__REVISION:
-            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEX_BASE)
+            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEXADECIMAL_BASE)
         elif key == self.__SUBSYSTEM_VENDOR_ID:
             value_native = PciVendorId(value)
         elif key == self.__SUBSYSTEM_ID:
-            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False, base=BitUtils.HEX_BASE)
+            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False,
+                                                       base=BitUtils.HEXADECIMAL_BASE)
         elif key == self.__IOMMU_GROUP:
             value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.DECIMAL_BASE)
         setattr(self, key, value_native)
@@ -2127,7 +2167,6 @@ class Pci:
                 if pci.class_code.is_vga():
                     result.append(pci)
             return result
-
 
     # def get_qemu_parameters():
     # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
@@ -2459,19 +2498,20 @@ class VmRdpForwarding(VmTcpForwarding):
 
 
 class RegexConstants:
-    INT64_DECIMAL_DIGITS_COUNT = 19
     CAPTURE_ALL = fr"(.*)"
-    SPACE_SYMBOLS = fr"[\t ]"
-    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{SPACE_SYMBOLS}*"
-    SPACE_SYMBOLS_ONE_OR_MORE = fr"{SPACE_SYMBOLS}+"
-    INT64_INTEGER_WITHOUT_SING = fr"[0-9]{{1,{INT64_DECIMAL_DIGITS_COUNT}}}"
-    INT64_INTEGER = fr"{INT64_INTEGER_WITHOUT_SING}|\+{INT64_INTEGER_WITHOUT_SING}|-{INT64_INTEGER_WITHOUT_SING}"
-    WHITESPACE_CHARACTER_SET = r"[ \t]"
+    WHITESPACES = r"\s"
+    WHITESPACE_CHARACTER_SET = fr"[{WHITESPACES}]"
+    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}*"
+    SPACE_SYMBOLS_ONE_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}+"
     NEWLINE_CHARACTER_SET = r"[\n\r]"
     ONE_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}+"
     ZERO_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}*"
     ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
     ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
+
+    @staticmethod
+    def atomic_group(value):
+        return f"(?>{value})"
 
 
 class EscapeLiteral:
@@ -2489,7 +2529,7 @@ class EscapeLiteral:
 
 
 class BoolFromString:
-    __BOOL_AS_STRING = {"yes": True, "true": True, "1": True, "no": False, "false": False, "0": False}
+    __BOOL_AS_STRING = {"yes": True, "true": True, "on": True, "no": False, "false": False, "off": False}
 
     def __init__(self, target_string):
         self.__target_string = target_string
@@ -2510,11 +2550,6 @@ class BoolFromString:
 
 
 class IntFromString:
-    __DECIMAL_BASE = 10
-    __HEXADECIMAL_BASE = 16
-    __BINARY_BASE = 2
-    __OCTAL_BASE = 8
-
     def __init__(self, target_string):
         self.__target_string = target_string
 
@@ -2543,37 +2578,33 @@ class IntFromString:
         return self.as_decimal_int() is not None
 
     def as_decimal_int(self):
-        try:
-            return int(self.__target_string, self.__DECIMAL_BASE)
-        except:
+        if not BitUtils.is_decimal(self.__target_string):
             return None
+        return int(self.__target_string, BitUtils.DECIMAL_BASE)
 
     def is_hexadecimal_int(self):
         return self.as_hexadecimal_int() is not None
 
     def as_hexadecimal_int(self):
-        try:
-            return int(self.__target_string, self.__HEXADECIMAL_BASE)
-        except:
+        if not BitUtils.is_hexadecimal(self.__target_string):
             return None
+        return int(self.__target_string, BitUtils.HEXADECIMAL_BASE)
 
     def is_binary_int(self):
         return self.as_binary_int() is not None
 
     def as_binary_int(self):
-        try:
-            return int(self.__target_string, self.__BINARY_BASE)
-        except:
+        if not BitUtils.is_binary(self.__target_string):
             return None
+        return int(self.__target_string, BitUtils.BINARY_BASE)
 
     def is_octal_int(self):
         return self.as_octal_int() is not None
 
     def as_octal_int(self):
-        try:
-            return int(self.__target_string, self.__OCTAL_BASE)
-        except:
+        if not BitUtils.is_octal(self.__target_string):
             return None
+        return int(self.__target_string, BitUtils.OCTAL_BASE)
 
 
 class FloatFromString:
@@ -2610,36 +2641,25 @@ class NumberFromString:
 
 
 class StringFromString:
-    __REGEX_STRING_ANY_CHARS = fr"[\S\s]"
-    __REGEX_STRING_DOUBLE_QUOTES = fr'^"{__REGEX_STRING_ANY_CHARS}"$'
-    __REGEX_STRING_SINGLE_QUOTES = fr"^'{__REGEX_STRING_ANY_CHARS}'$"
-    __REGEX_STRING_DEFAULT = fr"^{__REGEX_STRING_ANY_CHARS}$"
-    __REGEX = fr"{__REGEX_STRING_DOUBLE_QUOTES}|{__REGEX_STRING_SINGLE_QUOTES}|{__REGEX_STRING_DEFAULT}"
-
     def __init__(self, target_string):
         self.__target_string = target_string
 
+    # fixme utopia То что окавычено возвращать как строку
     def get(self):
-        regex = re.compile(self.__REGEX)
-        match = regex.search(self.__target_string)
-        if match is None:
-            return ""
-
-        result = match.group(0)
-        return EscapeLiteral(result).escape()
+        return EscapeLiteral(self.__target_string).escape()
 
 
 class FromString:
     def get(self, target_string):
         value_as_string = StringFromString(target_string).get()
-        if value_as_string is not str:
+        if not isinstance(value_as_string, str):
             return value_as_string
 
         result = NumberFromString(value_as_string).get()
         if result is not None:
             return result
 
-        result = BoolFromString(value_as_string).get()
+        result = BoolFromString(value_as_string).get_or_none()
         if result is not None:
             return result
 
@@ -2693,7 +2713,7 @@ class ConfigParameterValueParser:
         regex_with_single_quote = self.__get_regex_with_quotes(self.__SINGLE_QUOTE, self.__SINGLE_QUOTE_ESCAPE,
                                                                with_capture)
         regex_simple = self.__get_regex_simple(with_capture)
-        return fr"{regex_with_double_quote}|{regex_with_single_quote}|{regex_simple}"
+        return fr"(?>{regex_with_double_quote}|{regex_with_single_quote}|{regex_simple})"
 
     def __get_regex_with_quotes(self, quote, quote_escape, with_capture):
         begin_mark = quote
@@ -2705,7 +2725,7 @@ class ConfigParameterValueParser:
     def __get_regex_simple(self, with_capture):
         begin_mark = ""
         end_mark = ""
-        unacceptable_symbols = fr"\s{self.__DOUBLE_QUOTE}{self.__SINGLE_QUOTE}"
+        unacceptable_symbols = fr"{RegexConstants.WHITESPACES}{self.__DOUBLE_QUOTE}{self.__SINGLE_QUOTE}"
         escape = fr"{self.__DOUBLE_QUOTE_ESCAPE}|{self.__SINGLE_QUOTE_ESCAPE}"
         return self.__get_regex_template(begin_mark, end_mark, unacceptable_symbols, escape, with_capture)
 
@@ -2717,7 +2737,7 @@ class ConfigParameterValueParser:
         if bool(with_capture):
             begin_capture = "("
             end_capture = ")"
-        return rf"{begin_capture}{begin_mark}(?:[^{unacceptable_symbols}]*(?:{back_slash_escape}|{escape})*)*{end_mark}{end_capture}{RegexConstants.SPACE_SYMBOLS}*$"
+        return rf"{begin_capture}{begin_mark}(?>[^{unacceptable_symbols}{back_slash_escape}]*(?>{escape}|{back_slash_escape})*)*{end_mark}{end_capture}{RegexConstants.WHITESPACE_CHARACTER_SET}*$"
 
 
 class NoSection:
@@ -2818,12 +2838,14 @@ class ConfigParser:
         print(self.get_regex_for_search_value_by_name(name))
         regex = re.compile(self.get_regex_for_search_value_by_name(name), re.MULTILINE)
         regex_result = regex.search(content)
-        print("FFFF" + regex_result.group(0))
-        print("FFFF" + regex_result.group(1))
         if regex_result is None:
             return None
 
-        return regex_result.group(0)
+        for group in regex_result.groups():
+            if group is not None:
+                return group
+
+        return None
 
     def find_all(self, content):
         regex = re.compile(self.get_regex(), re.MULTILINE)
@@ -2874,8 +2896,9 @@ class ConfigParser:
 class UnitTest_ConfigParser(unittest.TestCase):
 
     def test_split(self):
+        print("test\nsplit")
         REF_TABLE = {
-            "a=b\nc=d\nhello=123": {"a": "b", "c": "d", "hello": 123}
+            "a=b\n\rc=d\n\rhello=123": {"a": "b", "c": "d", "hello": 123}
         }
 
         config_parser = ConfigParser()
@@ -3518,7 +3541,7 @@ def main():
 
         pci_vga_list = pci_list.get_vga_list()
         if len(pci_vga_list) > 1:
-            print("Many VGA!!!") # fixme utopia Дать выбрать какой VGA пробрасывать
+            print("Many VGA!!!")  # fixme utopia Дать выбрать какой VGA пробрасывать
 
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(pci_vga_list[0].iommu_group)
 

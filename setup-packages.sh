@@ -17,7 +17,7 @@
 # fixme utopia Инструкция по scp
 # fixme utopia [Windows/MSYS2] Настройка шареной папки + настройка RDP сервера (RDPWrapper)
 # fixme utopia 7zip заместо tar? Но у 7zip нет опции --strip-components
-# fixme utopia Делать ли upgrade pip? И как его правильно делать?
+# fixme utopia Делать ли upgrade pip? И как его правильно делать? https://stackoverflow.com/a/8550546
 
 # fixme utopia Настройка микрофона в браузере
 # Звук с микрофона использовать для браузера, например (не забыть выдать разрешение на микрофон для Termux:API, проверть точно ли нужно это разрешение)
@@ -107,6 +107,13 @@ if is_termux; then
     GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
 fi
 
+GLOBAL_CONFIG_PYTHON_VERSION="python3.11"
+if is_termux; then
+    GLOBAL_CONFIG_SMBD_TCP_PORTS="python3"
+elif is_msys; then
+    GLOBAL_CONFIG_SMBD_TCP_PORTS="python3"
+fi
+
 ### Global config end
 
 
@@ -149,7 +156,7 @@ elif is_msys; then
 fi
 MAKE_PACKAGE="make"
 
-PYTHON3_PACKAGE="python3 python3-pip python3-venv"
+PYTHON3_PACKAGE="${GLOBAL_CONFIG_PYTHON_VERSION} python3-pip ${GLOBAL_CONFIG_PYTHON_VERSION}-venv ${GLOBAL_CONFIG_PYTHON_VERSION}-dev"
 if is_termux; then
     PYTHON3_PACKAGE="python python-pip"
 elif is_msys; then
@@ -408,6 +415,15 @@ function get_directory_paths() {
 function set_file_as_executable() {
     local FILE_PATH="${1}"
     chmod +x "${FILE_PATH}" > "/dev/null" || return $?
+    return 0
+}
+
+function change_rights_on_directory_recursively_or_file() {
+    local TARGET_USER="${1}"
+    local DIR_OR_FILE_PATH="${2}"
+    local TARGET_GROUP="${TARGET_USER}"
+
+    chown -R "${TARGET_USER}:${TARGET_GROUP}" "${DIR_OR_FILE_PATH}" > "/dev/null" || return $?
     return 0
 }
 
@@ -937,13 +953,13 @@ function pip_update() {
     if is_termux || is_msys; then
         return 0
     fi
-    python3 -m pip install --upgrade pip || return $?
+    ${GLOBAL_CONFIG_PYTHON_VERSION} -m pip install --upgrade pip || return $?
     return 0
 }
 
 function pip_install_packages() {
     for pip_package in ${1}; do
-        pip3 install "${pip_package}" --force-reinstall --ignore-installed || return $?
+        ${GLOBAL_CONFIG_PYTHON_VERSION} -m pip install "${pip_package}" --force-reinstall --ignore-installed || return $?
     done
     return 0
 }
@@ -1602,7 +1618,8 @@ function desktop_file_get_value() {
 }
 
 function vnc_server_create_xstartup() {
-    local XSTARTUP_FILE_PATH="${1}"
+    local VNC_USER="${1}"
+    local XSTARTUP_FILE_PATH="${2}"
 
     local DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=""
     DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH=$(desktop_environment_get_desktop_file_path) || return $?
@@ -1616,6 +1633,10 @@ unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 ${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
     set_file_as_executable "${XSTARTUP_FILE_PATH}" || return $?
+
+    local XSTARTUP_DIR_PATH=""
+    XSTARTUP_DIR_PATH=$(dirname "${XSTARTUP_FILE_PATH}") || return $?
+    change_rights_on_directory_recursively_or_file "${VNC_USER}" "${XSTARTUP_DIR_PATH}" || return $?
     return 0
 }
 
@@ -1757,13 +1778,14 @@ function vnc_server_setup() {
     local declare -A VNC_SERVER_CONFIG=()
     vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
 
+    local VNC_USER="${VNC_SERVER_CONFIG["USER"]}"
     local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
     local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
 
     service_disable "${VNCD_INSTANCE_NAME}"
 
-    vnc_server_create_xstartup "${VNC_XSTARTUP_FILE_PATH}" || return $?
+    vnc_server_create_xstartup "${VNC_USER}" "${VNC_XSTARTUP_FILE_PATH}" || return $?
 
     if is_termux; then
         vnc_server_create_runit_config VNC_SERVER_CONFIG || return $?
