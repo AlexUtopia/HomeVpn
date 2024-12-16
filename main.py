@@ -1802,37 +1802,36 @@ class BitUtils:
 
     @staticmethod
     def is_decimal(val_as_string):
-        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.DECIMAL_BASE, prefix=""),
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.DECIMAL_BASE, prefix="(?!0[0-9])"),
                            re.MULTILINE | re.IGNORECASE)
         match = regex.search(val_as_string)
         return match is not None
 
     @staticmethod
     def is_hexadecimal(val_as_string):
-        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.HEXADECIMAL_BASE, prefix="0x"),
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.HEXADECIMAL_BASE, prefix="0x[0]*"),
                            re.MULTILINE | re.IGNORECASE)
         match = regex.search(val_as_string)
         return match is not None
 
     @staticmethod
     def is_binary(val_as_string):
-        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.BINARY_BASE, prefix="0b"),
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.BINARY_BASE, prefix="0b[0]*"),
                            re.MULTILINE | re.IGNORECASE)
         match = regex.search(val_as_string)
         return match is not None
 
     @staticmethod
     def is_octal(val_as_string):
-        regex = re.compile(BitUtils.get_regex_for_check_int(base=BitUtils.
-                                                            OCTAL_BASE, prefix="0"),
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.OCTAL_BASE, prefix="0[0]*"),
                            re.MULTILINE | re.IGNORECASE)
         match = regex.search(val_as_string)
         return match is not None
 
     @staticmethod
-    def get_regex_for_check_int(base=DECIMAL_BASE, prefix=""):
+    def __get_regex_for_check_int(base, prefix):
         BitUtils.__check_base(base)
-        return f"(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}"
+        return f"^(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}$"
 
     @staticmethod
     def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
@@ -1938,7 +1937,7 @@ class BitUtils:
 
         result = 0
         while val > 0:
-            val = val / base
+            val = val // base
             result = result + 1
         return result
 
@@ -1987,6 +1986,69 @@ class BitUtils:
             raise Exception("Value min ({}) more value max ({}))".format(val_min, val_max))
         if val_min > val > val_max:
             raise Exception("Value invalid range: {}, (min={}, max={})".format(str(val), val_min, val_max))
+
+
+class UnitTest_BitUtils(unittest.TestCase):
+
+    def test_is_decimal(self):
+        ref_table = {
+            "1": [(10, True), (16, False), (2, False), (8, False)],
+            "-1": [(10, True), (16, False), (2, False), (8, False)],
+            "0": [(10, True), (16, False), (2, False), (8, False)],
+            "9999": [(10, True), (16, False), (2, False), (8, False)],
+            "-9999": [(10, True), (16, False), (2, False), (8, False)],
+            "+9999": [(10, True), (16, False), (2, False), (8, False)],
+            "0x0": [(10, False), (16, True), (2, False), (8, False)],
+            "0x00": [(10, False), (16, True), (2, False), (8, False)],
+            "0x0000": [(10, False), (16, True), (2, False), (8, False)],
+            "0x00000000": [(10, False), (16, True), (2, False), (8, False)],
+            "0x0000000000000000": [(10, False), (16, True), (2, False), (8, False)],
+            "0x00000000000000000000000000000000": [(10, False), (16, True), (2, False), (8, False)],
+            "-0xff": [(10, False), (16, True), (2, False), (8, False)],
+            "+0xFe": [(10, False), (16, True), (2, False), (8, False)],
+            "+0x0000123456789ABCDEF": [(10, False), (16, True), (2, False), (8, False)],
+            "-0xFFFFFFFFFFFFFFFF": [(10, False), (16, True), (2, False), (8, False)],
+            "+0xFFFFFFFFFFFFFFFF": [(10, False), (16, True), (2, False), (8, False)],
+            "0b0": [(10, False), (16, False), (2, True), (8, False)],
+            "0b00000000": [(10, False), (16, False), (2, True), (8, False)],
+            "-0b010101010101": [(10, False), (16, False), (2, True), (8, False)],
+            "+0b010101010101": [(10, False), (16, False), (2, True), (8, False)],
+            "01": [(10, False), (16, False), (2, False), (8, True)],
+            "-01": [(10, False), (16, False), (2, False), (8, True)],
+            "+01": [(10, False), (16, False), (2, False), (8, True)],
+            "07": [(10, False), (16, False), (2, False), (8, True)],
+            "00": [(10, False), (16, False), (2, False), (8, True)],
+            "01234567890ABCDEF": [(10, False), (16, False), (2, False), (8, False)]
+        }
+
+        for key, table in ref_table.items():
+            for base, result in table:
+                if base == 10:
+                    self.assertEqual(BitUtils.is_decimal(key), result, f"base={base}, key={key}")
+                elif base == 16:
+                    self.assertEqual(BitUtils.is_hexadecimal(key), result, f"base={base}, key={key}")
+                elif base == 2:
+                    self.assertEqual(BitUtils.is_binary(key), result, f"base={base}, key={key}")
+                elif base == 8:
+                    self.assertEqual(BitUtils.is_octal(key), result, f"base={base}, key={key}")
+                else:
+                    self.assertTrue(False, f"Unknown base={base}")
+
+    def test_get_digit_count(self):
+        ref_table = {
+            "9999": (10, 4),
+            "10": (10, 2),
+            "0xFFFF": (16, 4),
+            "0x00FFFF": (16, 4),
+            "0xFFFFFFFF": (16, 8),
+            "0xFFFFFFFFFFFFFFFF": (16, 16),
+            "0b0101": (2, 3),
+            "012": (8, 2)
+        }
+
+        for key, value in ref_table.items():
+            base, result = value
+            self.assertEqual(BitUtils.get_digit_count(int(key, base), base), result, f"base={base}, key={key}")
 
 
 # https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf
@@ -2528,100 +2590,87 @@ class EscapeLiteral:
         return result
 
 
+class NoneFromString:
+    __NONE_AS_STRING = {"null": None, "none": None}
+
+    def __init__(self, target_string):
+        self.__target_string = target_string.strip().lower()
+
+    def get(self):
+        if self.__target_string in self.__NONE_AS_STRING:
+            return True, None
+
+        return False, self.__target_string
+
+
 class BoolFromString:
     __BOOL_AS_STRING = {"yes": True, "true": True, "on": True, "no": False, "false": False, "off": False}
 
     def __init__(self, target_string):
-        self.__target_string = target_string
+        self.__target_string = target_string.strip().lower()
 
-    def get(self, default_value=False):
-        result = self.get_or_none()
-        if result is not None:
-            return result
+    def get(self):
+        if self.__target_string in self.__BOOL_AS_STRING:
+            return True, self.__BOOL_AS_STRING[self.__target_string]
 
-        return default_value
-
-    def is_bool(self):
-        return self.get_or_none() is not None
-
-    def get_or_none(self):
-        target_string_trimmed = self.__target_string.strip().lower()
-        return self.__BOOL_AS_STRING.get(target_string_trimmed, None)
+        return False, self.__target_string
 
 
 class IntFromString:
     def __init__(self, target_string):
-        self.__target_string = target_string
+        self.__target_string = target_string.strip().lower()
 
     def get(self):
         return self.as_int()
 
-    def is_int(self):
-        return self.as_int() is not None
-
     def as_int(self):
-        result = self.as_decimal_int()
-        if result is not None:
-            return result
+        is_good, result = self.as_decimal_int()
+        if is_good:
+            return is_good, result
 
-        result = self.as_hexadecimal_int()
-        if result is not None:
-            return result
+        is_good, result = self.as_hexadecimal_int()
+        if is_good:
+            return is_good, result
 
-        result = self.as_binary_int()
-        if result is not None:
-            return result
+        is_good, result = self.as_binary_int()
+        if is_good:
+            return is_good, result
 
         return self.as_octal_int()
 
-    def is_decimal_int(self):
-        return self.as_decimal_int() is not None
-
     def as_decimal_int(self):
         if not BitUtils.is_decimal(self.__target_string):
-            return None
-        return int(self.__target_string, BitUtils.DECIMAL_BASE)
-
-    def is_hexadecimal_int(self):
-        return self.as_hexadecimal_int() is not None
+            return False, self.__target_string
+        return True, int(self.__target_string, BitUtils.DECIMAL_BASE)
 
     def as_hexadecimal_int(self):
         if not BitUtils.is_hexadecimal(self.__target_string):
-            return None
+            return False, self.__target_string
         return int(self.__target_string, BitUtils.HEXADECIMAL_BASE)
-
-    def is_binary_int(self):
-        return self.as_binary_int() is not None
 
     def as_binary_int(self):
         if not BitUtils.is_binary(self.__target_string):
-            return None
+            return False, self.__target_string
         return int(self.__target_string, BitUtils.BINARY_BASE)
-
-    def is_octal_int(self):
-        return self.as_octal_int() is not None
 
     def as_octal_int(self):
         if not BitUtils.is_octal(self.__target_string):
-            return None
+            return False, self.__target_string
         return int(self.__target_string, BitUtils.OCTAL_BASE)
 
 
 class FloatFromString:
     def __init__(self, target_string):
-        self.__target_string = target_string
+        self.__target_string = target_string.strip().lower()
 
     def get(self):
         return self.as_float()
 
-    def is_float(self):
-        return self.as_float() is not None
-
     def as_float(self):
         try:
-            return float(self.__target_string)
+            return True, float(self.__target_string)
         except:
-            return None
+            return False, self.__target_string
 
 
 class NumberFromString:
@@ -2629,13 +2678,10 @@ class NumberFromString:
         self.__int_from_string = IntFromString(target_string)
         self.__float_from_string = FloatFromString(target_string)
 
-    def is_number(self):
-        return self.get() is not None
-
     def get(self):
-        result = self.__int_from_string.get()
-        if result is not None:
-            return result
+        is_good, result = self.__int_from_string.get()
+        if is_good:
+            return is_good, result
 
         return self.__float_from_string.get()
 
@@ -2644,26 +2690,47 @@ class StringFromString:
     def __init__(self, target_string):
         self.__target_string = target_string
 
-    # fixme utopia То что окавычено возвращать как строку
     def get(self):
-        return EscapeLiteral(self.__target_string).escape()
+        if len(self.__target_string) == 0:
+            return True, self.__target_string
+
+        if (self.__target_string[0] == '"' and self.__target_string[-1] == '"') or (
+                self.__target_string[0] == "'" and self.__target_string[-1] == "'"):
+            self.__target_string = self.__target_string[1:-1]
+            return True, EscapeLiteral(self.__target_string).escape()
+
+        return False, EscapeLiteral(self.__target_string).escape()
 
 
 class FromString:
     def get(self, target_string):
-        value_as_string = StringFromString(target_string).get()
-        if not isinstance(value_as_string, str):
-            return value_as_string
+        if not isinstance(target_string, str):
+            print(f"Parse NOT STRING: {target_string}")
+            return target_string
 
-        result = NumberFromString(value_as_string).get()
-        if result is not None:
+        is_good, result_as_string = StringFromString(target_string).get()
+        if is_good:
+            print(f"Parse as string: {target_string} / {result_as_string}")
+            return result_as_string
+
+        is_good, result = NumberFromString(result_as_string).get()
+        if is_good:
+            print(f"Parse as number: {result} / {result_as_string}")
             return result
 
-        result = BoolFromString(value_as_string).get_or_none()
-        if result is not None:
+        is_good, result = BoolFromString(result_as_string).get()
+        if is_good:
+            print(f"Parse as bool: {result} / {result_as_string}")
             return result
 
-        return value_as_string
+        is_good, result = NoneFromString(result_as_string).get()
+        if is_good:
+            print(f"Parse as none: {result} / {result_as_string}")
+            return result
+
+        print(f"Parse UNKNOWN: {result_as_string}")
+
+        return result_as_string
 
 
 # \[(?=[\w\.]{1,16}\])(?>\.?[\w]+)+\]
@@ -2838,6 +2905,8 @@ class ConfigParser:
         print(self.get_regex_for_search_value_by_name(name))
         regex = re.compile(self.get_regex_for_search_value_by_name(name), re.MULTILINE)
         regex_result = regex.search(content)
+
+        print(regex_result)
         if regex_result is None:
             return None
 
@@ -2895,10 +2964,12 @@ class ConfigParser:
 
 class UnitTest_ConfigParser(unittest.TestCase):
 
-    def test_split(self):
-        print("test\nsplit")
+    def test_parse(self):
         REF_TABLE = {
-            "a=b\n\rc=d\n\rhello=123": {"a": "b", "c": "d", "hello": 123}
+            "a=b\nc=d\nhello=123\nstring=\"this is string in double quotes\"\nis_none=nOnE": {"a": "b", "c": "d",
+                                                                                              "hello": 123,
+                                                                                              "string": "this is string in double quotes",
+                                                                                              "is_none": None}
         }
 
         config_parser = ConfigParser()
