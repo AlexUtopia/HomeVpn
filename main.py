@@ -2191,13 +2191,13 @@ class Pci:
         return f"{self.vendor_id:04x}:{self.device_id:04x}"
 
     def get_kernel_parameters(self):
-        return ""
+        return []
 
     def get_vfio_pci_options_table(self):
         return {"multifunction": "on"}
 
     def get_qemu_parameters(self):
-        return ""
+        return [VfioPci.get_device_for_passthrough(self)]
 
     class PciList(list):
 
@@ -2230,9 +2230,6 @@ class Pci:
                     result.append(pci)
             return result
 
-    # def get_qemu_parameters():
-    # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
-
     @staticmethod
     def get_list():
         result = Pci.PciList()
@@ -2248,7 +2245,15 @@ class Pci:
                     pci = result[-1]
                     pci[key] = value
 
+        # for pci in result:
+        #     pci = builder(pci)
         return result
+
+    @staticmethod
+    def register_builder():
+        # билдеру передаётся объект Pci а билео отдаёт или оригинальный pci и его наследника
+        return 0
+
 
     @staticmethod
     def __run_lspci():
@@ -2262,6 +2267,16 @@ class VfioPci:
     def __init__(self, pci_or_list):
         self.__pci_or_list = pci_or_list
 
+    @staticmethod
+    def get_device_for_passthrough(pci):
+        # PCI устройство нельзя пробросить если оно не включено в iommu группу
+        if pci.iommu_group is None:
+            return {}
+
+        vfio_pci_options_table = {"host": pci.address()}
+        vfio_pci_options_table.update(pci.get_vfio_pci_options_table())
+        return {"-device": {"vfio-pci": vfio_pci_options_table}}
+
     def get_kernel_parameters(self):
         if self.__pci_or_list is None:
             return ""
@@ -2274,13 +2289,22 @@ class VfioPci:
             return "vfio_pci.ids={}".format(VfioPci.__serialize(self.__pci_or_list))
 
     def get_qemu_parameters(self):
-        return
+        result = []
+        if isinstance(self.__pci_or_list, list):
+            for pci in self.__pci_or_list:
+                if isinstance(pci, Pci):
+                    result.extend(pci.get_qemu_parameters())
+        else:
+            if isinstance(self.__pci_or_list, Pci):
+                result.extend(self.__pci_or_list.get_qemu_parameters())
+        return result
 
     @staticmethod
     def __serialize(pci):
         return str(pci.get_id()) if isinstance(pci, Pci) else (str(pci))
 
 
+# fixme utopia include VfioPci
 class Vfio:
     @staticmethod
     def get_kernel_parameters(pci_or_list):
@@ -2312,13 +2336,27 @@ class Vfio:
 
 
 class VgaPciIntel(Pci):
+    def __init__(self, pci):
+        super(pci).__init__()
+
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
-        return "i915.modeset=0 video=efifb:off"
+        result = super().get_kernel_parameters()
+        result.extend([{ "i915.modeset": 0 }, { "video": "efifb:off" }])
+        return result
 
-    # fixme utopia Если iommu не включено, т.е. у self.__pci.iommu_group is None, то бросить исключение
-    # def get_qemu_parameters():
-    # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
+    def get_vfio_pci_options_table(self):
+        result = super().get_vfio_pci_options_table()
+        result.update({"display": "auto", "x-vga": "on", "x-igd-opregion": "on"})
+        return result
+
+    def get_qemu_parameters(self):
+        result = super().get_qemu_parameters()
+        if len(result) > 0:
+            result.append({"-vga": "none"})
+        return result
+
+
 
 
 # fixme utopia Parser for command line
@@ -2890,6 +2928,105 @@ class Section:
     #   ]
 
 
+class ShellSerializer:
+    SPLIT_STR = " "
+    DICT_DEPT_MAX = 1
+
+    TABLE = [{"prefix": "--", "key_value_delimiter": "="}, {"prefix": "", "key_value_delimiter": SPLIT_STR}]
+
+    def serialize(self, config):
+        result = ""
+        if isinstance(config, list):
+            for item in config:
+                if isinstance(item, dict):
+                    result = f"{result}{self.SPLIT_STR}{self.serialize(item)}"
+        elif isinstance(config, dict):
+            # if len(config) > self.DICT_DEPT_MAX:
+            #     raise Exception("")
+            for key, value in config.items():
+                for item in self.TABLE:
+                    if str(key).startswith(item["prefix"]):
+                        result = f"{result}{self.SPLIT_STR}{key}{item['key_value_delimiter']}{self.serialize(value)}"
+        else:
+            result = f"{result}{self.SPLIT_STR}{str(config)}"
+        return result
+
+
+class IniSerializer:
+    def __init__(self, is_compact_sections=False, quotes_for_string_value='"', subsection_separator=".",
+                 key_value_seperator="=", new_line="\n"):
+        self.__is_compact_sections = is_compact_sections  # fixme utopia Не реализовано
+        self.__quotes_for_string_value = quotes_for_string_value
+        self.__subsection_separator = subsection_separator
+        self.__key_value_seperator = key_value_seperator
+        self.__new_line = new_line
+
+    def serialize(self, config):
+        return self.__serialize_impl(config, section_list=[]).strip()
+
+    def __serialize_impl(self, config, section_list, is_same_section=True):
+        result = ""
+        if isinstance(config, list):
+            for item in config:
+                result = f"{result}{self.__serialize_impl(item, section_list=section_list, is_same_section=is_same_section)}"
+        elif isinstance(config, dict):
+            for key, value in config.items():
+                if isinstance(value, dict) or isinstance(value, list):
+                    section_list_new = section_list.copy()
+                    section_list_new.append(key)
+                    result = f"{result}{self.__serialize_impl(value, section_list=section_list_new, is_same_section=False)}"
+                else:
+                    result = f"{result}{self.__serialize_section_name(section_list, is_same_section)}{self.__serialize_key_value(key, value)}"
+                    is_same_section = True
+        else:
+            result = f"{result}{self.__serialize_key(config)}"
+        return result
+
+    def __serialize_section_name(self, section_list, is_same_section):
+        if len(section_list) == 0 or is_same_section:
+            return ""
+        return f"[{self.__subsection_separator.join(section_list)}]{self.__new_line}"
+
+    def __serialize_key(self, key):
+        return f"{key}{self.__key_value_seperator}{self.__new_line}"
+
+    def __serialize_key_value(self, key, value):
+        return f"{key}{self.__key_value_seperator}{self.__serialize_value(value)}{self.__new_line}"
+
+    def __serialize_value(self, value):
+        result = str(value)
+        if isinstance(value, str):
+            result = f"{self.__quotes_for_string_value}{result}{self.__quotes_for_string_value}"
+        return result
+
+
+class UnitTest_IniSerializer(unittest.TestCase):
+
+    def test_serialize(self):
+        config_ref = '''key1="string_value1"
+key2=
+key3=
+[section_name1]
+key1_1=1.1
+[section_name1.section_name1_1.section_name1_1_1]
+key1_1_1=False
+[section_name1]
+key1_1=147
+key1_2="None"'''
+
+        ref_table = {
+            config_ref:
+                [{"key1": "string_value1"}, "key2", "key3", {"section_name1": [{"key1_1": 1.1}, {"section_name1_1": {
+                    "section_name1_1_1": [{"key1_1_1": False}]}, "key1_1": 147, "key1_2": "None"}]}]
+
+        }
+
+        serializer = IniSerializer()
+        for config_serialized, config in ref_table.items():
+            result = serializer.serialize(config)
+            self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
+
+
 class ConfigParser:
     def __init__(self, name_parser=ConfigParameterNameParser(), delimiter_parser=ConfigNameValueDelimiterParser(),
                  value_parser=ConfigParameterValueParser(), from_string=FromString()):
@@ -2965,7 +3102,7 @@ class ConfigParser:
 class UnitTest_ConfigParser(unittest.TestCase):
 
     def test_parse(self):
-        REF_TABLE = {
+        ref_table = {
             "a=b\nc=d\nhello=123\nstring=\"this is string in double quotes\"\nis_none=nOnE": {"a": "b", "c": "d",
                                                                                               "hello": 123,
                                                                                               "string": "this is string in double quotes",
@@ -2973,7 +3110,7 @@ class UnitTest_ConfigParser(unittest.TestCase):
         }
 
         config_parser = ConfigParser()
-        for content, key_value in REF_TABLE.items():
+        for content, key_value in ref_table.items():
             for key, value in key_value.items():
                 self.assertEqual(config_parser.get_value(key, content), value)
 
@@ -3673,8 +3810,6 @@ def main():
         # time.sleep(30)
         vm = VirtualMachine(network_bridge)
         vm.run()
-    elif command == "unittest":
-        unittest.main()
 
 
 if __name__ == '__main__':
