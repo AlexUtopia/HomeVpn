@@ -2106,6 +2106,33 @@ class PciVendorId:
         return self.__vendor_id == self.INTEL
 
 
+def get_all_subclasses(cls):
+    result = cls.__subclasses__().copy()
+    for sub_cls in cls.__subclasses__():
+        for sub_sub_cls in get_all_subclasses(sub_cls):
+            if not sub_sub_cls in result:
+                result.append(sub_sub_cls)
+    result.reverse()
+    return result
+
+
+class UnitTest_get_all_subclasses(unittest.TestCase):
+    class Foo(object): pass
+
+    class Bar(Foo): pass
+
+    class Baz(Foo): pass
+
+    class Bing(Bar): pass
+
+    def test(self):
+        subclass_name_list = []
+        for sub_cls in get_all_subclasses(UnitTest_get_all_subclasses.Foo):
+            subclass_name_list.append(sub_cls.__name__)
+
+        self.assertEqual(subclass_name_list, ["Bing", "Baz", "Bar"])
+
+
 # https://en.wikipedia.org/wiki/PCI_configuration_space
 # fixme utopia SR-IOV capability
 # https://forums.servethehome.com/index.php?threads/quick-check-if-your-pcie-device-has-sr-iov-capability.39675/
@@ -2145,6 +2172,20 @@ class Pci:
         self.subsystem_id = 0
         self.iommu_group = None
         self.kernel_module = ""
+
+    def _init(self, pci):
+        self.address = pci.address
+        self.class_name = pci.class_name
+        self.class_code = pci.class_code
+        self.device_name = pci.device_name
+        self.vendor_id = pci.vendor_id
+        self.device_id = pci.device_id
+        self.revision = pci.revision
+        self.subsystem_name = pci.subsystem_name
+        self.subsystem_vendor_id = pci.subsystem_vendor_id
+        self.subsystem_id = pci.subsystem_id
+        self.iommu_group = pci.iommu_group
+        self.kernel_module = pci.kernel_module
 
     def __str__(self):
         return str({
@@ -2245,15 +2286,16 @@ class Pci:
                     pci = result[-1]
                     pci[key] = value
 
-        # for pci in result:
-        #     pci = builder(pci)
+        for index, pci in enumerate(result):
+            result[index] = Pci.__build(pci)
         return result
 
     @staticmethod
-    def register_builder():
-        # билдеру передаётся объект Pci а билео отдаёт или оригинальный pci и его наследника
-        return 0
-
+    def __build(base_pci):
+        for sub_cls in get_all_subclasses(Pci):
+            if sub_cls.is_my_instance(base_pci):
+                return sub_cls(base_pci)
+        return base_pci
 
     @staticmethod
     def __run_lspci():
@@ -2273,7 +2315,7 @@ class VfioPci:
         if pci.iommu_group is None:
             return {}
 
-        vfio_pci_options_table = {"host": pci.address()}
+        vfio_pci_options_table = {"host": pci.address}
         vfio_pci_options_table.update(pci.get_vfio_pci_options_table())
         return {"-device": {"vfio-pci": vfio_pci_options_table}}
 
@@ -2337,12 +2379,13 @@ class Vfio:
 
 class VgaPciIntel(Pci):
     def __init__(self, pci):
-        super(pci).__init__()
+        pass
+        self._init(pci)
 
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
         result = super().get_kernel_parameters()
-        result.extend([{ "i915.modeset": 0 }, { "video": "efifb:off" }])
+        result.extend([{"i915.modeset": 0}, {"video": "efifb:off"}])
         return result
 
     def get_vfio_pci_options_table(self):
@@ -2356,7 +2399,9 @@ class VgaPciIntel(Pci):
             result.append({"-vga": "none"})
         return result
 
-
+    @staticmethod
+    def is_my_instance(pci):
+        return pci.class_code.is_vga() and pci.vendor_id.is_intel()
 
 
 # fixme utopia Parser for command line
@@ -3748,16 +3793,27 @@ def main():
         pci_list = Pci.get_list()
 
         pci_vga_list = pci_list.get_vga_list()
+        if len(pci_vga_list) == 0:
+            print("PCI VGA NOT FOUND")
+            return
+
         if len(pci_vga_list) > 1:
             print("Many VGA!!!")  # fixme utopia Дать выбрать какой VGA пробрасывать
+            return
+
+        if pci_vga_list[0].iommu_group is None:
+            print("VGA does not belong to iommu group")
+            return
 
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(pci_vga_list[0].iommu_group)
 
         vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
         print(vfio_pci.get_kernel_parameters())
+        print(vfio_pci.get_qemu_parameters())
 
-
-
+        # Vfio(vfio_pci).get_kernel_parameters() // То что будем переопределять для /etc/default/grub | GRUB_CMDLINE_LINUX
+        # VirtualMachine(network_bridge, gpu=vfio_pci.get_qemu_parameters()).run()
+        return
 
     elif command == "test":
         print(Pci.get_list())
