@@ -177,9 +177,9 @@ elif is_msys; then
     DNSMASQ_PACKAGE=""
 fi
 
-QEMU_SYSTEM_PACKAGE="qemu qemu-system qemu-kvm"
+QEMU_SYSTEM_PACKAGE="qemu qemu-system qemu-kvm swtpm ovmf"
 if is_termux; then
-    QEMU_SYSTEM_PACKAGE="qemu-system-x86-64"
+    QEMU_SYSTEM_PACKAGE="qemu-system-x86-64 swtpm ovmf"
 elif is_msys; then
     QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
 fi

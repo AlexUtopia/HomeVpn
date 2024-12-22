@@ -1517,9 +1517,16 @@ class Virtio:
         print("Virtio win drivers DOWNLOAD: OK")
 
 
+# https://www.qemu.org/docs/master/system/invocation.html#hxtool-7
+# https://qemu-project.gitlab.io/qemu/specs/tpm.html
+class Tpm:
+    pass
+
 # fixme utopia Обеспечить возможность установки win11
 # https://serverfault.com/a/1096401/1120954
 # https://extralan.ru/?p=3060
+# secure-boot check win11
+# https://www.iobit.com/en/knowledge-how-to-enable-secure-boot-on-windows--355.php
 # - TPM (software)
 # - UEFI (OVMF) + secure boot
 # - 4 GB RAM
@@ -1545,7 +1552,7 @@ class VirtualMachine:
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
                               self.__network(),
                               self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
-                              self.__cpu(), self.__gpu(), self.__usb(), self.__monitor()]
+                              self.__cpu(), self.__gpu(), self.__usb(), self.__monitor(), self.__bios()]
         return " ".join(command_parts_list)
 
     @staticmethod
@@ -1598,7 +1605,7 @@ class VirtualMachine:
     def __monitor(self):
         # fixme utopia config monitor port
         # https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor
-        return "-monitor telnet:127.0.0.1:55555,server,nowait;"
+        return "-monitor telnet:127.0.0.1:55555,server,nowait"
 
     def __cpu(self):
         # CPU который поддерживается Windows 11
@@ -1625,6 +1632,11 @@ class VirtualMachine:
         # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
         # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
         # return "-device virtio-vga-gl -display sdl,gl=on"
+
+    # https://www.qemu.org/docs/master/system/invocation.html#hxtool-0
+    # https://superuser.com/a/1798353/2121020
+    def __bios(self):
+        return "-drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd,readonly=on -drive if=pflash,format=raw,file=/home/utopia/HomeVpn/vm/OVMF_VARS_4M.ms.fd"
 
     def __usb(self):
         usb_device_array = [
