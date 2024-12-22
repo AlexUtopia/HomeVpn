@@ -1517,6 +1517,13 @@ class Virtio:
         print("Virtio win drivers DOWNLOAD: OK")
 
 
+# fixme utopia Обеспечить возможность установки win11
+# https://serverfault.com/a/1096401/1120954
+# https://extralan.ru/?p=3060
+# - TPM (software)
+# - UEFI (OVMF) + secure boot
+# - 4 GB RAM
+# - CPU Icelake-Server-v5
 class VirtualMachine:
     def __init__(self, network_bridge,
                  vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
@@ -1594,7 +1601,8 @@ class VirtualMachine:
         return "-monitor telnet:127.0.0.1:55555,server,nowait;"
 
     def __cpu(self):
-        return "-cpu host -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
+        # CPU который поддерживается Windows 11
+        return "-cpu Icelake-Server-v5 -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
 
     def __gpu(self):
         # Использовать для установки ОС
@@ -1743,12 +1751,12 @@ class UdpWatchdog:
 # Нам нужен парсер командной строки для linux kernel
 class Iommu:
     # fixme utopia Вырубить виртуализацию в биос и проверить появится ли
-    __IOMMU_SYS_FD_PATH = "/sys/class/iommu/"
+    __IOMMU_SYS_FS_PATH = "/sys/class/iommu/"
 
     # проверить что в /etc/default/grub есть intel_iommu=on iommu=pt и в dmesg есть
     # iommu: Default domain type: Passthrough
     def check(self):
-        return os.path.exists(self.__IOMMU_SYS_FD_PATH) and os.path.isdir(self.__IOMMU_SYS_FD_PATH)
+        return os.path.exists(self.__IOMMU_SYS_FS_PATH) and os.path.isdir(self.__IOMMU_SYS_FS_PATH)
 
     def is_intel(self):
         return self.check() and self.__is_cpu_vendor("intel")
@@ -1906,7 +1914,7 @@ class BitUtils:
     @staticmethod
     def get_max_by_base(base, digit_count):
         BitUtils.__check_base(base)
-        # BitUtils.__check_digit_count(digit_count)
+        # BitUtils.__check_digit_count(digit_count) # fixme utopia Сделать
 
         digit_value_max = BitUtils.get_digit_value_max(base)
         result = 0
@@ -1977,7 +1985,7 @@ class BitUtils:
 
     @staticmethod
     def __check_int_type(val):
-        if type(val) is not int:
+        if not isinstance(val, int):
             raise Exception("Value unknown type, must be int: {}".format(str(val)))
 
     @staticmethod
@@ -2190,8 +2198,8 @@ class Pci:
     def __str__(self):
         return str({
             self.__ADDRESS: self.address,
-            self.__CLASS_CODE: self.class_name,
-            self.__DEVICE_NAME: self.class_code,
+            self.__CLASS_CODE: self.class_code,
+            self.__DEVICE_NAME: self.class_name,
             self.__VENDOR_ID: self.vendor_id,
             self.__DEVICE_ID: self.device_id,
             self.__REVISION: self.revision,
@@ -2660,17 +2668,39 @@ class RegexConstants:
 
 
 class EscapeLiteral:
-    __ESCAPE = [("\\\\", "\\"), ("\\\"", "\""), ("\\\'", "'"), ("\\\n", ""), ("\\\r", ""), ("\\\r\n", ""),
-                ("\\\n\r", "")]
+    DECODE_TABLE_DEFAULT = [("\\\\", "\\"), ("\\\"", "\""), ("\\\'", "'"), ("\\n", "\n"),
+                            ("\\r", "\r")]
 
-    def __init__(self, target_string):
-        self.__target_string = target_string
+    ENCODE_TABLE_DEFAULT = [("\\", "\\\\"), ("\"", "\\\""), ("'", "\\\'"), ("\n", "\\n"),
+                            ("\r", "\\r")]
 
-    def escape(self):
-        result = ""
-        for escape_literal, replace_literal in self.__ESCAPE:
-            result = self.__target_string.replace(escape_literal, replace_literal)
+    def __init__(self, decode_table=DECODE_TABLE_DEFAULT,
+                 encode_table=ENCODE_TABLE_DEFAULT):
+        self.__decode_table = decode_table
+        self.__encode_table = encode_table
+
+    def decode(self, target_string):
+        result = target_string
+        for escape_literal, replace_literal in self.__decode_table:
+            result = result.replace(escape_literal, replace_literal)
         return result
+
+    def encode(self, target_string):
+        result = target_string
+        for replace_literal, escape_literal in self.__encode_table:
+            result = result.replace(replace_literal, escape_literal)
+        return result
+
+
+class UnitTest_EscapeLiteral(unittest.TestCase):
+
+    def self_test(self):
+        target_string = "\rhello\\\n\"world!\'\n\r\\hello world"
+
+        escape_literal = EscapeLiteral()
+        encoded_string = escape_literal.encode(target_string)
+        decoded_string = escape_literal.decode(encoded_string)
+        self.assertEqual(target_string, decoded_string)
 
 
 class NoneFromString:
@@ -2770,8 +2800,9 @@ class NumberFromString:
 
 
 class StringFromString:
-    def __init__(self, target_string):
+    def __init__(self, target_string, escape_literal=EscapeLiteral()):
         self.__target_string = target_string
+        self.__escape_literal = escape_literal
 
     def get(self):
         if len(self.__target_string) == 0:
@@ -2780,9 +2811,9 @@ class StringFromString:
         if (self.__target_string[0] == '"' and self.__target_string[-1] == '"') or (
                 self.__target_string[0] == "'" and self.__target_string[-1] == "'"):
             self.__target_string = self.__target_string[1:-1]
-            return True, EscapeLiteral(self.__target_string).escape()
+            return True, self.__escape_literal.decode(self.__target_string)
 
-        return False, EscapeLiteral(self.__target_string).escape()
+        return False, self.__escape_literal.decode(self.__target_string)
 
 
 class FromString:
@@ -2974,40 +3005,184 @@ class Section:
 
 
 class ShellSerializer:
-    SPLIT_STR = " "
-    DICT_DEPT_MAX = 1
+    KEY_VALUE_SEPARATOR_TABLE_DEFAULT = [{"prefix": "--", "separator": "="},
+                                         {"prefix": "", "separator": " "}]
 
-    TABLE = [{"prefix": "--", "key_value_delimiter": "="}, {"prefix": "", "key_value_delimiter": SPLIT_STR}]
+    def __init__(self, quotes_for_string_value='"',
+                 key_value_separator_table=KEY_VALUE_SEPARATOR_TABLE_DEFAULT, pair_separator=" ",
+                 escape_literal=EscapeLiteral(), nested_serializer=None, nested_key_value_separator=" ",
+                 nested_escape_literal=None):
+        self.__quotes_for_string_value = quotes_for_string_value
+        self.__key_value_separator_table = key_value_separator_table
+        self.__pair_separator = pair_separator
+        self.__escape_literal = escape_literal
+        self.__nested_serializer = nested_serializer
+        self.__nested_key_value_separator = nested_key_value_separator
+        self.__nested_escape_literal = nested_escape_literal
 
     def serialize(self, config):
+        result = self.__serialize_impl(config)
+        if result.endswith(self.__pair_separator):
+            result = result[:len(result) - len(self.__pair_separator)]
+        return result
+
+    def __serialize_impl(self, config):
         result = ""
         if isinstance(config, list):
             for item in config:
-                if isinstance(item, dict):
-                    result = f"{result}{self.SPLIT_STR}{self.serialize(item)}"
+                result = f"{result}{self.__serialize_impl(item)}"
         elif isinstance(config, dict):
-            # if len(config) > self.DICT_DEPT_MAX:
-            #     raise Exception("")
             for key, value in config.items():
-                for item in self.TABLE:
-                    if str(key).startswith(item["prefix"]):
-                        result = f"{result}{self.SPLIT_STR}{key}{item['key_value_delimiter']}{self.serialize(value)}"
+                if isinstance(value, dict) or isinstance(value, list):
+                    result = f"{result}{self.__serialize_nested_impl(key, value)}"
+                else:
+                    result = f"{result}{self.__serialize_key_value(key, value)}"
         else:
-            result = f"{result}{self.SPLIT_STR}{str(config)}"
+            result = f"{result}{self.__serialize_key(config)}"
         return result
+
+    def __serialize_nested_impl(self, key, value):
+        if self.__nested_serializer is not None:
+            return self.__serialize_key_value(key, self.__nested_serializer.serialize(value), is_nested=True)
+        raise Exception(f"Nested serialization policy NOT FOUND: {key}: {value}")
+
+    def __serialize_key(self, key):
+        return f"{key}{self.__pair_separator}"
+
+    def __serialize_key_value(self, key, value, is_nested=False):
+        separator = self.__get_nested_separator(key) if is_nested else self.__get_separator(key)
+        return f"{key}{separator}{self.__serialize_value(value, is_nested)}{self.__pair_separator}"
+
+    def __serialize_value(self, value, is_nested=False):
+        result = str(value)
+        if isinstance(value, str):
+            result = self.___encode_nested_literal(result) if is_nested else self.__encode_literal(result)
+            result = f"{self.__quotes_for_string_value}{result}{self.__quotes_for_string_value}"
+        return result
+
+    def __get_separator(self, key):
+        for __key_value_separator in self.__key_value_separator_table:
+            if str(key).startswith(__key_value_separator["prefix"]):
+                return __key_value_separator['separator']
+        return ""
+
+    def __get_nested_separator(self, key):
+        if self.__nested_key_value_separator is None:
+            return ""
+        return str(self.__nested_key_value_separator)
+
+    def __encode_literal(self, value):
+        if self.__escape_literal is None:
+            return value
+        return self.__escape_literal.encode(value)
+
+    def ___encode_nested_literal(self, value):
+        if self.__nested_escape_literal is None:
+            return value
+        return self.__nested_escape_literal.encode(value)
+
+
+class UnitTest_ShellSerializer(unittest.TestCase):
+
+    def test_serialize(self):
+        ref_table = {
+            '--device="test_device" key "\\\\\\n\\"hello world!!\\"\\r" key1 --device="test_device" -device2 "test_device2" -device3 "test_device3" --key2=15 --key3=18.7 --key4=True': [
+                {"--device": "test_device"},
+                {"key": "\\\n\"hello world!!\"\r"},
+                "key1",
+                {"--device": "test_device", "-device2": "test_device2", "-device3": "test_device3"},
+                {"--key2": 15, "--key3": 18.7, "--key4": True},
+            ],
+            '--device="test_device" --device1="test_device1"':
+                {
+                    "--device": "test_device",
+                    "--device1": "test_device1"
+                }
+        }
+
+        serializer = ShellSerializer()
+        for config_serialized, config in ref_table.items():
+            result = serializer.serialize(config)
+            self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
+
+    def test_nested_fail(self):
+        config = {"-device": {"subdevice": "test_device"}}
+
+        serializer = ShellSerializer()
+        self.assertRaises(Exception, serializer.serialize, config)
+
+
+class QemuSerializer(ShellSerializer):
+    class QemuEscapeLiteral(EscapeLiteral):
+        def __init__(self):
+            super().__init__(encode_table=[(",", ",,")])
+
+    def __init__(self):
+        super().__init__(nested_serializer=ShellSerializer(quotes_for_string_value="",
+                                                           key_value_separator_table=[
+                                                               {"prefix": "", "separator": "="}],
+                                                           pair_separator=",",
+                                                           escape_literal=QemuSerializer.QemuEscapeLiteral(),
+                                                           nested_serializer=ShellSerializer(quotes_for_string_value="",
+                                                                                             key_value_separator_table=[
+                                                                                                 {"prefix": "",
+                                                                                                  "separator": "="}],
+                                                                                             pair_separator=",",
+                                                                                             escape_literal=QemuSerializer.QemuEscapeLiteral()),
+                                                           nested_key_value_separator=","
+                                                           ))
+
+
+class UnitTest_QemuSerializer(unittest.TestCase):
+
+    def test_serialize(self):
+        ref_table = {
+            '-enable-kvm -m 8192 -netdev "tap,ifname=homevpn-tap2,script=no,downscript=no,id=homevpn-tap2-id" -device "virtio-net,netdev=homevpn-tap2-id,mac=ee:08:bf:ab:45:42" -vnc "127.0.0.1:2" -drive "file=/home/utopia/HomeVpn/vm ,,/win10.img,media=disk,if=virtio" -cpu "Icelake-Server-v5" -smp "cpus=4,sockets=1,cores=2,threads=2,maxcpus=4" -device "virtio-vga-gl" -display "sdl,gl=on" -usb -device "usb-host,vendorid=0x045E,productid=0x00DB" -usb -device "usb-host,vendorid=0x0BDA,productid=0x8771" -usb -device "usb-host,vendorid=0x046D,productid=0xC05B" -usb -device "usb-host,vendorid=0x258A,productid=0x0302" -monitor "telnet:127.0.0.1:55555,server,nowait"': [
+                "-enable-kvm",
+                {"-m": 8192},
+                {"-netdev": {"tap":
+                                 {"ifname": "homevpn-tap2", "script": "no", "downscript": "no",
+                                  "id": "homevpn-tap2-id"}}},
+                {"-device": {"virtio-net": {"netdev": "homevpn-tap2-id", "mac": "ee:08:bf:ab:45:42"}}},
+                {"-vnc": "127.0.0.1:2"},
+                {"-drive": {"file": "/home/utopia/HomeVpn/vm ,/win10.img", "media": "disk", "if": "virtio"}},
+                {"-cpu": "Icelake-Server-v5"},
+                {"-smp": {"cpus": 4, "sockets": 1, "cores": 2, "threads": 2, "maxcpus": 4}},
+                {"-device": "virtio-vga-gl"},
+                {"-display": {"sdl": {"gl": "on"}}},
+                "-usb",
+                {"-device": {"usb-host": {"vendorid": "0x045E", "productid": "0x00DB"}}},
+                "-usb",
+                {"-device": {"usb-host": {"vendorid": "0x0BDA", "productid": "0x8771"}}},
+                "-usb",
+                {"-device": {"usb-host": {"vendorid": "0x046D", "productid": "0xC05B"}}},
+                "-usb",
+                {"-device": {"usb-host": {"vendorid": "0x258A", "productid": "0x0302"}}},
+                {"-monitor": ["telnet:127.0.0.1:55555", "server", "nowait"]}
+            ]
+        }
+
+        serializer = QemuSerializer()
+        for config_serialized, config in ref_table.items():
+            result = serializer.serialize(config)
+            self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
 
 
 class IniSerializer:
     def __init__(self, is_compact_sections=False, quotes_for_string_value='"', subsection_separator=".",
-                 key_value_seperator="=", new_line="\n"):
+                 key_value_separator="=", pair_separator="\n", escape_literal=EscapeLiteral()):
         self.__is_compact_sections = is_compact_sections  # fixme utopia Не реализовано
         self.__quotes_for_string_value = quotes_for_string_value
         self.__subsection_separator = subsection_separator
-        self.__key_value_seperator = key_value_seperator
-        self.__new_line = new_line
+        self.__key_value_separator = key_value_separator
+        self.__pair_separator = pair_separator
+        self.__escape_literal = escape_literal
 
     def serialize(self, config):
-        return self.__serialize_impl(config, section_list=[]).strip()
+        result = self.__serialize_impl(config, section_list=[])
+        if result.endswith(self.__pair_separator):
+            result = result[:len(result) - len(self.__pair_separator)]
+        return result
 
     def __serialize_impl(self, config, section_list, is_same_section=True):
         result = ""
@@ -3030,40 +3205,63 @@ class IniSerializer:
     def __serialize_section_name(self, section_list, is_same_section):
         if len(section_list) == 0 or is_same_section:
             return ""
-        return f"[{self.__subsection_separator.join(section_list)}]{self.__new_line}"
+        return f"[{self.__subsection_separator.join(section_list)}]{self.__pair_separator}"
 
     def __serialize_key(self, key):
-        return f"{key}{self.__key_value_seperator}{self.__new_line}"
+        return f"{key}{self.__key_value_separator}{self.__pair_separator}"
 
     def __serialize_key_value(self, key, value):
-        return f"{key}{self.__key_value_seperator}{self.__serialize_value(value)}{self.__new_line}"
+        return f"{key}{self.__key_value_separator}{self.__serialize_value(value)}{self.__pair_separator}"
 
     def __serialize_value(self, value):
         result = str(value)
         if isinstance(value, str):
-            result = f"{self.__quotes_for_string_value}{result}{self.__quotes_for_string_value}"
+            result = f"{self.__quotes_for_string_value}{self.__encode_literal(result)}{self.__quotes_for_string_value}"
         return result
+
+    def __encode_literal(self, value):
+        if self.__escape_literal is None:
+            return value
+        return self.__escape_literal.encode(value)
 
 
 class UnitTest_IniSerializer(unittest.TestCase):
 
     def test_serialize(self):
         config_ref = '''key1="string_value1"
-key2=
+key2="\\\\\\n\\"hello world!!\\"\\r"
 key3=
 [section_name1]
 key1_1=1.1
 [section_name1.section_name1_1.section_name1_1_1]
 key1_1_1=False
 [section_name1]
-key1_1=147
-key1_2="None"'''
+key1_2=147
+key1_3="None"'''
 
         ref_table = {
-            config_ref:
-                [{"key1": "string_value1"}, "key2", "key3", {"section_name1": [{"key1_1": 1.1}, {"section_name1_1": {
-                    "section_name1_1_1": [{"key1_1_1": False}]}, "key1_1": 147, "key1_2": "None"}]}]
-
+            config_ref: [
+                {"key1": "string_value1"},
+                {"key2": "\\\n\"hello world!!\"\r"},
+                "key3",
+                {
+                    "section_name1":
+                        [
+                            {"key1_1": 1.1},
+                            {
+                                "section_name1_1":
+                                    {
+                                        "section_name1_1_1":
+                                            [
+                                                {"key1_1_1": False}
+                                            ]
+                                    },
+                                "key1_2": 147,
+                                "key1_3": "None"
+                            }
+                        ]
+                }
+            ]
         }
 
         serializer = IniSerializer()
