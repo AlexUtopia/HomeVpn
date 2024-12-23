@@ -1517,8 +1517,9 @@ class Virtio:
         print("Virtio win drivers DOWNLOAD: OK")
 
 
-# https://www.qemu.org/docs/master/system/invocation.html#hxtool-7
 # https://qemu-project.gitlab.io/qemu/specs/tpm.html
+# https://en.opensuse.org/Software_TPM_Emulator_For_QEMU
+# https://www.qemu.org/docs/master/system/invocation.html#hxtool-7
 class Tpm:
     pass
 
