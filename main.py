@@ -1,3 +1,4 @@
+import shutil
 import atexit
 import os.path
 import re
@@ -54,6 +55,12 @@ class Path:
             return os.path.basename(path)
         return ""
 
+    def get_dir_path(self):
+        path = self.get()
+        if os.path.isfile(path):
+            return Path(os.path.dirname(path))
+        return Path(path)
+
     def exists(self):
         return os.path.exists(self.get())
 
@@ -65,6 +72,12 @@ class Path:
             # print("[WARNING] Path \"{}\" is path to exists directory".format(path))
             return
         os.makedirs(path)
+
+    def copy_from(self, path):
+        shutil.copyfile(Path(str(path)).get(), self.get())
+
+    def join(self, path):
+        return Path(os.path.join(self.get(), path))
 
     def __str__(self):
         return self.get()
@@ -1076,6 +1089,9 @@ class VmMetaData:
         else:
             self.__rdp_forward_port = TcpPort(rdp_forward_port)
 
+    def get_working_dir_path(self):
+        return self.__image_path.get_dir_path().join(self.get_name())
+
 
 class VmRegistry:
     # {
@@ -1242,6 +1258,49 @@ class ResolvConf:
 
     def __build_basic_regex(self, value, parameter=__NAMESERVER):
         return f"^{self.__SPACE_SYMBOLS_ZERO_OR_MORE}{parameter}{self.__SPACE_SYMBOLS_ONE_OR_MORE}{value}{self.__SPACE_SYMBOLS_ZERO_OR_MORE}$"
+
+
+class DaemonManagerBase:
+    def __init__(self):
+        self.__command_line = None
+        atexit.register(self.clear_at_exit)
+
+    def start(self):
+        if self.__command_line:
+            return
+
+        self._start_impl()
+        self.__command_line = str(self._build_command_line())
+
+        print(self.__command_line)
+        subprocess.check_call(self.__command_line, shell=True)
+
+    # def _start_impl(self):
+    #     pass
+
+    def close(self):
+        if not self.__command_line:
+            return
+
+        self.__find_and_kill_target_processes()
+        self._close_impl()
+
+    def clear_at_exit(self):
+        try:
+            self.close()
+        except Exception:
+            return
+
+    def __find_and_kill_target_processes(self):
+        for process in psutil.process_iter():
+            if self.__compare_cmd_line(process.cmdline()):
+                print("KILL {}".format(process))
+                process.kill()
+
+    def __compare_cmd_line(self, psutil_process_cmdline):
+        normalize_command_line = " ".join(shlex.split(self.__command_line))
+        psutil_command_line = " ".join(psutil_process_cmdline)
+        return psutil_command_line.endswith(normalize_command_line)
 
 
 # https://serverfault.com/questions/723292/dnsmasq-doesnt-automatically-reload-when-entry-is-added-to-etc-hosts
@@ -1515,149 +1574,6 @@ class Virtio:
         print("Virtio win drivers DOWNLOAD: {} --> \"{}\"".format(virtio_win_drivers_url, win_drivers_iso_path))
         urllib.request.urlretrieve(virtio_win_drivers_url, str(win_drivers_iso_path))
         print("Virtio win drivers DOWNLOAD: OK")
-
-
-# https://qemu-project.gitlab.io/qemu/specs/tpm.html
-# https://en.opensuse.org/Software_TPM_Emulator_For_QEMU
-# https://www.qemu.org/docs/master/system/invocation.html#hxtool-7
-class Tpm:
-    pass
-
-# fixme utopia Обеспечить возможность установки win11
-# https://serverfault.com/a/1096401/1120954
-# https://extralan.ru/?p=3060
-# secure-boot check win11
-# https://www.iobit.com/en/knowledge-how-to-enable-secure-boot-on-windows--355.php
-# - TPM (software)
-# - UEFI (OVMF) + secure boot
-# - 4 GB RAM
-# - CPU Icelake-Server-v5
-class VirtualMachine:
-    def __init__(self, network_bridge,
-                 vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
-                 path_to_iso_installer=None, virtio=None):
-        self.__tap = Tap()
-        self.__network_bridge = network_bridge
-        self.__vm_meta_data = vm_meta_data
-        self.__path_to_iso_installer = path_to_iso_installer
-        self.__virtio = virtio
-
-    def run(self):
-        self.__network_bridge.create()
-
-        command_line = self.__command_line()
-        print(command_line)
-        subprocess.check_call(command_line, shell=True)
-
-    def __command_line(self):
-        command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
-                              self.__network(),
-                              self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
-                              self.__cpu(), self.__gpu(), self.__usb(), self.__monitor(), self.__bios()]
-        return " ".join(command_parts_list)
-
-    @staticmethod
-    def __qemu_command_line():
-        return "qemu-system-{}".format(platform.machine())
-
-    @staticmethod
-    def __kvm_enable():
-        return "-enable-kvm"
-
-    @staticmethod
-    def __ram_size():  # fixme utopia Использовать psutil
-        return "-m 8192"
-
-    def __network(self):
-        self.__tap.create()
-        self.__network_bridge.add_and_configure_tap(self.__tap, self.__vm_meta_data)
-
-        tap_name = str(self.__tap)
-        netdev_id = "{}-id".format(tap_name)
-
-        # fixme utopia Присвоим ip адрес vm через mac адрес
-        # https://superuser.com/questions/1413011/setting-a-static-ip-upon-qemu-vm-creation
-
-        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac={2}".format(
-            tap_name, netdev_id, self.__vm_meta_data.get_mac_address_as_string())
-
-    def __disk(self):
-        return "-drive file=\"{}\",media=disk,if=virtio".format(self.__vm_meta_data.get_image_path())
-
-    def __iso_installer(self):
-        if self.__path_to_iso_installer is None:
-            return ""
-        return "-cdrom \"{}\"".format(self.__path_to_iso_installer)
-
-    def __other(self):
-        # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
-        # -vga std -vnc 127.0.0.1:2
-        # -bt hci,host:hci0
-        # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
-        # https://www.youtube.com/watch?v=ELbxhm1-rno
-        # -full-screen
-        # -device virtio-vga-gl -display sdl,gl=on
-        # /usr/share/ovmf/OVMF.fd
-        # return "-vnc 127.0.0.1:2 -bios /usr/share/OVMF/OVMF_CODE.fd"
-        # return "-vnc 127.0.0.1:2 -soundhw hda"
-        # return "-vnc 127.0.0.1:2 -machine q35"
-        return "-vnc 127.0.0.1:2"
-
-    def __monitor(self):
-        # fixme utopia config monitor port
-        # https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor
-        return "-monitor telnet:127.0.0.1:55555,server,nowait"
-
-    def __cpu(self):
-        # CPU который поддерживается Windows 11
-        return "-cpu Icelake-Server-v5 -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
-
-    def __gpu(self):
-        # Использовать для установки ОС
-        # return "-vga std -display gtk"
-
-        # return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
-        # return "-vga none -device vfio-pci,host=00:1f.3"
-
-        return "-device virtio-vga-gl -display sdl,gl=on"
-
-        # return "-nographic"
-
-        # https://www.reddit.com/r/VFIO/comments/cktnhv/bar_0_cant_reserve/
-        # https://listman.redhat.com/archives/vfio-users/2016-March/msg00088.html
-        # ,display=auto,multifunction=on,x-vga=on,
-        # x-igd-opregion=on,
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,display=auto,multifunction=on"  # x-pci-sub-vendor-id=0x1025,x-pci-sub-device-id=0x1518,x-pci-vendor-id=0x8086,x-pci-device-id=0x2812
-        # return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
-        # return "-device virtio-vga-gl -display sdl,gl=on"
-
-    # https://www.qemu.org/docs/master/system/invocation.html#hxtool-0
-    # https://superuser.com/a/1798353/2121020
-    def __bios(self):
-        return "-drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd,readonly=on -drive if=pflash,format=raw,file=/home/utopia/HomeVpn/vm/OVMF_VARS_4M.ms.fd"
-
-    def __usb(self):
-        usb_device_array = [
-            (0x045e, 0x00db),  # Клавиатура Microsoft # Natural Ergonomic Keyboard 4000 v 1.0
-            (0x0bda, 0x8771),  # USB-Bluetooth 5.0 адаптер Ugreen # CM390
-            (0x046d, 0xc05b),  # Мышка Logitec # B110
-            (0x258a, 0x0302)  # Клавиатура с тачпадом Harper # KBT-330
-        ]
-
-        result = []
-
-        for vid, pid in usb_device_array:
-            result.append("-usb -device usb-host,vendorid=0x{:04X},productid=0x{:04X}".format(vid, pid))
-
-        return " ".join(result)
-
-    def __virtio_win_drivers(self):
-        if self.__virtio is None:
-            return ""
-        return "-drive file=\"{}\",media=cdrom,if=ide".format(self.__virtio.get_win_drivers())
 
 
 class UdpWatchdog:
@@ -3060,6 +2976,8 @@ class ShellSerializer:
         raise Exception(f"Nested serialization policy NOT FOUND: {key}: {value}")
 
     def __serialize_key(self, key):
+        if len(key) == 0:
+            return ""
         return f"{key}{self.__pair_separator}"
 
     def __serialize_key_value(self, key, value, is_nested=False):
@@ -3221,6 +3139,8 @@ class IniSerializer:
         return f"[{self.__subsection_separator.join(section_list)}]{self.__pair_separator}"
 
     def __serialize_key(self, key):
+        if len(key) == 0:
+            return ""
         return f"{key}{self.__key_value_separator}{self.__pair_separator}"
 
     def __serialize_key_value(self, key, value):
@@ -3571,6 +3491,335 @@ class VmSingleGpuPassthrough:
         self.__grub.revert_cmd_line_linux()
         self.__grub.update()
         Power.reboot()
+
+
+# https://qemu-project.gitlab.io/qemu/specs/tpm.html
+# https://en.opensuse.org/Software_TPM_Emulator_For_QEMU
+# https://www.qemu.org/docs/master/system/invocation.html#hxtool-7
+class TpmEmulator(DaemonManagerBase):
+    PREFIX = "swtpm"
+    TPM_CMD = "swtpm"
+    TPM_DEVICE_DEFAULT = "tpm-tis"
+
+    class TpmSerializer(ShellSerializer):
+        class TpmEscapeLiteral(EscapeLiteral):
+            def __init__(self):
+                super().__init__(encode_table=[(",", ",,")])
+
+        def __init__(self):
+            super().__init__(key_value_separator_table=[
+                {"prefix": "", "separator": " "}], quotes_for_string_value="", nested_serializer=ShellSerializer(
+                key_value_separator_table=[
+                    {"prefix": "",
+                     "separator": " "}],
+                pair_separator=" ",
+                escape_literal=QemuSerializer.QemuEscapeLiteral(),
+                nested_serializer=ShellSerializer(
+                    quotes_for_string_value="",
+                    key_value_separator_table=[
+                        {"prefix": "",
+                         "separator": "="}],
+                    pair_separator=",",
+                    escape_literal=QemuSerializer.QemuEscapeLiteral()),
+                nested_key_value_separator=" "
+            ))
+
+    def __init__(self, vm_meta_data, is_tpm2_0=True, log_level=20):
+        super().__init__()
+        self.__vm_meta_data = vm_meta_data
+        self.__is_tpm2_0 = is_tpm2_0
+        self.__log_level = log_level
+        self.__serializer = TpmEmulator.TpmSerializer()
+
+    def get_qemu_parameters(self):
+        self.__get_tpm_state_dir_path().makedirs()
+        return [{"-chardev": {"socket": {"id": self.__get_tpm_chardev_id(),
+                                         "path": self.__get_tpm_chardev_ctrl_unixsocket_path()}}},
+                {"-tpmdev": {
+                    "emulator": {"id": self.__get_tpm_dev_id(), "chardev": self.__get_tpm_chardev_id()}}},
+
+                {"-device": {
+                    self.__get_tpm_dev_model(): {"tpmdev": self.__get_tpm_dev_id()}}}
+                ]
+
+    def _start_impl(self):
+        self.__get_tpm_state_dir_path().makedirs()
+
+    def _close_impl(self):
+        return
+
+    def _build_command_line(self):
+        return f"{self.TPM_CMD} {self.__serializer.serialize(self.__get_command_line_args())}"
+
+    def __get_command_line_args(self):
+        return {"socket": [{"--tpmstate": {"dir": self.__get_tpm_state_dir_path()}},
+                           {"--ctrl": {"type": "unixio", "path": self.__get_tpm_chardev_ctrl_unixsocket_path()}},
+                           "--tpm2" if self.__is_tpm2_0 else "",
+                           {"--log": {"level": self.__log_level, "file": self.__get_tpm_log_file_path()}},
+                           "--daemon"]}
+
+    def __get_tpm_chardev_id(self):
+        return f"{self.PREFIX}-{self.__vm_meta_data.get_name()}-chardev-id"
+
+    def __get_tpm_chardev_ctrl_unixsocket_path(self):
+        return self.__get_tpm_state_dir_path().join(self.__get_tpm_chardev_ctrl_unixsocket_name())
+
+    def __get_tpm_log_file_path(self):
+        return self.__get_tpm_state_dir_path().join(f"{self.PREFIX}.log")
+
+    def __get_tpm_state_dir_path(self):
+        return self.__vm_meta_data.get_working_dir_path().join(self.PREFIX)
+
+    def __get_tpm_chardev_ctrl_unixsocket_name(self):
+        return f"{self.PREFIX}-sock"
+
+    def __get_tpm_dev_model(self):
+        # fixme utopia tpm-tis / tpm-spapr / tpm-tis-device / tpm-tis-i2c
+        return self.TPM_DEVICE_DEFAULT
+
+    def __get_tpm_dev_id(self):
+        return f"{self.PREFIX}-{self.__vm_meta_data.get_name()}-dev-id"
+
+
+# https://superuser.com/a/1412150/2121020
+class QemuSerial:
+    PREFIX = "serial"
+
+    __index = -1
+
+    def __init__(self, vm_meta_data):
+        QemuSerial.__index += 1
+        self.__vm_meta_data = vm_meta_data
+
+    def get_qemu_parameters(self):
+        self.__get_serial_state_dir_path().makedirs()
+        return [{"-chardev": {
+            "stdio": {"id": self.__get_serial_chardev_id(), "mux": "on", "logfile": self.__get_serial_log_file_path(),
+                      "signal": "off"}}}, {"-serial": f"chardev:{self.__get_serial_chardev_id()}"}]
+
+    def __get_serial_chardev_id(self):
+        return f"{self.PREFIX}-{self.__vm_meta_data.get_name()}-chardev-id{self.__index}"
+
+    def __get_serial_log_file_path(self):
+        return self.__get_serial_state_dir_path().join(f"{self.PREFIX}.log")
+
+    def __get_serial_state_dir_path(self):
+        return self.__vm_meta_data.get_working_dir_path().join(f"{self.PREFIX}{self.__index}")
+
+
+class QemuLogging:
+    PREFIX = "qemu"
+
+    def __init__(self, vm_meta_data):
+        self.__vm_meta_data = vm_meta_data
+
+    def get_qemu_parameters(self):
+        self.__get_qemu_state_dir_path().makedirs()
+        return [{"-D": self.__get_qemu_log_file_path()}]
+
+    def __get_qemu_log_file_path(self):
+        return self.__get_qemu_state_dir_path().join(f"{self.PREFIX}.log")
+
+    def __get_qemu_state_dir_path(self):
+        return self.__vm_meta_data.get_working_dir_path().join(self.PREFIX)
+
+
+# https://github.com/tianocore/edk2/blob/master/OvmfPkg/README
+# https://superuser.com/a/1798353/2121020
+# https://www.qemu.org/docs/master/system/invocation.html#hxtool-0
+class QemuUefi:
+    PREFIX = "uefi"
+    OVMF_CODE_SECURE_BOOT = "OVMF_CODE_4M.secboot.fd"
+    OVMF_CODE_BOOT = "OVMF_CODE_4M.fd"
+    OVMF_VARS = "OVMF_VARS_4M.ms.fd"
+
+    def __init__(self, vm_meta_data, ovmf_dir_path=Path("/usr/share/OVMF"), is_secure_boot=True):
+        self.__vm_meta_data = vm_meta_data
+        self.__ovmf_dir_path = Path(str(ovmf_dir_path))
+        self.__is_secure_boot = is_secure_boot
+
+    def get_qemu_parameters(self):
+        if not self.__get_vm_ovmf_vars_file_path().exists():
+            self.__get_uefi_state_dir_path().makedirs()
+            self.__get_vm_ovmf_vars_file_path().copy_from(self.__get_ovmf_vars_file_path())
+        return [
+            {"-machine": "q35"},
+            {"-drive": {
+                "if": "pflash", "format": "raw", "file": self.__get_ovmf_code_file_path(), "readonly": "on"}},
+            {"-drive": {
+                "if": "pflash", "format": "raw", "file": self.__get_vm_ovmf_vars_file_path()}}]
+
+    def __get_ovmf_code_file_path(self):
+        if self.__is_secure_boot:
+            return self.__ovmf_dir_path.join(self.OVMF_CODE_SECURE_BOOT)
+        else:
+            return self.__ovmf_dir_path.join(self.OVMF_CODE_BOOT)
+
+    def __get_ovmf_vars_file_path(self):
+        return self.__ovmf_dir_path.join(self.OVMF_VARS)
+
+    def __get_vm_ovmf_vars_file_path(self):
+        return self.__get_uefi_state_dir_path().join(self.OVMF_VARS)
+
+    def __get_uefi_state_dir_path(self):
+        return self.__vm_meta_data.get_working_dir_path().join(self.PREFIX)
+
+
+class QemuBios:
+    # SeaBIOS используется по умолчанию, дополнительные аргументы не требуются
+    def get_qemu_parameters(self):
+        return []
+
+
+# fixme utopia Обеспечить возможность установки win11
+# https://serverfault.com/a/1096401/1120954
+# https://extralan.ru/?p=3060
+# secure-boot check win11
+# https://www.iobit.com/en/knowledge-how-to-enable-secure-boot-on-windows--355.php
+# - TPM (software)
+# - UEFI (OVMF) + secure boot
+# - 4 GB RAM
+# - CPU Icelake-Server-v5
+class VirtualMachine:
+    def __init__(self, network_bridge,
+                 vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
+                 path_to_iso_installer=None, virtio=None, tpm=None, qemu_serial=None, qemu_logging=None,
+                 qemu_bios=None):
+        self.__tap = Tap()
+        self.__network_bridge = network_bridge
+        self.__vm_meta_data = vm_meta_data
+        self.__path_to_iso_installer = path_to_iso_installer
+        self.__virtio = virtio
+        self.__tpm = TpmEmulator(vm_meta_data) if tpm is None else tpm
+        self.__qemu_serial = QemuSerial(vm_meta_data) if qemu_serial is None else qemu_serial
+        self.__qemu_logging = QemuLogging(vm_meta_data) if qemu_logging is None else qemu_logging
+        self.__qemu_bios = QemuUefi(vm_meta_data) if qemu_bios is None else qemu_bios
+        self.__serializer = QemuSerializer()
+
+    def run(self):
+        self.__network_bridge.create()
+        self.__tpm.start()
+
+        command_line = self.__command_line()
+        print(command_line)
+        subprocess.check_call(command_line, shell=True)
+        self.__tpm.close()
+
+    def __command_line(self):
+        command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
+                              self.__network(),
+                              self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
+                              self.__cpu(), self.__gpu(), self.__usb(), self.__monitor(),
+                              self.__get_qemu_bios_command_line(),
+                              self.__get_tpm_command_line(), self.__get_qemu_serial_command_line(),
+                              self.__get_qemu_logging_command_line()]
+        return " ".join(command_parts_list)
+
+    @staticmethod
+    def __qemu_command_line():
+        return "qemu-system-{}".format(platform.machine())
+
+    @staticmethod
+    def __kvm_enable():
+        return "-enable-kvm"
+
+    @staticmethod
+    def __ram_size():  # fixme utopia Использовать psutil
+        return "-m 8192"
+
+    def __network(self):
+        self.__tap.create()
+        self.__network_bridge.add_and_configure_tap(self.__tap, self.__vm_meta_data)
+
+        tap_name = str(self.__tap)
+        netdev_id = "{}-id".format(tap_name)
+
+        # fixme utopia Присвоим ip адрес vm через mac адрес
+        # https://superuser.com/questions/1413011/setting-a-static-ip-upon-qemu-vm-creation
+
+        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac={2}".format(
+            tap_name, netdev_id, self.__vm_meta_data.get_mac_address_as_string())
+
+    def __disk(self):
+        return "-drive file=\"{}\",media=disk,if=virtio".format(self.__vm_meta_data.get_image_path())
+
+    def __iso_installer(self):
+        if self.__path_to_iso_installer is None:
+            return ""
+        return "-cdrom \"{}\"".format(self.__path_to_iso_installer)
+
+    def __other(self):
+        # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
+        # -vga std -vnc 127.0.0.1:2
+        # -bt hci,host:hci0
+        # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
+        # https://www.youtube.com/watch?v=ELbxhm1-rno
+        # -full-screen
+        # return "-vnc 127.0.0.1:2 -soundhw hda"
+        return '-vnc 127.0.0.1:2'
+
+    def __monitor(self):
+        # fixme utopia config monitor port
+        # https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor
+        return "-monitor telnet:127.0.0.1:55555,server,nowait"
+
+    def __cpu(self):
+        # CPU который поддерживается Windows 11
+        return "-cpu Icelake-Server-v5 -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
+
+    def __gpu(self):
+        # Использовать для установки ОС
+        return "-vga std -display gtk"
+
+        # return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
+        # return "-vga none -device vfio-pci,host=00:1f.3"
+
+        # return "-device virtio-vga-gl -display sdl,gl=on"
+
+        # return "-nographic"
+
+        # https://www.reddit.com/r/VFIO/comments/cktnhv/bar_0_cant_reserve/
+        # https://listman.redhat.com/archives/vfio-users/2016-March/msg00088.html
+        # ,display=auto,multifunction=on,x-vga=on,
+        # x-igd-opregion=on,
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,display=auto,multifunction=on"  # x-pci-sub-vendor-id=0x1025,x-pci-sub-device-id=0x1518,x-pci-vendor-id=0x8086,x-pci-device-id=0x2812
+        # return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
+        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
+        # return "-device virtio-vga-gl -display sdl,gl=on"
+
+    def __usb(self):
+        usb_device_array = [
+            (0x045e, 0x00db),  # Клавиатура Microsoft # Natural Ergonomic Keyboard 4000 v 1.0
+            (0x0bda, 0x8771),  # USB-Bluetooth 5.0 адаптер Ugreen # CM390
+            (0x046d, 0xc05b),  # Мышка Logitec # B110
+            (0x258a, 0x0302)  # Клавиатура с тачпадом Harper # KBT-330
+        ]
+
+        result = []
+
+        for vid, pid in usb_device_array:
+            result.append("-usb -device usb-host,vendorid=0x{:04X},productid=0x{:04X}".format(vid, pid))
+
+        return " ".join(result)
+
+    def __virtio_win_drivers(self):
+        if self.__virtio is None:
+            return ""
+        return "-drive file=\"{}\",media=cdrom,if=ide".format(self.__virtio.get_win_drivers())
+
+    def __get_tpm_command_line(self):
+        return self.__serializer.serialize(self.__tpm.get_qemu_parameters())
+
+    def __get_qemu_serial_command_line(self):
+        return self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
+
+    def __get_qemu_logging_command_line(self):
+        return self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
+
+    def __get_qemu_bios_command_line(self):
+        return self.__serializer.serialize(self.__qemu_bios.get_qemu_parameters())
 
 
 class OsNameAndVersion:
