@@ -1275,9 +1275,6 @@ class DaemonManagerBase:
         print(self.__command_line)
         subprocess.check_call(self.__command_line, shell=True)
 
-    # def _start_impl(self):
-    #     pass
-
     def close(self):
         if not self.__command_line:
             return
@@ -3721,7 +3718,12 @@ class VirtualMachine:
 
     @staticmethod
     def __kvm_enable():
-        return "-enable-kvm"
+        if CurrentOs.is_linux():
+            return "-accel kvm"
+        elif CurrentOs.is_msys():
+            return "-accel whpx"
+        else:
+            return "-accel tcg"
 
     @staticmethod
     def __ram_size():  # fixme utopia Использовать psutil
