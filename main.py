@@ -15,6 +15,9 @@ import netaddr
 import os_release
 import randmac
 import unittest
+from crontab import CronTab
+from datetime import datetime
+import getpass
 
 import requests
 
@@ -1090,7 +1093,7 @@ class VmMetaData:
             self.__rdp_forward_port = TcpPort(rdp_forward_port)
 
     def get_working_dir_path(self):
-        return self.__image_path.get_dir_path().join(self.get_name())
+        return self.__image_path.get_dir_path().join(f"{self.get_name()}-data")
 
 
 class VmRegistry:
@@ -2016,7 +2019,7 @@ class PciClassCode:
     # https://github.com/xiaoran007/pypci/blob/v0.0.4/src/pypci/backend/pci.py#L74
     def is_vga(self):
         return self.get_base_class() == self.BASE_CLASS_VGA or (
-                self.get_base_class() == self.BASE_CLASS_VGA and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
+                self.get_base_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
@@ -2280,11 +2283,14 @@ class VfioPci:
         return str(pci.get_id()) if isinstance(pci, Pci) else (str(pci))
 
 
-# fixme utopia include VfioPci
+# https://docs.kernel.org/driver-api/vfio-mediated-device.html
+# https://docs.kernel.org/driver-api/vfio.html
 class Vfio:
-    @staticmethod
-    def get_kernel_parameters(pci_or_list):
-        return " ".join([Vfio.__get_vfio(), Vfio.__get_mdev(), Vfio.__get_vfio_pci(pci_or_list)])
+    def __init__(self, vfio_pci):
+        self.__vfio_pci = vfio_pci
+
+    def get_kernel_parameters(self):
+        return " ".join([Vfio.__get_vfio(), Vfio.__get_mdev(), self.__vfio_pci.get_kernel_parameters()])
 
     @staticmethod
     def __get_vfio():
@@ -2293,22 +2299,6 @@ class Vfio:
     @staticmethod
     def __get_mdev():
         return "mdev"
-
-    @staticmethod
-    def __get_vfio_pci(pci_or_list):
-        if pci_or_list is None:
-            return ""
-
-        if type(pci_or_list) is list:
-            if len(pci_or_list) == 0:
-                return ""
-            return "vfio_pci.ids={}".format(",".join(Vfio.__serialize(pci) for pci in pci_or_list))
-        else:
-            return "vfio_pci.ids={}".format(Vfio.__serialize(pci_or_list))
-
-    @staticmethod
-    def __serialize(pci):
-        return str(pci.get_id()) if isinstance(pci, Pci) else (str(pci))
 
 
 class VgaPciIntel(Pci):
@@ -2330,7 +2320,7 @@ class VgaPciIntel(Pci):
     def get_qemu_parameters(self):
         result = super().get_qemu_parameters()
         if len(result) > 0:
-            result.append({"-vga": "none"})
+            result.append({"-vga": "none"}) # fixme utopia Аткуально только для Single GPU Passthrough режима
         return result
 
     @staticmethod
@@ -3351,11 +3341,10 @@ class ShellConfig:
     def __is_integer(self, raw_string_value):
         return raw_string_value.trim().isdigit()
 
-    # https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
-    # https://stackoverflow.com/a/43512141
-    # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
 
-
+# https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
+# https://stackoverflow.com/a/43512141
+# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
 class CurrentOs:
     @staticmethod
     def is_windows():
@@ -3457,11 +3446,22 @@ class Grub:
 
 # GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt vfio mdev vfio_pci.ids=8086:9a49,8086:a082,8086:a0c8,8086:a0a3,8086:a0a4 i915.modeset=0 video=efifb:off"
 
-# fixme utopia Будем использовать systemd
+# fixme utopia Умолчательный скрипт для cronta который запускает скрипты из директории user (=getpass.getuser())
 class UnixCrontab:
     def __init__(self):
-        print("UnixCrontab")
+        UnixCrontab.register_startup_script()
 
+    @staticmethod
+    def register_startup_script( startup_script_content ):
+        with CronTab(user=getpass.getuser()) as cron:
+            command = f'{sys.executable} {__file__} test_after_reboot'
+            print(command)
+            job = cron.new(command=command)
+            job.every_reboot()
+
+
+# Windows startup
+# https://superuser.com/a/1518663/2121020
 
 class Startup:
     def __init__(self):
@@ -3470,18 +3470,79 @@ class Startup:
 
 class VmSingleGpuPassthrough:
     def __init__(self):
+
+
         self.__grub = Grub()
         self.__startup = Startup()
         print("VmSingleGpuPassthrough")
 
-    def run(self):
+    def run(self, ttt):
+        if ttt:
+            self.after_reboot()
+        else:
+            self.before_reboot()
+
+
+    def before_reboot(self):
+        pci_list = Pci.get_list()
+
+        pci_vga_list = pci_list.get_vga_list()
+        if len(pci_vga_list) == 0:
+            print("PCI VGA NOT FOUND")
+            return
+
+        if len(pci_vga_list) > 1:
+            print("Many VGA!!!")  # fixme utopia Дать выбрать какой VGA пробрасывать
+            # fixme utopia НЕ Single GPU Passthrough, добавлять -vga none не нужно
+            return
+
+        iommu_group = pci_vga_list[0].iommu_group
+
+        if iommu_group is None:
+            print("VGA does not belong to iommu group")
+            return
+
+        pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
+
+        vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
+        print(vfio_pci.get_kernel_parameters())
+        print(vfio_pci.get_qemu_parameters())
+
         self.__grub.set_cmd_line_linux("iommu on")
         self.__grub.update()
         # sys.executable доступ к интепретатору
-        self.__startup.after_rebot_script()
+
+        command_line = f"{sys.executable} {__file__} vm_run_pp --vfio_pci={vfio_pci} --grub_config_backup_path={vfio_pci} &"
+
+        self.__startup.register_startup_script()
         Power.reboot()
 
     def after_reboot(self):
+
+        config = OpenVpnConfig()
+        network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
+                                       config.get_dns_config_dir(), config.get_internet_network_interface(),
+                                       block_internet_access=block_internet_access)
+
+        vm_registry = VmRegistry(config.get_vm_registry_path())
+        vm_meta_data = vm_registry.get_with_verifying(vm_name)
+
+        local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
+            config.get_local_network_interface())
+
+        vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
+                                            vm_meta_data.get_ssh_forward_port())
+        vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
+                                            vm_meta_data.get_rdp_forward_port())
+        tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
+                                                                 vm_rdp_forwarding.add_with_retry()))
+        tcp_forwarding_thread.start()
+
+        virtio = Virtio(config)
+        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=QemuVgaPciPassthrough(vfio_pci))
+        vm.run()
+        tcp_forwarding_thread.join()
+
         # vw start with single gpu passthrough
         # if vw exit
         self.__startup.remove_after_rebot_script()
@@ -3668,6 +3729,36 @@ class QemuBios:
         return []
 
 
+# https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
+# https://www.qemu.org/docs/master/system/invocation.html#hxtool-3
+# https://wiki.archlinux.org/title/QEMU#virtio
+# https://wiki.archlinux.org/title/QEMU/Guest_graphics_acceleration#Virgil3d_virtio-gpu_paravirtualized_device_driver
+# https://github.com/virtio-win/kvm-guest-drivers-windows/pull/943
+# Полноценно работает только для Linux guest, для Windows guest отсутствуют драйвера для virtio-gpu
+class QemuVgaVirtio:
+    def __init__(self):
+        pass
+
+    def get_qemu_parameters(self):
+        return [{"-device": "virtio-vga-gl", "-display": {"sdl": {"gl": "on"}}}]
+
+
+class QemuVgaDefault:
+    def __init__(self):
+        pass
+
+    def get_qemu_parameters(self):
+        return [{"-vga": "std", "-display": {"gtk": {}}}]
+
+
+class QemuVgaPciPassthrough:
+    def __init__(self, vfio_pci):
+        self.__vfio_pci = vfio_pci
+
+    def get_qemu_parameters(self):
+        return self.__vfio_pci.get_get_qemu_parameters()
+
+
 # fixme utopia Обеспечить возможность установки win11
 # https://serverfault.com/a/1096401/1120954
 # https://extralan.ru/?p=3060
@@ -3681,7 +3772,7 @@ class VirtualMachine:
     def __init__(self, network_bridge,
                  vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
                  path_to_iso_installer=None, virtio=None, tpm=None, qemu_serial=None, qemu_logging=None,
-                 qemu_bios=None):
+                 qemu_bios=None, qemu_vga=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
@@ -3691,6 +3782,7 @@ class VirtualMachine:
         self.__qemu_serial = QemuSerial(vm_meta_data) if qemu_serial is None else qemu_serial
         self.__qemu_logging = QemuLogging(vm_meta_data) if qemu_logging is None else qemu_logging
         self.__qemu_bios = QemuUefi(vm_meta_data) if qemu_bios is None else qemu_bios
+        self.__qemu_vga = QemuVgaDefault() if qemu_vga is None else qemu_vga
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -3706,7 +3798,7 @@ class VirtualMachine:
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
                               self.__network(),
                               self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
-                              self.__cpu(), self.__gpu(), self.__usb(), self.__monitor(),
+                              self.__cpu(), self.__get_qemu_vga_command_line(), self.__usb(), self.__monitor(),
                               self.__get_qemu_bios_command_line(),
                               self.__get_tpm_command_line(), self.__get_qemu_serial_command_line(),
                               self.__get_qemu_logging_command_line()]
@@ -3769,27 +3861,8 @@ class VirtualMachine:
         # CPU который поддерживается Windows 11
         return "-cpu Icelake-Server-v5 -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
 
-    def __gpu(self):
-        # Использовать для установки ОС
-        return "-vga std -display gtk"
-
-        # return "-vga std -display gtk -device vfio-pci,host=00:1f.3"
-        # return "-vga none -device vfio-pci,host=00:1f.3"
-
-        # return "-device virtio-vga-gl -display sdl,gl=on"
-
-        # return "-nographic"
-
-        # https://www.reddit.com/r/VFIO/comments/cktnhv/bar_0_cant_reserve/
-        # https://listman.redhat.com/archives/vfio-users/2016-March/msg00088.html
-        # ,display=auto,multifunction=on,x-vga=on,
-        # x-igd-opregion=on,
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on"
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,display=auto,multifunction=on"  # x-pci-sub-vendor-id=0x1025,x-pci-sub-device-id=0x1518,x-pci-vendor-id=0x8086,x-pci-device-id=0x2812
-        # return "-vga std -device vfio-pci,host=00:02.0,rombar=0 -device vfio-pci,host=00:1f.3"
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on,addr=02.0"
-        # return "-vga none -device vfio-pci,host=00:02.0,display=auto,multifunction=on,x-vga=on,x-igd-opregion=on -device vfio-pci,host=00:1f.3,addr=04.1,multifunction=on -device vfio-pci,host=00:1f.0,multifunction=on, -device vfio-pci,host=00:1f.4,multifunction=on, -device vfio-pci,host=00:1f.5,multifunction=on"
-        # return "-device virtio-vga-gl -display sdl,gl=on"
+    def __get_qemu_vga_command_line(self):
+        return self.__serializer.serialize(self.__qemu_vga.get_qemu_parameters())
 
     def __usb(self):
         usb_device_array = [
@@ -3875,12 +3948,11 @@ class Msys2CommandLineWrapper:
     def __get_msys2_bin_dir(self):
         return fr"{self.__msys2_dir}\usr\bin"
 
-    # wine cmd /C ""notepad" "привет мир \'.txt""
-    # Файлы в win не могут содержать двоичные кавычки в названии
-    # fixme utopia Проверить экранирование одинарной кавычки на винде
-    # fixme utopia Использовать WindowsCommandLineWrapper?
 
-
+# wine cmd /C ""notepad" "привет мир \'.txt""
+# Файлы в win не могут содержать двоичные кавычки в названии
+# fixme utopia Проверить экранирование одинарной кавычки на винде
+# fixme utopia Использовать WindowsCommandLineWrapper?
 class WineCommandLineWrapper:
     WINE = "wine"
 
@@ -4278,7 +4350,9 @@ def main():
         return
 
     elif command == "test":
-        print(Pci.get_list())
+        crontab = UnixCrontab()
+
+        # print(Pci.get_list())
 
         # print(NetworkInterface.get_internet_if().get_ipv4_interface_if().network.netmask)
         return
@@ -4328,6 +4402,14 @@ def main():
         # time.sleep(30)
         vm = VirtualMachine(network_bridge)
         vm.run()
+    elif command == 'test_after_reboot':
+        reader = TextConfigReader("reboot_test.txt")
+        fff = ""
+        if reader.exists():
+            fff = reader.get()
+
+        fff += f"AFTER REBOOT LABEL AT: {datetime.today().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        TextConfigWriter("reboot_test.txt").set(fff)
 
 
 if __name__ == '__main__':

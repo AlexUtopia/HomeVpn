@@ -313,7 +313,7 @@ FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_
 ### Full packages end
 
 
-PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1 requests==2.32.3 grequests==0.7.0 PySocks==1.7.1 py-cpuinfo==9.0.0"
+PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1 requests==2.32.3 grequests==0.7.0 PySocks==1.7.1 py-cpuinfo==9.0.0 python-crontab==3.2.0"
 
 ### System API begin
 
