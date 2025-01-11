@@ -152,7 +152,7 @@ class Path:
         return os.path.exists(self.get())
 
     def exists_by_wildcard(self, wildcard):
-        return bool(pathlib.Path(self.get()).glob(wildcard))
+        return bool(list(pathlib.Path(self.get()).glob(wildcard)))
 
     def makedirs(self):
         path = self.get()
@@ -2084,7 +2084,7 @@ class UnitTest_BitUtils(unittest.TestCase):
 
 
 # https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf
-class PciClassCode:
+class PciClassCode(int):
     BASE_CLASS_BACKWARD_COMPATIBILITY = 0x00
     BASE_CLASS_BACKWARD_COMPATIBILITY_ALL_EXCEPT_VGA = 0x00
     BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
@@ -2092,24 +2092,15 @@ class PciClassCode:
 
     REGEX = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
 
-    def __init__(self, class_code):
-        self.__class_code = BitUtils.get_int_with_check(class_code, bit_count=16, signed=False,
-                                                        base=BitUtils.HEXADECIMAL_BASE)
-
-    def __str__(self):
-        return str(self.__class_code)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __format__(self, format_spec):
-        return f"{{:{format_spec}}}".format(self.__class_code)
+    def __new__(cls, class_code):
+        return super(PciClassCode, cls).__new__(cls, BitUtils.get_int_with_check(class_code, bit_count=16, signed=False,
+                                                                                 base=BitUtils.HEXADECIMAL_BASE))
 
     def get_base_class(self):
-        return (self.__class_code >> BitUtils.BITS_IN_BYTE) & BitUtils.LSB_TETRAD_MASK
+        return (self.__int__() >> BitUtils.BITS_IN_BYTE) & BitUtils.LSB_TETRAD_MASK
 
     def get_sub_class(self):
-        return self.__class_code & BitUtils.LSB_TETRAD_MASK
+        return self.__int__() & BitUtils.LSB_TETRAD_MASK
 
     # https://github.com/xiaoran007/pypci/blob/v0.0.4/src/pypci/backend/pci.py#L74
     def is_vga(self):
@@ -2118,24 +2109,15 @@ class PciClassCode:
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
-class PciVendorId:
+class PciVendorId(int):
     INTEL = 0x8086
 
-    def __init__(self, vendor_id):
-        self.__vendor_id = BitUtils.get_int_with_check(vendor_id, bit_count=16, signed=False,
-                                                       base=BitUtils.HEXADECIMAL_BASE)
-
-    def __str__(self):
-        return str(self.__vendor_id)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __format__(self, format_spec):
-        return f"{{:{format_spec}}}".format(self.__vendor_id)
+    def __new__(cls, vendor_id):
+        return super(PciVendorId, cls).__new__(cls, BitUtils.get_int_with_check(vendor_id, bit_count=16, signed=False,
+                                                                                base=BitUtils.HEXADECIMAL_BASE))
 
     def is_intel(self):
-        return self.__vendor_id == self.INTEL
+        return self.__int__() == self.INTEL
 
 
 def get_all_subclasses(cls):
@@ -2286,14 +2268,14 @@ class Pci:
     class PciList(list):
 
         def __str__(self):
-            return json.dumps(self)
+            return json.dumps(self, default=lambda o: o.__dict__)
 
         def __repr__(self):
             return self.__str__()
 
         @staticmethod
         def from_string(model):
-            Pci.PciList.from_json(json.loads(model))
+            return Pci.PciList.from_json(json.loads(model))
 
         @staticmethod
         def from_json(model):
@@ -2379,7 +2361,7 @@ class VfioPci:
 
     @staticmethod
     def from_string(model):
-        return VfioPci.from_string(model)
+        return VfioPci(Pci.PciList.from_string(model))
 
     @staticmethod
     def from_json(model):
@@ -2421,7 +2403,7 @@ class Vfio:
         return "vfio"
 
     @staticmethod
-    def __get_mdev():
+    def __get_mdev():  # fixme utopia Это нам требуется только для GVT-G (mediated) проброса GPU Intel
         return "mdev"
 
 
@@ -2444,7 +2426,7 @@ class VgaPciIntel(Pci):
     def get_qemu_parameters(self):
         result = super().get_qemu_parameters()
         if len(result) > 0:
-            result.append({"-vga": "none"})  # fixme utopia Аткуально только для Single GPU Passthrough режима
+            result.append({"-vga": "none"})
         return result
 
     @staticmethod
@@ -3560,7 +3542,7 @@ class StartupCrontab:
                                                     is_execute_once=is_execute_once, startup_script_content=None,
                                                     name=name)
 
-    def __init__(self, user=getpass.getuser()):
+    def __init__(self, user=os.getlogin()):
         self.__user = user
 
     def register_script(self, startup_script_content, is_background_executing=False,
@@ -3582,7 +3564,7 @@ class StartupCrontab:
     def __register_supervisor_script(self):
         with CronTab(user=self.__user) as cron:
             command = f'"{sys.executable}" "{__file__}" {self.COMMAND}'
-            if cron.find_comment(self.SUPERVISOR_SCRIPT_ID):
+            if next(cron.find_comment(self.SUPERVISOR_SCRIPT_ID), None) is not None:
                 return
 
             print(f"[Startup] register supervisor script: {command}")
@@ -3625,7 +3607,7 @@ class StartupWindows(StartupCrontab):
 
 
 class Startup:
-    def __init__(self, user=getpass.getuser()):
+    def __init__(self, user=os.getlogin()):
         if CurrentOs.is_linux():
             self.__startup_impl = StartupCrontab(user)
         elif CurrentOs.is_windows() or CurrentOs.is_msys():
@@ -3644,18 +3626,28 @@ class Startup:
         self.__startup_impl.run_all_scripts()
 
 
-class VmSingleGpuPassthrough:
-    def __init__(self):
-
+class VmRunner:
+    def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
+                 qemu_vga_pci_passthrough=None, initiate_vga_pci_passthrough=False):
+        self.__vm_name = vm_name
+        self.__project_config = project_config
+        self.__startup = startup
+        self.__block_internet_access = block_internet_access
+        self.__qemu_vga_pci_passthrough = qemu_vga_pci_passthrough
+        self.__initiate_vga_pci_passthrough = initiate_vga_pci_passthrough
         self.__grub = Grub()
-        self.__startup = Startup()
-        print("VmSingleGpuPassthrough")
+        self.__serializer = ShellSerializer()
 
-    def run(self, ttt):
-        if ttt:
-            self.after_reboot()
+    def run(self):
+        if self.__initiate_vga_pci_passthrough:
+            if self.__qemu_vga_pci_passthrough:
+                self.after_reboot()
+            else:
+                self.before_reboot()
+                # self.__run()
         else:
-            self.before_reboot()
+            print("FFFFFFFFFFFFFFFFFFFFFFFFF")
+            # self.__run()
 
     def before_reboot(self):
         pci_list = Pci.get_list()
@@ -3667,13 +3659,12 @@ class VmSingleGpuPassthrough:
 
         if len(pci_vga_list) > 1:
             print("Many VGA!!!")  # fixme utopia Дать выбрать какой VGA пробрасывать
-            # fixme utopia НЕ Single GPU Passthrough, добавлять -vga none не нужно
             return
 
         iommu_group = pci_vga_list[0].iommu_group
 
         if iommu_group is None:
-            print("VGA does not belong to iommu group")
+            print("VGA does not include to iommu group")
             return
 
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
@@ -3682,27 +3673,33 @@ class VmSingleGpuPassthrough:
         print(vfio_pci.get_kernel_parameters())
         print(vfio_pci.get_qemu_parameters())
 
-        self.__grub.set_cmd_line_linux("iommu on")
-        self.__grub.update()
-        # sys.executable доступ к интепретатору
+        # self.__grub.set_cmd_line_linux("iommu on")
+        # self.__grub.update()
 
-        command_line = f"{sys.executable} {__file__} vm_run_pp --vfio_pci={vfio_pci} --grub_config_backup_path={vfio_pci} &"
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": ""}]])}'
 
-        self.__startup.register_startup_script()
-        Power.reboot()
+        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
+        print(command_line)
+        # Power.reboot()
 
     def after_reboot(self):
+        self.__run()
+        self.__grub.revert_cmd_line_linux()
+        self.__grub.update()
+        Power.reboot()
 
-        config = OpenVpnConfig()
-        network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                       config.get_dns_config_dir(), config.get_internet_network_interface(),
-                                       block_internet_access=block_internet_access)
+    def __run(self):
+        network_bridge = NetworkBridge(self.__project_config.get_server_name(),
+                                       self.__project_config.get_vm_bridge_ip_address_and_mask(),
+                                       self.__project_config.get_dns_config_dir(),
+                                       self.__project_config.get_internet_network_interface(),
+                                       block_internet_access=self.__block_internet_access)
 
-        vm_registry = VmRegistry(config.get_vm_registry_path())
-        vm_meta_data = vm_registry.get_with_verifying(vm_name)
+        vm_registry = VmRegistry(self.__project_config.get_vm_registry_path())
+        vm_meta_data = vm_registry.get_with_verifying(self.__vm_name)
 
         local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
-            config.get_local_network_interface())
+            self.__project_config.get_local_network_interface())
 
         vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
                                             vm_meta_data.get_ssh_forward_port())
@@ -3712,17 +3709,10 @@ class VmSingleGpuPassthrough:
                                                                  vm_rdp_forwarding.add_with_retry()))
         tcp_forwarding_thread.start()
 
-        virtio = Virtio(config)
-        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=QemuVgaPciPassthrough(vfio_pci))
+        virtio = Virtio(self.__project_config)
+        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=self.__qemu_vga_pci_passthrough)
         vm.run()
         tcp_forwarding_thread.join()
-
-        # vw start with single gpu passthrough
-        # if vw exit
-        self.__startup.remove_after_rebot_script()
-        self.__grub.revert_cmd_line_linux()
-        self.__grub.update()
-        Power.reboot()
 
 
 # https://qemu-project.gitlab.io/qemu/specs/tpm.html
@@ -3927,7 +3917,19 @@ class QemuVgaDefault:
 
 class QemuVgaPciPassthrough:
     def __init__(self, vfio_pci):
-        self.__vfio_pci = vfio_pci
+        if isinstance(vfio_pci, VfioPci):
+            self.__vfio_pci = vfio_pci
+        elif isinstance(vfio_pci, str):
+            print(vfio_pci)
+            self.__vfio_pci = VfioPci.from_string(vfio_pci)
+        else:
+            raise Exception(f"[QemuVgaPciPassthrough] vfio_pci TYPE MISMATCH: {type(vfio_pci)}")
+
+    def __str__(self):
+        return str(self.__vfio_pci)
+
+    def __repr__(self):
+        return self.__str__()
 
     def get_qemu_parameters(self):
         return self.__vfio_pci.get_get_qemu_parameters()
@@ -3956,7 +3958,7 @@ class VirtualMachine:
         self.__qemu_serial = QemuSerial(vm_meta_data) if qemu_serial is None else qemu_serial
         self.__qemu_logging = QemuLogging(vm_meta_data) if qemu_logging is None else qemu_logging
         self.__qemu_bios = QemuUefi(vm_meta_data) if qemu_bios is None else qemu_bios
-        self.__qemu_vga = QemuVgaDefault() if qemu_vga is None else qemu_vga
+        self.__qemu_vga = QemuVgaVirtio() if qemu_vga is None else qemu_vga
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -4017,8 +4019,6 @@ class VirtualMachine:
         return "-cdrom \"{}\"".format(self.__path_to_iso_installer)
 
     def __other(self):
-        # -cdrom ~/Загрузки/linuxmint-20.2-cinnamon-64bit.iso
-        # -vga std -vnc 127.0.0.1:2
         # -bt hci,host:hci0
         # https://qemu-project.gitlab.io/qemu/system/devices/usb.html
         # https://www.youtube.com/watch?v=ELbxhm1-rno
@@ -4335,6 +4335,10 @@ def main():
     parser_vm_run.add_argument("vm_name", type=str, help="Virtual machine name")
     parser_vm_run.add_argument("--bi", help="Block internet access, but not the local network",
                                action='store_true')
+    parser_vm_run.add_argument("--QemuVgaPciPassthrough", type=QemuVgaPciPassthrough,
+                               help="PCI VGA list for passthrough to virtual machine. Not for human use")
+    parser_vm_run.add_argument("--pp", help="Initiate VGA PCI passthrough to virtual machine",
+                               action='store_true')
 
     parser_vm_ssh_fwd = subparsers.add_parser("vm_ssh_fwd", help="Port forwarding for SSH for virtual machine")
     parser_vm_ssh_fwd.add_argument("vm_name", type=str, help="Virtual machine name")
@@ -4355,6 +4359,7 @@ def main():
     parser_test = subparsers.add_parser("test", help="TEST")
 
     args = parser.parse_args()
+    print(args)
     if args.command == "config":
         print(project_config.get_config_parameter_strong(args.config_parameter_name))
 
@@ -4391,30 +4396,8 @@ def main():
         vm.run()
 
     elif args.command == "vm_run":
-        network_bridge = NetworkBridge(project_config.get_server_name(),
-                                       project_config.get_vm_bridge_ip_address_and_mask(),
-                                       project_config.get_dns_config_dir(),
-                                       project_config.get_internet_network_interface(),
-                                       block_internet_access=args.bi)
-
-        vm_registry = VmRegistry(project_config.get_vm_registry_path())
-        vm_meta_data = vm_registry.get_with_verifying(args.vm_name)
-
-        local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
-            project_config.get_local_network_interface())
-
-        vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
-                                            vm_meta_data.get_ssh_forward_port())
-        vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
-                                            vm_meta_data.get_rdp_forward_port())
-        tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
-                                                                 vm_rdp_forwarding.add_with_retry()))
-        tcp_forwarding_thread.start()
-
-        virtio = Virtio(project_config)
-        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio)
-        vm.run()
-        tcp_forwarding_thread.join()
+        VmRunner(args.vm_name, project_config=project_config, block_internet_access=args.bi,
+                 qemu_vga_pci_passthrough=args.QemuVgaPciPassthrough, initiate_vga_pci_passthrough=args.pp).run()
 
     elif args.command == "vm_ssh_fwd":
         vm_registry = VmRegistry(project_config.get_vm_registry_path())
@@ -4423,32 +4406,6 @@ def main():
     elif args.command == "vm_rdp_fwd":
         vm_registry = VmRegistry(project_config.get_vm_registry_path())
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
-
-    elif args.command == "vm_run_pp":
-        pci_list = Pci.get_list()
-
-        pci_vga_list = pci_list.get_vga_list()
-        if len(pci_vga_list) == 0:
-            print("PCI VGA NOT FOUND")
-            return
-
-        if len(pci_vga_list) > 1:
-            print("Many VGA!!!")  # fixme utopia Дать выбрать какой VGA пробрасывать
-            return
-
-        if pci_vga_list[0].iommu_group is None:
-            print("VGA does not belong to iommu group")
-            return
-
-        pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(pci_vga_list[0].iommu_group)
-
-        vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
-        print(vfio_pci.get_kernel_parameters())
-        print(vfio_pci.get_qemu_parameters())
-
-        # Vfio(vfio_pci).get_kernel_parameters() // То что будем переопределять для /etc/default/grub | GRUB_CMDLINE_LINUX
-        # VirtualMachine(network_bridge, gpu=vfio_pci.get_qemu_parameters()).run()
-        return
 
     elif args.command == "test":
         print(os.environ)
