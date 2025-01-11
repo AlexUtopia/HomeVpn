@@ -1,6 +1,9 @@
+import argparse
+import hashlib
 import shutil
 import atexit
 import os.path
+import stat
 import re
 import shlex
 import subprocess
@@ -17,6 +20,7 @@ import randmac
 import unittest
 from crontab import CronTab
 from datetime import datetime
+import pathlib
 import getpass
 
 import requests
@@ -40,10 +44,90 @@ import cpuinfo
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
 
+# https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
+# https://stackoverflow.com/a/43512141
+# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
+class CurrentOs:
+    @staticmethod
+    def is_windows():
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('win')
+
+    @staticmethod
+    def is_msys():
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('msys')
+
+    @staticmethod
+    def is_linux():
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('linux')
+
+    @staticmethod
+    def is_termux():
+        # https://termux.dev/en/
+        return CurrentOs.is_android()
+
+    @staticmethod
+    def is_android():
+        try:
+            cmd_result = subprocess.run("uname -o", shell=True, capture_output=True, text=True)
+            if cmd_result.returncode:
+                return False
+            return cmd_result.stdout.lower().startswith("android")
+        except Exception:
+            return False
+
+    @staticmethod
+    def get_linux_kernel_version():
+        # https://docs.python.org/3/library/os.html#os.uname
+        return semantic_version.Version(platform.release())
+
+    @staticmethod
+    def get_windows_version():
+        os_version_info_ex = sys.getwindowsversion()
+        # fixme utopia Добавить информацию про wProductType
+        return semantic_version.Version(major=os_version_info_ex.major, minor=os_version_info_ex.minor,
+                                        build=os_version_info_ex.build)
+
+    @staticmethod
+    def get_linux_distro_name():
+        # https://pypi.org/project/os-release/
+        # https://www.freedesktop.org/software/systemd/man/os-release.html
+        return os_release.id()
+
+    @staticmethod
+    def get_linux_distro_version():
+        # https://pypi.org/project/os-release/
+        # https://www.freedesktop.org/software/systemd/man/os-release.html
+        return semantic_version.Version(version_string=os_release.version_id())
+
+    # fixme utopia Проверить на Ubuntu 32bit
+    # https://askubuntu.com/questions/768415/where-can-i-find-32-bit-version-of-ubuntu
+    @staticmethod
+    def is32bit():
+        return platform.architecture()[0].lower() == "32bit"
+
+    @staticmethod
+    def is64bit():
+        # https://www.fastwebhost.in/blog/how-to-find-if-linux-is-running-on-32-bit-or-64-bit/
+        # https://wiki.termux.com/wiki/FAQ
+        return platform.architecture()[0].lower() == "64bit"
+
 
 class Path:
     def __init__(self, path):
         self.__path = os.path.expanduser(os.path.expandvars(str(path)))
+
+    @staticmethod
+    def get_home_directory(user=getpass.getuser()):
+        if CurrentOs.is_termux():
+            user = ""
+
+        result = Path(os.path.expanduser(f"~{user}"))
+        if result.exists():
+            return result
+        return None
 
     def get(self):
         if os.path.isabs(self.__path):
@@ -67,6 +151,9 @@ class Path:
     def exists(self):
         return os.path.exists(self.get())
 
+    def exists_by_wildcard(self, wildcard):
+        return bool(pathlib.Path(self.get()).glob(wildcard))
+
     def makedirs(self):
         path = self.get()
         if os.path.isfile(path):
@@ -77,10 +164,15 @@ class Path:
         os.makedirs(path)
 
     def copy_from(self, path):
-        shutil.copyfile(Path(str(path)).get(), self.get())
+        shutil.copyfile(Path(path).get(), self.get())
 
     def join(self, path):
         return Path(os.path.join(self.get(), path))
+
+    def add_executable(self):
+        mode = os.stat(self.get()).st_mode
+        mode |= stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        os.chmod(self.get(), mode)
 
     def __str__(self):
         return self.get()
@@ -113,11 +205,14 @@ class TextConfigWriter:
         self.__config_file_path = Path(config_file_path)
         self.__encoding = str(encoding)
 
-    def set(self, data):
+    def set(self, data, set_executable=False):
         self.__makedirs()
 
         with open(self.__config_file_path.get(), mode="wt", encoding=self.__encoding) as config_file:
             config_file.write(str(data))
+
+        if set_executable:
+            self.__config_file_path.add_executable()
         return self.__config_file_path
 
     def __makedirs(self):
@@ -2125,7 +2220,7 @@ class Pci:
         self.kernel_module = pci.kernel_module
 
     def __str__(self):
-        return str({
+        return json.dumps({
             self.__ADDRESS: self.address,
             self.__CLASS_CODE: self.class_code,
             self.__DEVICE_NAME: self.class_name,
@@ -2165,6 +2260,17 @@ class Pci:
     def __getitem__(self, key):
         return getattr(self, key)
 
+    @staticmethod
+    def from_string(model):
+        Pci.from_json(json.loads(model))
+
+    @staticmethod
+    def from_json(model):
+        result = Pci()
+        for key, value in model.items():
+            result[key] = value
+        return Pci.__build(result)
+
     def get_id(self):
         return f"{self.vendor_id:04x}:{self.device_id:04x}"
 
@@ -2178,6 +2284,23 @@ class Pci:
         return [VfioPci.get_device_for_passthrough(self)]
 
     class PciList(list):
+
+        def __str__(self):
+            return json.dumps(self)
+
+        def __repr__(self):
+            return self.__str__()
+
+        @staticmethod
+        def from_string(model):
+            Pci.PciList.from_json(json.loads(model))
+
+        @staticmethod
+        def from_json(model):
+            result = Pci.PciList()
+            for item in model:
+                result.append(Pci.from_json(item))
+            return result
 
         def get_iommu_group_list(self):
             result = set()
@@ -2243,8 +2366,24 @@ class Pci:
 
 
 class VfioPci:
-    def __init__(self, pci_or_list):
-        self.__pci_or_list = pci_or_list
+    def __init__(self, pci_list):
+        self.__pci_list = pci_list
+        if not isinstance(self.__pci_list, Pci.PciList):
+            raise Exception(f"[VfioPci] pci_list TYPE MISMATCH: {type(self.__pci_list)}")
+
+    def __str__(self):
+        return str(self.__pci_list)
+
+    def __repr__(self):
+        return self.__str__()
+
+    @staticmethod
+    def from_string(model):
+        return VfioPci.from_string(model)
+
+    @staticmethod
+    def from_json(model):
+        return VfioPci(Pci.PciList.from_json(model))
 
     @staticmethod
     def get_device_for_passthrough(pci):
@@ -2257,30 +2396,15 @@ class VfioPci:
         return {"-device": {"vfio-pci": vfio_pci_options_table}}
 
     def get_kernel_parameters(self):
-        if self.__pci_or_list is None:
+        if len(self.__pci_list) == 0:
             return ""
-
-        if isinstance(self.__pci_or_list, list):
-            if len(self.__pci_or_list) == 0:
-                return ""
-            return "vfio_pci.ids={}".format(",".join(VfioPci.__serialize(pci) for pci in self.__pci_or_list))
-        else:
-            return "vfio_pci.ids={}".format(VfioPci.__serialize(self.__pci_or_list))
+        return "vfio_pci.ids={}".format(",".join(pci.get_id() for pci in self.__pci_list))
 
     def get_qemu_parameters(self):
         result = []
-        if isinstance(self.__pci_or_list, list):
-            for pci in self.__pci_or_list:
-                if isinstance(pci, Pci):
-                    result.extend(pci.get_qemu_parameters())
-        else:
-            if isinstance(self.__pci_or_list, Pci):
-                result.extend(self.__pci_or_list.get_qemu_parameters())
+        for pci in self.__pci_list:
+            result.extend(pci.get_qemu_parameters())
         return result
-
-    @staticmethod
-    def __serialize(pci):
-        return str(pci.get_id()) if isinstance(pci, Pci) else (str(pci))
 
 
 # https://docs.kernel.org/driver-api/vfio-mediated-device.html
@@ -2320,7 +2444,7 @@ class VgaPciIntel(Pci):
     def get_qemu_parameters(self):
         result = super().get_qemu_parameters()
         if len(result) > 0:
-            result.append({"-vga": "none"}) # fixme utopia Аткуально только для Single GPU Passthrough режима
+            result.append({"-vga": "none"})  # fixme utopia Аткуально только для Single GPU Passthrough режима
         return result
 
     @staticmethod
@@ -3342,77 +3466,6 @@ class ShellConfig:
         return raw_string_value.trim().isdigit()
 
 
-# https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
-# https://stackoverflow.com/a/43512141
-# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
-class CurrentOs:
-    @staticmethod
-    def is_windows():
-        # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('win')
-
-    @staticmethod
-    def is_msys():
-        # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('msys')
-
-    @staticmethod
-    def is_linux():
-        # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('linux')
-
-    @staticmethod
-    def is_termux():
-        # https://termux.dev/en/
-        return CurrentOs.is_android()
-
-    @staticmethod
-    def is_android():
-        try:
-            cmd_result = subprocess.run("uname -o", shell=True, capture_output=True, text=True)
-            if cmd_result.returncode:
-                return False
-            return cmd_result.stdout.lower().startswith("android")
-        except Exception:
-            return False
-
-    @staticmethod
-    def get_linux_kernel_version():
-        # https://docs.python.org/3/library/os.html#os.uname
-        return semantic_version.Version(platform.release())
-
-    @staticmethod
-    def get_windows_version():
-        os_version_info_ex = sys.getwindowsversion()
-        # fixme utopia Добавить информацию про wProductType
-        return semantic_version.Version(major=os_version_info_ex.major, minor=os_version_info_ex.minor,
-                                        build=os_version_info_ex.build)
-
-    @staticmethod
-    def get_linux_distro_name():
-        # https://pypi.org/project/os-release/
-        # https://www.freedesktop.org/software/systemd/man/os-release.html
-        return os_release.id()
-
-    @staticmethod
-    def get_linux_distro_version():
-        # https://pypi.org/project/os-release/
-        # https://www.freedesktop.org/software/systemd/man/os-release.html
-        return semantic_version.Version(version_string=os_release.version_id())
-
-    # fixme utopia Проверить на Ubuntu 32bit
-    # https://askubuntu.com/questions/768415/where-can-i-find-32-bit-version-of-ubuntu
-    @staticmethod
-    def is32bit():
-        return platform.architecture()[0].lower() == "32bit"
-
-    @staticmethod
-    def is64bit():
-        # https://www.fastwebhost.in/blog/how-to-find-if-linux-is-running-on-32-bit-or-64-bit/
-        # https://wiki.termux.com/wiki/FAQ
-        return platform.architecture()[0].lower() == "64bit"
-
-
 class Power:
     # https://pythonassets.com/posts/shutdown-reboot-and-log-off-on-windows-and-linux/
     @staticmethod
@@ -3446,31 +3499,153 @@ class Grub:
 
 # GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt vfio mdev vfio_pci.ids=8086:9a49,8086:a082,8086:a0c8,8086:a0a3,8086:a0a4 i915.modeset=0 video=efifb:off"
 
-# fixme utopia Умолчательный скрипт для cronta который запускает скрипты из директории user (=getpass.getuser())
-class UnixCrontab:
-    def __init__(self):
-        UnixCrontab.register_startup_script()
+class StartupCrontab:
+    COMMAND = "startup_run_all_scripts"
+    SUPERVISOR_SCRIPT_ID = "073c0542-ab8f-4518-802b-4417a4519219"
 
-    @staticmethod
-    def register_startup_script( startup_script_content ):
-        with CronTab(user=getpass.getuser()) as cron:
-            command = f'{sys.executable} {__file__} test_after_reboot'
-            print(command)
-            job = cron.new(command=command)
+    __STARTUP_SCRIPTS_DIR_NAME = ".crontab_startup_scripts"
+
+    class StartupScriptName:
+        __ENCODE = "utf-8"
+        __NAME = "name"
+        __IS_BACKGROUND_EXECUTING_LABEL = "_bg"
+        __IS_BACKGROUND_EXECUTING = "is_background_executing"
+        __IS_EXECUTE_ONCE_LABEL = "_once"
+        __IS_EXECUTE_ONCE = "is_execute_once"
+
+        __EXTENSION = ".sh"
+
+        __REGEX_MD5 = "[a-f0-9]{32}"
+        __REGEX = f"(?P<{__NAME}>{__REGEX_MD5})(?P<{__IS_BACKGROUND_EXECUTING}>{__IS_BACKGROUND_EXECUTING_LABEL})?(?P<{__IS_EXECUTE_ONCE}>{__IS_EXECUTE_ONCE_LABEL})?\\{__EXTENSION}"
+
+        def __init__(self, is_background_executing, is_execute_once, startup_script_content, name=None):
+            self.is_background_executing = is_background_executing
+            self.is_execute_once = is_execute_once
+            self.name = name if isinstance(name, str) else self.__get_startup_script_name_by_content(
+                startup_script_content)
+
+        def __str__(self):
+            return self.get()
+
+        def __repr__(self):
+            return self.__str__()
+
+        def get(self):
+            return f"{self.name}{self.__get_background_executing_prefix()}{self.__get_execute_once_prefix()}{self.__EXTENSION}"
+
+        def get_wildcard(self):
+            return f"{self.name}*{self.__EXTENSION}"
+
+        def __get_startup_script_name_by_content(self, startup_script_content):
+            return hashlib.md5(str(startup_script_content).encode(self.__ENCODE)).hexdigest()
+
+        def __get_background_executing_prefix(self):
+            return self.__IS_BACKGROUND_EXECUTING_LABEL if self.is_background_executing else ""
+
+        def __get_execute_once_prefix(self):
+            return self.__IS_EXECUTE_ONCE_LABEL if self.is_execute_once else ""
+
+        @staticmethod
+        def parse(startup_script_file_name):
+            regex = re.compile(StartupCrontab.StartupScriptName.__REGEX)
+            match = regex.fullmatch(startup_script_file_name)
+            if match is None:
+                return None
+
+            name = match.group(StartupCrontab.StartupScriptName.__NAME)
+            is_background_executing = bool(match.group(StartupCrontab.StartupScriptName.__IS_BACKGROUND_EXECUTING))
+            is_execute_once = bool(match.group(StartupCrontab.StartupScriptName.__IS_EXECUTE_ONCE))
+
+            return StartupCrontab.StartupScriptName(is_background_executing=is_background_executing,
+                                                    is_execute_once=is_execute_once, startup_script_content=None,
+                                                    name=name)
+
+    def __init__(self, user=getpass.getuser()):
+        self.__user = user
+
+    def register_script(self, startup_script_content, is_background_executing=False,
+                        is_execute_once=False):
+        self.__register_supervisor_script()
+        startup_script_name = StartupCrontab.StartupScriptName(is_background_executing=is_background_executing,
+                                                               is_execute_once=is_execute_once,
+                                                               startup_script_content=startup_script_content)
+        return self.__create_startup_script_file(startup_script_name, startup_script_content)
+
+    def run_all_scripts(self):
+        for path in sorted(pathlib.Path(self.__get_startup_script_dir().get()).glob("*"),
+                           key=lambda x: x.stat().st_mtime_ns, reverse=True):
+            if path.is_file():
+                startup_script_name = StartupCrontab.StartupScriptName.parse(path.name)
+                if startup_script_name is not None:
+                    self.__run_startup_script(startup_script_name, path)
+
+    def __register_supervisor_script(self):
+        with CronTab(user=self.__user) as cron:
+            command = f'"{sys.executable}" "{__file__}" {self.COMMAND}'
+            if cron.find_comment(self.SUPERVISOR_SCRIPT_ID):
+                return
+
+            print(f"[Startup] register supervisor script: {command}")
+            job = cron.new(command=command, comment=self.SUPERVISOR_SCRIPT_ID)
             job.every_reboot()
+
+    def __create_startup_script_file(self, startup_script_name, startup_script_content):
+        startup_script_file_path = self.__get_startup_script_file_path(startup_script_name)
+        if self.__is_startup_script_file_exists(startup_script_name):
+            print(f"[Startup] script {startup_script_file_path} ALREADY EXISTS")
+            return False
+
+        TextConfigWriter(startup_script_file_path).set(startup_script_content, set_executable=True)
+        return True
+
+    def __run_startup_script(self, startup_script_name, startup_script_file_path):
+        command = f'. "{startup_script_file_path}"'
+        if startup_script_name.is_execute_once:
+            command += f'; rm -f "{startup_script_file_path}"'
+        if startup_script_name.is_background_executing:
+            command += ' &'
+
+        subprocess.run(command, shell=True, text=True)
+
+    def __get_startup_script_file_path(self, startup_script_name):
+        return self.__get_startup_script_dir().join(startup_script_name.get())
+
+    def __is_startup_script_file_exists(self, startup_script_name):
+        return self.__get_startup_script_dir().exists_by_wildcard(startup_script_name.get_wildcard())
+
+    def __get_startup_script_dir(self):
+        return Path.get_home_directory(self.__user).join(self.__STARTUP_SCRIPTS_DIR_NAME)
 
 
 # Windows startup
 # https://superuser.com/a/1518663/2121020
+# fixme utopia Переопределить метод __register_supervisor_script()
+class StartupWindows(StartupCrontab):
+    pass
+
 
 class Startup:
-    def __init__(self):
-        print("Startup")
+    def __init__(self, user=getpass.getuser()):
+        if CurrentOs.is_linux():
+            self.__startup_impl = StartupCrontab(user)
+        elif CurrentOs.is_windows() or CurrentOs.is_msys():
+            # self.__startup_impl = StartupWindows()
+            raise Exception("[Startup] NOT IMPLEMENTED")
+        else:
+            raise Exception("[Startup] NOT IMPLEMENTED")
+
+    def register_script(self, startup_script_content, is_background_executing=False,
+                        is_execute_once=False):
+        return self.__startup_impl.register_script(startup_script_content=startup_script_content,
+                                                   is_background_executing=is_background_executing,
+                                                   is_execute_once=is_execute_once)
+
+    def run_all_scripts(self):
+        self.__startup_impl.run_all_scripts()
 
 
 class VmSingleGpuPassthrough:
     def __init__(self):
-
 
         self.__grub = Grub()
         self.__startup = Startup()
@@ -3481,7 +3656,6 @@ class VmSingleGpuPassthrough:
             self.after_reboot()
         else:
             self.before_reboot()
-
 
     def before_reboot(self):
         pci_list = Pci.get_list()
@@ -4131,199 +4305,126 @@ class InstallCommandLine:
         print("")
 
 
-def help_usage():
-    print(
-        "config <config-parameter-name>\n"
-        "  or\n"
-        "run <none parameters>\n"
-        "  or\n"
-        "check <none parameters>\n"
-        "  or\n"
-        "user_ovpn <user name>\n"
-        "  or\n"
-        "vm_create <vm name> <image size in gibibytes>\n"
-        "  or\n"
-        "vm_install <vm name> <path to iso disk with os distributive> <bi>\n"
-        "  or\n"
-        "vm_run <vm name> <bi>\n"
-        "\n"
-        "\n"
-        "  bi - block internet access - optional parameter"
-        "\n"
-        "  config - get config parameter value by name from open-vpn.config.json\n"
-        "    available <config-parameter-name> see in open-vpn.config.json\n"
-        "\n"
-        "  run - run OpenVpn server\n"
-        "\n"
-        "  check - check you NAT type for udp hole punching\n"
-        "\n"
-        "  user_ovpn - generate openvpn client config file (*.ovpn) for specified user\n"
-        "\n"
-        "  vm_create - create vm image with <vm name> and <image size in gibibytes>,\n"
-        "    default image size 20 GiB\n"
-        "\n"
-        "  vm_install - install os on vm image created by vm_create command\n"
-        "\n"
-        "  vm_run - run vm by name, see vm_create and vm_install commands\n"
-    )
-
-
 def main():
-    if len(sys.argv) == 1:
-        help_usage()
-        return
+    project_config = OpenVpnConfig()
+    parser = argparse.ArgumentParser(prog=project_config.get_server_name(), description="HomeVpn project executable")
 
-    command = sys.argv[1]
-    if command == "config":
-        if len(sys.argv) == 3:
-            config_parameter_name = str(sys.argv[2])
-            print(OpenVpnConfig().get_config_parameter_strong(config_parameter_name))
-            return
-        else:
-            help_usage()
-            return
+    subparsers = parser.add_subparsers(help="Subcommands help", dest='command')
 
-    elif command == "run":
+    parser_config = subparsers.add_parser("config", help="Get project main config parameter value by name")
+    parser_config.add_argument("config_parameter_name", type=str, help="Config parameter name")
+
+    parser_run = subparsers.add_parser("run", help="Run VPN server")
+
+    parser_check = subparsers.add_parser("check", help="Check UDP hole punching")
+
+    parser_user_ovpn = subparsers.add_parser("user_ovpn", help="Generate ovpn file for user")
+    parser_user_ovpn.add_argument("user_name", type=str, help="User name")
+
+    parser_vm_create = subparsers.add_parser("vm_create", help="Create virtual machine image")
+    parser_vm_create.add_argument("vm_name", type=str, help="Virtual machine name")
+    parser_vm_create.add_argument("--image_size", type=int, help="Virtual machine image size in gibibytes", default=50)
+
+    parser_vm_install = subparsers.add_parser("vm_install", help="Install OS on virtual machine")
+    parser_vm_install.add_argument("vm_name", type=str, help="Virtual machine name")
+    parser_vm_install.add_argument("os_distr_path", type=Path, help="OS distributive iso image path")
+    parser_vm_install.add_argument("--bi", help="Block internet access, but not the local network",
+                                   action='store_true')
+
+    parser_vm_run = subparsers.add_parser("vm_run", help="Run virtual machine")
+    parser_vm_run.add_argument("vm_name", type=str, help="Virtual machine name")
+    parser_vm_run.add_argument("--bi", help="Block internet access, but not the local network",
+                               action='store_true')
+
+    parser_vm_ssh_fwd = subparsers.add_parser("vm_ssh_fwd", help="Port forwarding for SSH for virtual machine")
+    parser_vm_ssh_fwd.add_argument("vm_name", type=str, help="Virtual machine name")
+    parser_vm_ssh_fwd.add_argument("host_tcp_port", type=int,
+                                   help="Host PC input TCP port for forwarding SSH connection to target virtual machine",
+                                   choices=range(TcpPort.TCP_PORT_MIN, TcpPort.TCP_PORT_MAX),
+                                   metavar=f"{TcpPort.TCP_PORT_MIN}..{TcpPort.TCP_PORT_MAX}")
+
+    parser_vm_rdp_fwd = subparsers.add_parser("vm_rdp_fwd", help="Port forwarding for RDP for virtual machine")
+    parser_vm_rdp_fwd.add_argument("vm_name", type=str, help="Virtual machine name")
+    parser_vm_rdp_fwd.add_argument("host_tcp_port", type=int,
+                                   help="Host PC input TCP port for forwarding SSH connection to target virtual machine",
+                                   choices=range(TcpPort.TCP_PORT_MIN, TcpPort.TCP_PORT_MAX),
+                                   metavar=f"{TcpPort.TCP_PORT_MIN}..{TcpPort.TCP_PORT_MAX}")
+
+    parser_startup = subparsers.add_parser(StartupCrontab.COMMAND, help="Startup action script")
+
+    parser_test = subparsers.add_parser("test", help="TEST")
+
+    args = parser.parse_args()
+    if args.command == "config":
+        print(project_config.get_config_parameter_strong(args.config_parameter_name))
+
+    elif args.command == "run":
         Daemon().run()
 
-    elif command == "check":
-        open_vpn_config = OpenVpnConfig()
-        MyExternalIpAddressAndPort(open_vpn_config.get_server_port()).get()
+    elif args.command == "check":
+        MyExternalIpAddressAndPort(project_config.get_server_port()).get()
 
-    elif command == "user_ovpn":
-        if len(sys.argv) == 3:
-            user_name = str(sys.argv[2])
-            open_vpn_config = OpenVpnConfig()
-            my_ip_address_and_port = IpAddressAndPort(
-                TextConfigReader(open_vpn_config.get_my_current_ip_address_and_port()).get())
-            print(OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate())
-            return
-        else:
-            help_usage()
-            return
+    elif args.command == "user_ovpn":
+        my_ip_address_and_port = IpAddressAndPort(
+            TextConfigReader(project_config.get_my_current_ip_address_and_port()).get())
+        print(OpenVpnClientConfigGenerator(my_ip_address_and_port, args.user_name).generate())
 
-    elif command == "vm_create":
-        if len(sys.argv) >= 3:
-            config = OpenVpnConfig()
+    elif args.command == "vm_create":
+        print(VmRegistry(project_config.get_vm_registry_path()).create(args.vm_name, args.image_size).get_image_path())
 
-            name = str(sys.argv[2])
+    elif args.command == "vm_install":
+        if not args.os_distr_path.exists():
+            raise Exception("OS distributive image \"{}\" NOT FOUND".format(args.os_distr_path))
 
-            image_size_in_gib = 20
-            if len(sys.argv) >= 4:
-                image_size_in_gib_as_string = sys.argv[3]
-                if image_size_in_gib_as_string is not None:
-                    image_size_in_gib = int(image_size_in_gib_as_string)
+        local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
+            project_config.get_local_network_interface())
 
-            print(VmRegistry(config.get_vm_registry_path()).create(name, image_size_in_gib).get_image_path())
-            return
-        else:
-            help_usage()
-            return
+        network_bridge = NetworkBridge(project_config.get_server_name(),
+                                       project_config.get_vm_bridge_ip_address_and_mask(),
+                                       project_config.get_dns_config_dir(), local_network_interface,
+                                       block_internet_access=args.bi)
 
-    elif command == "vm_install":
-        if len(sys.argv) >= 3:
-            vm_name = str(sys.argv[2])
-            path_to_os_iso_disk = Path(sys.argv[3])
+        vm_registry = VmRegistry(project_config.get_vm_registry_path())
+        vm_meta_data = vm_registry.get_with_verifying(args.vm_name)
+        virtio = Virtio(project_config)
+        vm = VirtualMachine(network_bridge, vm_meta_data, args.os_distr_path, virtio=virtio)
+        vm.run()
 
-            block_internet_access = False
-            if len(sys.argv) == 5 and str(sys.argv[4]).lower() == "bi":
-                block_internet_access = True
+    elif args.command == "vm_run":
+        network_bridge = NetworkBridge(project_config.get_server_name(),
+                                       project_config.get_vm_bridge_ip_address_and_mask(),
+                                       project_config.get_dns_config_dir(),
+                                       project_config.get_internet_network_interface(),
+                                       block_internet_access=args.bi)
 
-            if not path_to_os_iso_disk.exists():
-                raise Exception("VM installer \"{}\" NOT FOUND".format(path_to_os_iso_disk))
+        vm_registry = VmRegistry(project_config.get_vm_registry_path())
+        vm_meta_data = vm_registry.get_with_verifying(args.vm_name)
 
-            config = OpenVpnConfig()
+        local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
+            project_config.get_local_network_interface())
 
-            local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
-                config.get_local_network_interface())
+        vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
+                                            vm_meta_data.get_ssh_forward_port())
+        vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
+                                            vm_meta_data.get_rdp_forward_port())
+        tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
+                                                                 vm_rdp_forwarding.add_with_retry()))
+        tcp_forwarding_thread.start()
 
-            network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(), local_network_interface,
-                                           block_internet_access=block_internet_access)
+        virtio = Virtio(project_config)
+        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio)
+        vm.run()
+        tcp_forwarding_thread.join()
 
-            vm_registry = VmRegistry(config.get_vm_registry_path())
-            vm_meta_data = vm_registry.get_with_verifying(vm_name)
-            virtio = Virtio(config)
-            vm = VirtualMachine(network_bridge, vm_meta_data, path_to_os_iso_disk, virtio=virtio)
-            vm.run()
-            return
-        else:
-            help_usage()
-            return
+    elif args.command == "vm_ssh_fwd":
+        vm_registry = VmRegistry(project_config.get_vm_registry_path())
+        vm_registry.set_ssh_forward_port(args.vm_name, args.host_tcp_port)
 
-    elif command == "vm_run":
-        if len(sys.argv) >= 2:
-            vm_name = str(sys.argv[2])
+    elif args.command == "vm_rdp_fwd":
+        vm_registry = VmRegistry(project_config.get_vm_registry_path())
+        vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
-            block_internet_access = False
-            if len(sys.argv) == 4 and str(sys.argv[3]).lower() == "bi":
-                block_internet_access = True
-
-            config = OpenVpnConfig()
-            network_bridge = NetworkBridge(config.get_server_name(), config.get_vm_bridge_ip_address_and_mask(),
-                                           config.get_dns_config_dir(), config.get_internet_network_interface(),
-                                           block_internet_access=block_internet_access)
-
-            vm_registry = VmRegistry(config.get_vm_registry_path())
-            vm_meta_data = vm_registry.get_with_verifying(vm_name)
-
-            local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
-                config.get_local_network_interface())
-
-            vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
-                                                vm_meta_data.get_ssh_forward_port())
-            vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
-                                                vm_meta_data.get_rdp_forward_port())
-            tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
-                                                                     vm_rdp_forwarding.add_with_retry()))
-            tcp_forwarding_thread.start()
-
-            virtio = Virtio(config)
-            vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio)
-            vm.run()
-            tcp_forwarding_thread.join()
-            return
-        else:
-            help_usage()
-            return
-
-    elif command == "vm_ssh_fwd":
-        if len(sys.argv) >= 2:
-            vm_name = str(sys.argv[2])
-            project_config = OpenVpnConfig()
-            vm_registry = VmRegistry(project_config.get_vm_registry_path())
-            vm_metadata = vm_registry.get_with_verifying(vm_name)
-
-            ssh_input_port_from_user = input(
-                "Enter vm \"{}\" SSH port [{}-{}]: ".format(vm_metadata.get_name(), TcpPort.TCP_PORT_MIN,
-                                                            TcpPort.TCP_PORT_MAX))
-            if not TcpPort.is_valid(ssh_input_port_from_user):
-                print("INVALID!!! reexecute command")
-
-            vm_registry.set_ssh_forward_port(vm_name, ssh_input_port_from_user)
-        else:
-            help_usage()
-            return
-
-    elif command == "vm_rdp_fwd":
-        if len(sys.argv) >= 2:
-            vm_name = str(sys.argv[2])
-            project_config = OpenVpnConfig()
-            vm_registry = VmRegistry(project_config.get_vm_registry_path())
-            vm_metadata = vm_registry.get_with_verifying(vm_name)
-
-            ssh_input_port_from_user = input(
-                "Enter vm \"{}\" SSH port [{}-{}]: ".format(vm_metadata.get_name(), TcpPort.TCP_PORT_MIN,
-                                                            TcpPort.TCP_PORT_MAX))
-            if not TcpPort.is_valid(ssh_input_port_from_user):
-                print("INVALID!!! reexecute command")
-
-            vm_registry.set_rdp_forward_port(vm_name, ssh_input_port_from_user)
-        else:
-            help_usage()
-            return
-
-    elif command == "vm_run_pp":
+    elif args.command == "vm_run_pp":
         pci_list = Pci.get_list()
 
         pci_vga_list = pci_list.get_vga_list()
@@ -4349,67 +4450,11 @@ def main():
         # VirtualMachine(network_bridge, gpu=vfio_pci.get_qemu_parameters()).run()
         return
 
-    elif command == "test":
-        crontab = UnixCrontab()
+    elif args.command == "test":
+        print(os.environ)
 
-        # print(Pci.get_list())
-
-        # print(NetworkInterface.get_internet_if().get_ipv4_interface_if().network.netmask)
-        return
-        print("XXX")
-
-        user_name = "utopia"
-        open_vpn_config = OpenVpnConfig()
-        my_ip_address_and_port = IpAddressAndPort(
-            TextConfigReader(open_vpn_config.get_my_current_ip_address_and_port()).get())
-        file_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate()
-
-        TelegramClient().send_file(file_path)
-
-        return
-
-        filename = "gitconfig.txt"
-        up = {'document': (filename, open("/home/utopia/.gitconfig", 'rb'), "multipart/form-data")}
-        site = "https://api.telegram.org/bot5296572881:AAFkHMbDlDvpWR2mEC3p2q0sb8ycOxbQmnI/sendDocument"
-        request = requests.post(site, files=up, data={"chat_id": "-687389280"})
-
-        print(request.content)
-
-        return
-        print(NetworkInterface("lo").get_ipv4_interface_if())
-        print(NetworkInterface("lo").get_ipv6_interface_if())
-        print(NetworkInterface.get_internet_if())
-        # return
-        # print(ResolvConf().get_nameserver_list())
-        # ResolvConf().add_nameserver_if("172.20.0.1")
-        # print(ResolvConf().get_nameserver_list())
-        # ResolvConf().remove_nameserver("172.20.0.1")
-        # print(ResolvConf().get_nameserver_list())
-        # return
-        config = OpenVpnConfig()
-        vm_bridge_name = config.get_server_name()
-        print("vm_bridge_name = {}".format(vm_bridge_name))
-        # print("ttt: {}".format(list(vm_bridge_ip_network.hosts())))
-        # return
-        network_bridge = NetworkBridge(vm_bridge_name, config.get_vm_bridge_ip_address_and_mask(),
-                                       config.get_dns_config_dir(),
-                                       config.get_or_default_internet_network_interface())
-        # network_bridge.create()
-        # time.sleep(30)
-        # print("network_bridge.close()")
-        # network_bridge.close()
-        # print("network_bridge.close() +++")
-        # time.sleep(30)
-        vm = VirtualMachine(network_bridge)
-        vm.run()
-    elif command == 'test_after_reboot':
-        reader = TextConfigReader("reboot_test.txt")
-        fff = ""
-        if reader.exists():
-            fff = reader.get()
-
-        fff += f"AFTER REBOOT LABEL AT: {datetime.today().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        TextConfigWriter("reboot_test.txt").set(fff)
+    elif args.command == StartupCrontab.COMMAND:
+        Startup().run_all_scripts()
 
 
 if __name__ == '__main__':
