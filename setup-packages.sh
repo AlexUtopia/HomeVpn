@@ -98,6 +98,16 @@ fi
 GLOBAL_CONFIG_VNC_USER=$(logname) # в termux переменная окружения USER не установлена
 GLOBAL_CONFIG_SAMBA_USER=$(logname) # в termux переменная окружения USER не установлена
 
+if [[ -z "${GLOBAL_CONFIG_VNC_USER}" ]]; then
+    echo "[FATAL] GLOBAL_CONFIG_VNC_USER parameter IS NOT SET"
+    exit 1
+fi
+
+if [[ -z "${GLOBAL_CONFIG_SAMBA_USER}" ]]; then
+    echo "[FATAL] GLOBAL_CONFIG_SAMBA_USER parameter IS NOT SET"
+    exit 1
+fi
+
 GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
 if is_msys; then
     GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${SYSTEMDRIVE}/smb_share_public"
@@ -401,14 +411,20 @@ function get_directory_paths() {
     if [[ -z "${TYPE}" ]]; then
         TYPE="f"
     fi
+    local MAXDEPTH="${4}"
+    local MAXDEPTH_COMMAND_LINE=""
+    if [[ -z "${MAXDEPTH}" ]]; then
+        MAXDEPTH_COMMAND_LINE=""
+    else
+        MAXDEPTH_COMMAND_LINE="-maxdepth ${MAXDEPTH}"
+    fi
 
-    local MAXDEPTH=1
     local NULL_SYMBOL=$'\0'
 
     while IFS= read -r -d "${NULL_SYMBOL}" FILE_PATH; do
         # echo "${FILE_PATH}" fixme utopia del?
         RESULT_REF+=("${FILE_PATH}")
-    done < <(find "${DIR_PATH}" -maxdepth ${MAXDEPTH} -name "${PATH_WILDCARDS}" -type "${TYPE}" -print0 | sort -z -V)
+    done < <(find "${DIR_PATH}" ${MAXDEPTH_COMMAND_LINE} -name "${PATH_WILDCARDS}" -type "${TYPE}" -print0 | sort -z -V)
     return 0
 }
 
@@ -1020,9 +1036,18 @@ function termux_set_symlinks_to_storage() {
 
 ### System services begin
 
-function systemd_get_base_dir_path() {
+function systemd_get_system_service_base_dir_path() {
    echo "${GLOBAL_CONFIG_ETC_PREFIX}/systemd/system"
    return 0
+}
+
+function systemd_get_user_service_base_dir_path() {
+    local USER_NAME="${1}"
+
+    local USER_HOME_DIR_PATH=""
+    USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USER_NAME}") || return $?
+    echo "${USER_HOME_DIR_PATH}/.config/systemd/user"
+    return 0
 }
 
 function systemd_init() {
@@ -1031,9 +1056,19 @@ function systemd_init() {
 
 function systemd_is_service_active() {
     local SERVICE_NAME="${1}"
+    local USER_NAME="${2}"
 
     local SERVICE_STATUS=""
-    SERVICE_STATUS=$(systemctl is-active "${SERVICE_NAME}" 2> "/dev/null") || return $?
+    if [[ -z "${USER_NAME}" ]]; then
+        SERVICE_STATUS=$(systemctl is-active "${SERVICE_NAME}" 2> "/dev/null") || return $?
+    else
+        # https://unix.stackexchange.com/a/685029
+        # https://www.opennet.ru/opennews/art.shtml?num=54871
+        # Опция --machine доступна начиная с 248 версии systemd. Сделан fallback на systemd-run
+        # https://manpages.debian.org/testing/systemd/systemd-run.1.en.html
+        SERVICE_STATUS=$(systemctl --machine="${USER_NAME}@" --user is-active "${SERVICE_NAME}" 2> "/dev/null") ||
+            SERVICE_STATUS=$(systemd-run --machine="${USER_NAME}@" --user --pipe systemctl --user status "${SERVICE_NAME}" 2> "/dev/null") || return $?
+    fi
 
     if [[ "${SERVICE_STATUS,,}" == "active" ]]; then
         return 0
@@ -1043,17 +1078,33 @@ function systemd_is_service_active() {
 
 function systemd_service_enable() {
     local SERVICE_NAME="${1}"
+    local USER_NAME="${2}"
 
-    systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
-    systemctl start "${SERVICE_NAME}" > "/dev/null" || return $?
+    if [[ -z "${USER_NAME}" ]]; then
+        systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
+        systemctl start "${SERVICE_NAME}" > "/dev/null" || return $?
+    else
+        systemctl --machine="${USER_NAME}@" --user enable "${SERVICE_NAME}" > "/dev/null" ||
+            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
+        systemctl --machine="${USER_NAME}@" --user start "${SERVICE_NAME}" > "/dev/null" ||
+            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl start "${SERVICE_NAME}" > "/dev/null" || return $?
+    fi
     return 0
 }
 
 function systemd_service_disable() {
     local SERVICE_NAME="${1}"
+    local USER_NAME="${2}"
 
-    systemctl stop "${SERVICE_NAME}" > "/dev/null" || return $?
-    systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
+    if [[ -z "${USER_NAME}" ]]; then
+        systemctl stop "${SERVICE_NAME}" > "/dev/null" || return $?
+        systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
+    else
+        systemctl --machine="${USER_NAME}@" --user stop "${SERVICE_NAME}" > "/dev/null" ||
+            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl stop "${SERVICE_NAME}" > "/dev/null" || return $?
+        systemctl --machine="${USER_NAME}@" --user disable "${SERVICE_NAME}" > "/dev/null" ||
+            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
+    fi
     return 0
 }
 
@@ -1176,37 +1227,40 @@ function service_init() {
 
 function is_service_active() {
     local SERVICE_NAME="${1}"
+    local USER_NAME="${2}"
 
     if is_termux; then
         runit_is_service_active "${SERVICE_NAME}" || return $?
         return 0
     fi
 
-    systemd_is_service_active "${SERVICE_NAME}" || return $?
+    systemd_is_service_active "${SERVICE_NAME}" "${USER_NAME}" || return $?
     return 0
 }
 
 function service_enable() {
     local SERVICE_NAME="${1}"
+    local USER_NAME="${2}"
 
     if is_termux; then
         runit_service_enable "${SERVICE_NAME}" || return $?
         return 0
     fi
 
-    systemd_service_enable "${SERVICE_NAME}" || return $?
+    systemd_service_enable "${SERVICE_NAME}" "${USER_NAME}" || return $?
     return 0
 }
 
 function service_disable() {
     local SERVICE_NAME="${1}"
+    local USER_NAME="${2}"
 
     if is_termux; then
         runit_service_disable "${SERVICE_NAME}" || return $?
         return 0
     fi
 
-    systemd_service_disable "${SERVICE_NAME}" || return $?
+    systemd_service_disable "${SERVICE_NAME}" "${USER_NAME}" || return $?
     return 0
 }
 
@@ -1653,12 +1707,17 @@ function vnc_server_get_config_info() {
     local VNC_USER="${2}"
 
     local INIT_SYSTEM_BASE_DIR_PATH=""
+    local INIT_SYSTEM_CONFIG_SEARCH_DIR_PATH=""
     local INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE=""
+    local INIT_SYSTEM_BASE_DIR_MAXDEPTH=""
     if is_termux; then
         INIT_SYSTEM_BASE_DIR_PATH="$(runit_get_base_dir_path)"
+        INIT_SYSTEM_CONFIG_SEARCH_DIR_PATH="${INIT_SYSTEM_BASE_DIR_PATH}"
         INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE="d"
+        INIT_SYSTEM_BASE_DIR_MAXDEPTH=1
     else
-        INIT_SYSTEM_BASE_DIR_PATH="$(systemd_get_base_dir_path)"
+        INIT_SYSTEM_BASE_DIR_PATH="$(systemd_get_user_service_base_dir_path "${VNC_USER}")"
+        INIT_SYSTEM_CONFIG_SEARCH_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/home"
         INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE="f"
     fi
 
@@ -1678,7 +1737,7 @@ function vnc_server_get_config_info() {
     RESULT_REF["XSTARTUP_FILE_PATH"]="${VNC_XSTARTUP_FILE_PATH}"
 
     local INIT_SYSTEM_CONFIG_PATH_LIST=()
-    get_directory_paths INIT_SYSTEM_CONFIG_PATH_LIST "${INIT_SYSTEM_BASE_DIR_PATH}" "${VNCD_BASENAME}@*.service" "${INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE}" || return $?
+    get_directory_paths INIT_SYSTEM_CONFIG_PATH_LIST "${INIT_SYSTEM_CONFIG_SEARCH_DIR_PATH}" "${VNCD_BASENAME}@*.service" "${INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE}" "${INIT_SYSTEM_BASE_DIR_MAXDEPTH}" || return $?
 
     local DISPLAY_NUMBER="0"
     for ((i=0; i<=${#INIT_SYSTEM_CONFIG_PATH_LIST[@]}; i++)); do
@@ -1715,31 +1774,25 @@ function vnc_server_create_systemd_config() {
     local -n VNC_SERVER_CONFIG_REF=${1}
 
     local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG_REF["EXECUTABLE_PATH"]}"
-    local VNC_USER="${VNC_SERVER_CONFIG_REF["USER"]}"
-    local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG_REF["USER_HOME_DIRECTORY_PATH"]}"
     local VNC_DISPLAY=":${VNC_SERVER_CONFIG_REF["DISPLAY_NUMBER"]}"
     local VNCD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG_REF["INSTANCE_CONFIG_PATH"]}"
-
 
     # https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#Options
     # https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-vnc-on-ubuntu-22-04
     # https://wiki.archlinux.org/title/Systemd_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)#%D0%A2%D0%B8%D0%BF%D1%8B_%D1%81%D0%BB%D1%83%D0%B6%D0%B1
+    # https://wiki.archlinux.org/title/TigerVNC#With_a_user_service
     create_file "[Unit]
 Description=Start VNC server at startup
-After=syslog.target network.target
 
 [Service]
 Type=forking
-User=${VNC_USER}
-Group=${VNC_USER}
-WorkingDirectory=${VNC_USER_HOME_DIRECTORY_PATH}
 
 ExecStartPre=-${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY} > /dev/null 2>&1
 ExecStart=${VNC_SERVER_EXECUTABLE_PATH} -localhost no ${VNC_DISPLAY}
 ExecStop=${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY}
 
 [Install]
-WantedBy=multi-user.target" "${VNCD_INSTANCE_CONFIG_PATH}" || return $?
+WantedBy=default.target" "${VNCD_INSTANCE_CONFIG_PATH}" || return $?
     return 0
 }
 
@@ -1783,7 +1836,7 @@ function vnc_server_setup() {
     local VNC_XSTARTUP_FILE_PATH="${VNC_SERVER_CONFIG["XSTARTUP_FILE_PATH"]}"
     local VNC_USER_HOME_DIRECTORY_PATH="${VNC_SERVER_CONFIG["USER_HOME_DIRECTORY_PATH"]}"
 
-    service_disable "${VNCD_INSTANCE_NAME}"
+    service_disable "${VNCD_INSTANCE_NAME}" "${VNC_USER}"
 
     vnc_server_create_xstartup "${VNC_USER}" "${VNC_XSTARTUP_FILE_PATH}" || return $?
 
@@ -1795,9 +1848,9 @@ function vnc_server_setup() {
 
     vnc_create_password_if "${VNC_USER_HOME_DIRECTORY_PATH}" || return $?
 
-    service_enable "${VNCD_INSTANCE_NAME}" || return $?
+    service_enable "${VNCD_INSTANCE_NAME}" "${VNC_USER}" || return $?
 
-    if ! is_service_active "${VNCD_INSTANCE_NAME}"; then
+    if ! is_service_active "${VNCD_INSTANCE_NAME}" "${VNC_USER}"; then
         echo "FATAL: ${VNCD_INSTANCE_NAME} not started"
         return 1
     fi
