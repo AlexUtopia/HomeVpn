@@ -1067,7 +1067,7 @@ function systemd_is_service_active() {
         # Опция --machine доступна начиная с 248 версии systemd. Сделан fallback на systemd-run
         # https://manpages.debian.org/testing/systemd/systemd-run.1.en.html
         SERVICE_STATUS=$(systemctl --machine="${USER_NAME}@" --user is-active "${SERVICE_NAME}" 2> "/dev/null") ||
-            SERVICE_STATUS=$(systemd-run --machine="${USER_NAME}@" --user --pipe systemctl --user status "${SERVICE_NAME}" 2> "/dev/null") || return $?
+            SERVICE_STATUS=$(systemd-run --machine="${USER_NAME}@" --user --pipe systemctl --user is-active "${SERVICE_NAME}" 2> "/dev/null") || return $?
     fi
 
     if [[ "${SERVICE_STATUS,,}" == "active" ]]; then
