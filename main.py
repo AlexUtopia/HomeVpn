@@ -2672,23 +2672,6 @@ class VmRdpForwarding(VmTcpForwarding):
     pass
 
 
-class RegexConstants:
-    CAPTURE_ALL = fr"(.*)"
-    WHITESPACES = r"\s"
-    WHITESPACE_CHARACTER_SET = fr"[{WHITESPACES}]"
-    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}*"
-    SPACE_SYMBOLS_ONE_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}+"
-    NEWLINE_CHARACTER_SET = r"[\n\r]"
-    ONE_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}+"
-    ZERO_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}*"
-    ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
-    ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
-
-    @staticmethod
-    def atomic_group(value):
-        return f"(?>{value})"
-
-
 class EscapeLiteral:
     DECODE_TABLE_DEFAULT = [("\\\\", "\\"), ("\\\"", "\""), ("\\\'", "'"), ("\\n", "\n"),
                             ("\\r", "\r")]
@@ -2723,6 +2706,45 @@ class UnitTest_EscapeLiteral(unittest.TestCase):
         encoded_string = escape_literal.encode(target_string)
         decoded_string = escape_literal.decode(encoded_string)
         self.assertEqual(target_string, decoded_string)
+
+
+class RegexConstants:
+    CAPTURE_ALL = fr"(.*)"
+    WHITESPACES = r"\s"
+    WHITESPACE_CHARACTER_SET = fr"[{WHITESPACES}]"
+    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}*"
+    SPACE_SYMBOLS_ONE_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}+"
+    NEWLINE_CHARACTER_SET = r"[\n\r]"
+    ONE_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}+"
+    ZERO_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}*"
+    ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
+    ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
+
+    ENCODE_TABLE_FOR_CHARACTER_SET = [(".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
+                                      (")", "\)"), ("$", "\$"), ("-", "\-"), ("\\", "\\\\"), (">", "\>"),
+                                      ("<", "\<"), ("|", "\|"), ("?", "\?"), ("^", "\^")]
+
+    @staticmethod
+    def atomic_group(value):
+        return f"(?>{value})"
+
+    @staticmethod
+    def to_character_set(character_set):
+        result = ""
+        if isinstance(character_set, list) or isinstance(character_set, set):
+            for item in character_set:
+                result += RegexConstants.to_character_set(item)
+            result = RegexConstants.to_character_set(result)
+        elif isinstance(character_set, str):
+            character_set_as_list = list(set(character_set))
+            character_set_as_list.sort()
+            result = "".join(character_set_as_list)
+        return result
+
+    @staticmethod
+    def character_set_escape(character_set):
+        return EscapeLiteral(encode_table=RegexConstants.ENCODE_TABLE_FOR_CHARACTER_SET).encode(
+            RegexConstants.to_character_set(character_set))
 
 
 class NoneFromString:
@@ -2874,33 +2896,59 @@ class FromString:
 class ConfigParameterNameParser:
     __NAME_LENGTH_MIN = 1
 
-    def __init__(self, name_length_max=64, match_start_of_string=True):
+    def __init__(self, name_length_max=64, is_match_start_of_string=True, underscore_character_set="_",
+                 subname_separator="",
+                 subname_count_max=0):
         self.__name_length_max = name_length_max
-        self.__match_start_of_string = match_start_of_string
+        self.__is_match_start_of_string = is_match_start_of_string
+        self.__underscore_character_set = RegexConstants.character_set_escape(underscore_character_set)
+        self.__subname_separator = RegexConstants.character_set_escape(subname_separator)
+        self.__subname_count_max = subname_count_max
+
         if self.__name_length_max < self.__NAME_LENGTH_MIN:
             self.__name_length_max = self.__NAME_LENGTH_MIN
 
-    def get_regex(self, capture=True):
-        capture_begin = "(" if capture else ""
-        capture_end = ")" if capture else ""
-        start_of_string = "^" if self.__match_start_of_string else ""
+        if self.__subname_count_max < 0:
+            self.__subname_count_max = 0
 
-        return fr"{start_of_string}{capture_begin}[a-zA-Z_][a-zA-Z_0-9]{{0,{self.__name_length_max - self.__NAME_LENGTH_MIN}}}{capture_end}"
+    def get_subname_count_max(self):
+        return self.__subname_count_max
+
+    def get_regex(self, with_capture=True):
+        begin_capture = "(" if with_capture else ""
+        end_capture = ")" if with_capture else ""
+        start_of_string = "^" if self.__is_match_start_of_string else ""
+        result = f"{start_of_string}{begin_capture}{self.__get_regex_template(with_capture=False)}"
+        if self.__subname_count_max > 0:
+            result += f"{RegexConstants.atomic_group(f'{self.__subname_separator}{self.__get_regex_template(with_capture)}')}{{0,self.{self.__subname_count_max}}}"
+        return f"{result}{end_capture}"
 
     def get_regex_for_name(self, name):
-        return fr"^{name}"
+        start_of_string = "^" if self.__is_match_start_of_string else ""
+        return f"{start_of_string}{name}"
 
     def check_name(self, name):
-        regex = re.compile(self.get_regex(capture=False))
+        regex = re.compile(self.get_regex(with_capture=False))
         match = regex.match(name)
         if match is None:
             return False
         return True
 
+    def __get_regex_template(self, with_capture):
+        begin_capture = "(" if with_capture else ""
+        end_capture = ")" if with_capture else ""
+        return f"{begin_capture}[a-zA-Z{self.__underscore_character_set}][a-zA-Z0-9{self.__underscore_character_set}]{{0,{self.__name_length_max - self.__NAME_LENGTH_MIN}}}{end_capture}"
+
 
 class ConfigNameValueDelimiterParser:
+    def __init__(self, delimiter="=", is_delimiter_optional=False):
+        self.__delimiter = delimiter
+        self.__is_delimiter_optional = is_delimiter_optional
+
     def get_regex(self):
-        return fr"="
+        if self.__is_delimiter_optional:
+            return f"(?>{self.__delimiter}|)"
+        return f"{self.__delimiter}"
 
 
 class ConfigParameterValueParser:
@@ -2909,6 +2957,9 @@ class ConfigParameterValueParser:
     __BACK_SLASH_ESCAPE = fr"\\"
     __DOUBLE_QUOTE_ESCAPE = fr"{__BACK_SLASH_ESCAPE}{__DOUBLE_QUOTE}"
     __SINGLE_QUOTE_ESCAPE = fr"{__BACK_SLASH_ESCAPE}{__SINGLE_QUOTE}"
+
+    def __init__(self, is_match_end_of_string=True):
+        self.__is_match_end_of_string = is_match_end_of_string
 
     def get_regex(self, with_capture=True):
         regex_with_double_quote = self.__get_regex_with_quotes(self.__DOUBLE_QUOTE, self.__DOUBLE_QUOTE_ESCAPE,
@@ -2935,12 +2986,10 @@ class ConfigParameterValueParser:
     def __get_regex_template(self, begin_mark, end_mark, unacceptable_symbols, escape, with_capture):
         back_slash_escape = self.__BACK_SLASH_ESCAPE
 
-        begin_capture = ""
-        end_capture = ""
-        if bool(with_capture):
-            begin_capture = "("
-            end_capture = ")"
-        return rf"{begin_capture}{begin_mark}(?>[^{unacceptable_symbols}{back_slash_escape}]*(?>{escape}|{back_slash_escape})*)*{end_mark}{end_capture}{RegexConstants.WHITESPACE_CHARACTER_SET}*$"
+        begin_capture = "(" if with_capture else ""
+        end_capture = ")" if with_capture else ""
+        end_of_string = "$" if self.__is_match_end_of_string else ""
+        return rf"{begin_capture}{begin_mark}(?>[^{unacceptable_symbols}{back_slash_escape}]*(?>{escape}|{back_slash_escape})*)*{end_mark}{end_capture}{RegexConstants.WHITESPACE_CHARACTER_SET}*{end_of_string}"
 
 
 class NoSection:
@@ -2949,7 +2998,7 @@ class NoSection:
 
 
 class SectionWithoutSubsections(NoSection):
-    def __init__(self, parameter_name_parser=ConfigParameterNameParser(match_start_of_string=False)):
+    def __init__(self, parameter_name_parser=ConfigParameterNameParser(is_match_start_of_string=False)):
         super().__init__()
         self.__parameter_name_parser = parameter_name_parser
 
@@ -3323,11 +3372,18 @@ class ConfigParser:
         return None
 
     def find_all(self, content):
+        print(f"FFFFFFFFFFFFFF {content}")
+        print(self.get_regex())
         regex = re.compile(self.get_regex(), re.MULTILINE)
         tmp = regex.findall(content)
-
         result = dict()
-        for name, value in tmp:
+        for groups in tmp:
+            name = groups[0]
+            value = ""
+            for i in range(1 + self.__name_parser.get_subname_count_max(), len(groups)):
+                value = groups[i]
+                if len(value) > 0:
+                    break
             result.update({name: self.__from_string.get(value)})
         return result
 
@@ -4359,7 +4415,6 @@ def main():
     parser_test = subparsers.add_parser("test", help="TEST")
 
     args = parser.parse_args()
-    print(args)
     if args.command == "config":
         print(project_config.get_config_parameter_strong(args.config_parameter_name))
 
@@ -4408,7 +4463,11 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        print(os.environ)
+        # print(os.environ)
+        ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
+        print(ggg)
+        print(ConfigParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
+
 
     elif args.command == StartupCrontab.COMMAND:
         Startup().run_all_scripts()
