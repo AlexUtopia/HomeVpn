@@ -1298,6 +1298,11 @@ function firewall_accept_udp_traffic_for_port() {
 # fixme utopia Добавим поддержку "X11Forwarding yes" в "$PREFIX/etc/ssh/sshd_config" (termux)
 # https://www.reddit.com/r/termux/comments/bd5kz4/x_windows_remote_display/
 function sshd_setup() {
+    if [[ -n "${SSH_CONNECTION}" ]]; then
+        echo "SSH server is not installed because execution takes place in a SSH session"
+        return 0
+    fi
+
     local SSHD="ssh" # https://tokmakov.msk.ru/blog/item/441
 
     if is_termux; then
@@ -1824,6 +1829,11 @@ function vnc_create_password_if() {
 }
 
 function vnc_server_setup() {
+    if [[ -n "${VNCDESKTOP}" ]]; then
+        echo "VNC server is not installed because execution takes place in a VNC session"
+        return 0
+    fi
+
     if is_msys; then
         return 0
     fi
