@@ -358,8 +358,13 @@ function get_os_distro_codename_or_version() {
 
 function make_dirs() {
     local DIR_PATH="${1}"
+    local USER_NAME="${2}"
 
-    mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
+    if [[ -n "${USER_NAME}" ]]; then
+        sudo --user="${USER_NAME}" mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
+    else
+        mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
+    fi
     return 0
 }
 
@@ -469,12 +474,13 @@ function deactivate_file_if_exists() {
 
 function prepare_for_create_file() {
     local FILE_PATH="${1}"
-    local REWRITE_IF_EXIST="${2}"
+    local USER_NAME="${2}"
+    local REWRITE_IF_EXIST="${3}"
 
     local FILE_DIR_PATH=""
     FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
 
-    make_dirs "${FILE_DIR_PATH}" || return $?
+    make_dirs "${FILE_DIR_PATH}" "${USER_NAME}" || return $?
 
     if [[ -z "${REWRITE_IF_EXIST}" ]]; then
         deactivate_file_if_exists "${FILE_PATH}" || return $?
@@ -485,11 +491,16 @@ function prepare_for_create_file() {
 function create_file() {
     local CONTENT="${1}"
     local FILE_PATH="${2}"
-    local REWRITE_IF_EXIST="${3}"
+    local USER_NAME="${3}"
+    local REWRITE_IF_EXIST="${4}"
 
-    prepare_for_create_file "${FILE_PATH}" "${REWRITE_IF_EXIST}" || return $?
+    prepare_for_create_file "${FILE_PATH}" "${USER_NAME}" "${REWRITE_IF_EXIST}" || return $?
 
-    ${SHELL} -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
+    if [[ -n "${USER_NAME}" ]]; then
+        sudo --user="${USER_NAME}" "${SHELL}" -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
+    else
+        "${SHELL}" -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
+    fi
     return 0
 }
 
@@ -990,7 +1001,7 @@ function termux_autorun_serves_at_boot() {
 
     create_file "#!${SHELL}
 termux-wake-lock
-. \"${GLOBAL_CONFIG_ETC_PREFIX}/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "rewrite_if_exist" || return $?
+. \"${GLOBAL_CONFIG_ETC_PREFIX}/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "" "rewrite_if_exist" || return $?
     set_file_as_executable "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
     return 0
 }
@@ -1690,12 +1701,8 @@ function vnc_server_create_xstartup() {
 autocutsel -fork
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
-${EXEC}" "${XSTARTUP_FILE_PATH}" || return $?
+${EXEC}" "${XSTARTUP_FILE_PATH}" "${VNC_USER}" || return $?
     set_file_as_executable "${XSTARTUP_FILE_PATH}" || return $?
-
-    local XSTARTUP_DIR_PATH=""
-    XSTARTUP_DIR_PATH=$(dirname "${XSTARTUP_FILE_PATH}") || return $?
-    change_rights_on_directory_recursively_or_file "${VNC_USER}" "${XSTARTUP_DIR_PATH}" || return $?
     return 0
 }
 
@@ -1778,6 +1785,7 @@ function vnc_server_get_config_info() {
 function vnc_server_create_systemd_config() {
     local -n VNC_SERVER_CONFIG_REF=${1}
 
+    local VNC_USER="${VNC_SERVER_CONFIG_REF["USER"]}"
     local VNC_SERVER_EXECUTABLE_PATH="${VNC_SERVER_CONFIG_REF["EXECUTABLE_PATH"]}"
     local VNC_DISPLAY=":${VNC_SERVER_CONFIG_REF["DISPLAY_NUMBER"]}"
     local VNCD_INSTANCE_CONFIG_PATH="${VNC_SERVER_CONFIG_REF["INSTANCE_CONFIG_PATH"]}"
@@ -1797,7 +1805,7 @@ ExecStart=${VNC_SERVER_EXECUTABLE_PATH} -localhost no ${VNC_DISPLAY}
 ExecStop=${VNC_SERVER_EXECUTABLE_PATH} -kill ${VNC_DISPLAY}
 
 [Install]
-WantedBy=default.target" "${VNCD_INSTANCE_CONFIG_PATH}" || return $?
+WantedBy=default.target" "${VNCD_INSTANCE_CONFIG_PATH}" "${VNC_USER}" || return $?
     return 0
 }
 
