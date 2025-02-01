@@ -1825,11 +1825,17 @@ exit 0" || return $?
 }
 
 function vnc_create_password_if() {
-    local VNC_USER_HOME_DIRECTORY_PATH="${1}"
+    local VNC_USER_HOME_DIR_PATH="${1}"
+    local VNC_USER="${2}"
 
-    if [[ ! -f "${VNC_USER_HOME_DIRECTORY_PATH}/.vnc/passwd" ]]; then
+    if [[ ! -f "${VNC_USER_HOME_DIR_PATH}/.vnc/passwd" ]]; then
         echo "Set VNC password"
-        vncpasswd || return $?
+
+        if is_termux; then
+            vncpasswd || return $?
+        else
+            sudo --user="${VNC_USER}" vncpasswd || return $?
+        fi
         return 0
     fi
 
@@ -1864,7 +1870,7 @@ function vnc_server_setup() {
         vnc_server_create_systemd_config VNC_SERVER_CONFIG || return $?
     fi
 
-    vnc_create_password_if "${VNC_USER_HOME_DIRECTORY_PATH}" || return $?
+    vnc_create_password_if "${VNC_USER_HOME_DIRECTORY_PATH}" "${VNC_USER}" || return $?
 
     service_enable "${VNCD_INSTANCE_NAME}" "${VNC_USER}" || return $?
 
