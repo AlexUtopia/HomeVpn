@@ -3598,7 +3598,7 @@ class StartupCrontab:
                                                     is_execute_once=is_execute_once, startup_script_content=None,
                                                     name=name)
 
-    def __init__(self, user=os.getlogin()):
+    def __init__(self, user=getpass.getuser()):
         self.__user = user
 
     def register_script(self, startup_script_content, is_background_executing=False,
@@ -3637,7 +3637,7 @@ class StartupCrontab:
         return True
 
     def __run_startup_script(self, startup_script_name, startup_script_file_path):
-        command = f'. "{startup_script_file_path}"'
+        command = f'$("{startup_script_file_path}")'
         if startup_script_name.is_execute_once:
             command += f'; rm -f "{startup_script_file_path}"'
         if startup_script_name.is_background_executing:
@@ -3657,13 +3657,13 @@ class StartupCrontab:
 
 # Windows startup
 # https://superuser.com/a/1518663/2121020
-# fixme utopia Переопределить метод __register_supervisor_script()
+# fixme utopia Переопределить метод __register_supervisor_script() и __run_startup_script()
 class StartupWindows(StartupCrontab):
     pass
 
 
 class Startup:
-    def __init__(self, user=os.getlogin()):
+    def __init__(self, user=getpass.getuser()):
         if CurrentOs.is_linux():
             self.__startup_impl = StartupCrontab(user)
         elif CurrentOs.is_windows() or CurrentOs.is_msys():
