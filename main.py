@@ -1,4 +1,5 @@
 import argparse
+import copy
 import hashlib
 import shutil
 import atexit
@@ -1794,10 +1795,10 @@ class Iommu:
     # https://docs.kernel.org/admin-guide/kernel-parameters.html
     def get_kernel_parameters(self):
         if self.is_intel():
-            return "intel_iommu=on iommu=pt"
+            return [{"intel_iommu": "on", "iommu": "pt"}]
         elif self.is_amd():
-            return "amd_iommu=on iommu=pt"
-        return ""
+            return [{"amd_iommu": "on", "iommu": "pt"}]
+        return []
 
     def __is_cpu_vendor(self, cpu_vendor):
         try:
@@ -2379,8 +2380,8 @@ class VfioPci:
 
     def get_kernel_parameters(self):
         if len(self.__pci_list) == 0:
-            return ""
-        return "vfio_pci.ids={}".format(",".join(pci.get_id() for pci in self.__pci_list))
+            return []
+        return [{"vfio_pci.ids": pci.get_id() for pci in self.__pci_list}]
 
     def get_qemu_parameters(self):
         result = []
@@ -2396,7 +2397,9 @@ class Vfio:
         self.__vfio_pci = vfio_pci
 
     def get_kernel_parameters(self):
-        return " ".join([Vfio.__get_vfio(), Vfio.__get_mdev(), self.__vfio_pci.get_kernel_parameters()])
+        result = [Vfio.__get_vfio(), Vfio.__get_mdev()]
+        result.extend(self.__vfio_pci.get_kernel_parameters())
+        return result
 
     @staticmethod
     def __get_vfio():
@@ -2720,8 +2723,8 @@ class RegexConstants:
     ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
     ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
 
-    ENCODE_TABLE_FOR_CHARACTER_SET = [(".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
-                                      (")", "\)"), ("$", "\$"), ("-", "\-"), ("\\", "\\\\"), (">", "\>"),
+    ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
+                                      (")", "\)"), ("$", "\$"), ("-", "\-"), (">", "\>"),
                                       ("<", "\<"), ("|", "\|"), ("?", "\?"), ("^", "\^")]
 
     @staticmethod
@@ -2729,22 +2732,25 @@ class RegexConstants:
         return f"(?>{value})"
 
     @staticmethod
-    def to_character_set(character_set):
+    def to_character_set(character_set, is_remove_duplicate=True):
         result = ""
         if isinstance(character_set, list) or isinstance(character_set, set):
             for item in character_set:
                 result += RegexConstants.to_character_set(item)
             result = RegexConstants.to_character_set(result)
         elif isinstance(character_set, str):
-            character_set_as_list = list(set(character_set))
-            character_set_as_list.sort()
-            result = "".join(character_set_as_list)
+            if is_remove_duplicate:
+                character_set_as_list = list(set(character_set))
+                character_set_as_list.sort()
+                result = "".join(character_set_as_list)
+            else:
+                result = character_set
         return result
 
     @staticmethod
-    def character_set_escape(character_set):
+    def character_set_escape(character_set, is_remove_duplicate=True):
         return EscapeLiteral(encode_table=RegexConstants.ENCODE_TABLE_FOR_CHARACTER_SET).encode(
-            RegexConstants.to_character_set(character_set))
+            RegexConstants.to_character_set(character_set, is_remove_duplicate))
 
 
 class NoneFromString:
@@ -2902,7 +2908,7 @@ class ConfigParameterNameParser:
         self.__name_length_max = name_length_max
         self.__is_match_start_of_string = is_match_start_of_string
         self.__underscore_character_set = RegexConstants.character_set_escape(underscore_character_set)
-        self.__subname_separator = RegexConstants.character_set_escape(subname_separator)
+        self.__subname_separator = RegexConstants.character_set_escape(subname_separator, is_remove_duplicate=False)
         self.__subname_count_max = subname_count_max
 
         if self.__name_length_max < self.__NAME_LENGTH_MIN:
@@ -2920,7 +2926,7 @@ class ConfigParameterNameParser:
         start_of_string = "^" if self.__is_match_start_of_string else ""
         result = f"{start_of_string}{begin_capture}{self.__get_regex_template(with_capture=False)}"
         if self.__subname_count_max > 0:
-            result += f"{RegexConstants.atomic_group(f'{self.__subname_separator}{self.__get_regex_template(with_capture)}')}{{0,self.{self.__subname_count_max}}}"
+            result += f"{RegexConstants.atomic_group(f'{self.__subname_separator}{self.__get_regex_template(with_capture)}')}{{0,{self.__subname_count_max}}}"
         return f"{result}{end_capture}"
 
     def get_regex_for_name(self, name):
@@ -3372,7 +3378,6 @@ class ConfigParser:
         return None
 
     def find_all(self, content):
-        print(f"FFFFFFFFFFFFFF {content}")
         print(self.get_regex())
         regex = re.compile(self.get_regex(), re.MULTILINE)
         tmp = regex.findall(content)
@@ -3422,6 +3427,88 @@ class ConfigParser:
     # Проблема https://regex101.com/r/rdVI51/1
     # https://regex101.com/r/YMUFSJ/1
     # https://regex101.com/r/3PLIai/1
+
+
+class GrubLinuxCmdLineParser(ConfigParser):
+    def __init__(self):
+        super().__init__(
+            name_parser=ConfigParameterNameParser(is_match_start_of_string=False, underscore_character_set="_-",
+                                                  subname_separator=".",
+                                                  subname_count_max=1),
+            delimiter_parser=ConfigNameValueDelimiterParser(is_delimiter_optional=True),
+            value_parser=ConfigParameterValueParser(is_match_end_of_string=False))
+
+
+# fixme utopia Add module_blacklist merger
+class GrubLinuxCmdLineSerializer(ShellSerializer):
+    def __init__(self, key_for_merging_list=["module_blacklist", "vfio_pci"], key_modify_table=[("-", "_")]):
+        super().__init__(key_value_separator_table=[
+            {"prefix": "", "separator": "="}], nested_key_value_separator="=",
+            nested_serializer=ShellSerializer(quotes_for_string_value="",
+                                              key_value_separator_table=[
+                                                  {"prefix": "", "separator": "?"}],
+                                              pair_separator=","
+                                              ))
+        self.__key_for_merging_list = key_for_merging_list
+        self.__modify_key_policy = EscapeLiteral(encode_table=key_modify_table)
+
+    def serialize(self, config):
+        config_copy = copy.deepcopy(config)
+        self.__modify_config_keys(config_copy)
+        return super().serialize(config_copy)
+
+    def __modify_config_keys(self, config_ref):
+        if isinstance(config_ref, dict):
+            config_dict_with_new_keys = dict()
+            for key, value in config_ref.items():
+                config_dict_with_new_keys[self.__modify_key_policy.encode(key)] = value
+            config_ref.clear()
+            config_ref.update(config_dict_with_new_keys)
+
+            for key, value in config_ref.items():
+                self.__modify_config_keys(value)
+        elif isinstance(config_ref, list):
+            for item in config_ref:
+                self.__modify_config_keys(item)
+
+    # fixme utopia WIP
+    def __normalize(self, config_ref):
+        if isinstance(config_ref, dict):
+            config_dict_with_new_keys = dict()
+            for key, value in config_ref.items():
+                config_dict_with_new_keys[self.__modify_key_policy.encode(key)] = value
+            config_ref.clear()
+            config_ref.update(config_dict_with_new_keys)
+
+            for key, value in config_ref.items():
+                self.__normalize(value)
+        elif isinstance(config_ref, list):
+            for item in config_ref:
+                self.__normalize(item)
+
+
+
+class UnitTest_GrubLinuxCmdLineSerializer(unittest.TestCase):
+
+    def test_serialize(self):
+        ref_table = {
+            'vfio vfio_pci="1,2,3" module_blacklist="i915,kernel_module,kernel_module2,kernel_module3,kernel_module4" i915.modeset="0" mdev iommu="pt" intel_iommu="on"': [
+                "vfio",
+                {"vfio-pci": ["1", "2", "3"]},
+                {"module-blacklist": ["i915", "kernel_module"]},
+                {"module-blacklist": ["i915", "kernel_module2"]},
+                {"module-blacklist": "kernel_module3"},
+                {"module-blacklist": ["kernel_module4"]},
+                {"i915.modeset": "0"},
+                "mdev",
+                {"iommu": "pt", "intel_iommu": "on"}
+            ]
+        }
+
+        serializer = GrubLinuxCmdLineSerializer()
+        for config_serialized, config in ref_table.items():
+            result = serializer.serialize(config)
+            self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
 
 
 class UnitTest_ConfigParser(unittest.TestCase):
@@ -4466,7 +4553,7 @@ def main():
         # print(os.environ)
         ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
         print(ggg)
-        print(ConfigParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
+        print(GrubLinuxCmdLineParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
 
 
     elif args.command == StartupCrontab.COMMAND:
