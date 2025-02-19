@@ -3471,20 +3471,22 @@ class GrubLinuxCmdLineSerializer(ShellSerializer):
             for item in config_ref:
                 self.__modify_config_keys(item)
 
-    # fixme utopia WIP
-    def __normalize(self, config_ref):
-        if isinstance(config_ref, dict):
-            config_dict_with_new_keys = dict()
-            for key, value in config_ref.items():
-                config_dict_with_new_keys[self.__modify_key_policy.encode(key)] = value
-            config_ref.clear()
-            config_ref.update(config_dict_with_new_keys)
+    # fixme utopia В отдельный класс + тесты
+    # fixme utopia Применить ословаривание только для определённых ключей
+    def __normalize(self, config):
+        result = dict()
+        self.__normalize_recursive(config, result)
+        return result
 
-            for key, value in config_ref.items():
-                self.__normalize(value)
-        elif isinstance(config_ref, list):
-            for item in config_ref:
-                self.__normalize(item)
+    def __normalize_recursive(self, config, result_ref):
+        if isinstance(config, dict):
+            for key, value in config.items():
+                self.__normalize_recursive(value, result_ref[key])
+        elif isinstance(config, list):
+            for item in config:
+                self.__normalize_recursive(item, result_ref)
+        elif isinstance(config, str): # Ключи без значений
+            result_ref[config]=""
 
 
 
@@ -3499,6 +3501,7 @@ class UnitTest_GrubLinuxCmdLineSerializer(unittest.TestCase):
                 {"module-blacklist": ["i915", "kernel_module2"]},
                 {"module-blacklist": "kernel_module3"},
                 {"module-blacklist": ["kernel_module4"]},
+                {"module-blacklist": ["kernel_module3"]},
                 {"i915.modeset": "0"},
                 "mdev",
                 {"iommu": "pt", "intel_iommu": "on"}
