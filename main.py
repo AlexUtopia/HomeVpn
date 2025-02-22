@@ -3747,7 +3747,6 @@ class Grub:
     GRUB_CMDLINE_LINUX = "GRUB_CMDLINE_LINUX"
 
     def __init__(self, grub_config_backup_path, grub_config_file_path=Path("/etc/default/grub")):
-        self.__grub_config_backup_path = grub_config_backup_path
         self.__grub_config_reader = TextConfigReader(grub_config_file_path)
         self.__grub_config_writer = TextConfigWriter(grub_config_file_path,
                                                      last_backup_file_path=grub_config_backup_path)
