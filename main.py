@@ -20,7 +20,7 @@ import os_release
 import randmac
 import unittest
 from crontab import CronTab
-from datetime import datetime
+import datetime
 import pathlib
 import getpass
 
@@ -165,7 +165,27 @@ class Path:
         os.makedirs(path)
 
     def copy_from(self, path):
-        shutil.copyfile(Path(path).get(), self.get())
+        shutil.copy2(str(Path(path)), str(self))
+
+    # fixme utopia backup для файла и для директории
+    def create_backup(self, backup_prefix=f"unused_since_{datetime.datetime.now():%Y-%m-%dT%H_%M_%S_%f%z}_"):
+        if not self.exists():
+            return None
+
+        backup_file_path = self.get_dir_path().join(f"{backup_prefix}{self.get_filename()}")
+        backup_file_path.copy_from(self.get())
+        return backup_file_path
+
+    # fixme utopia backup для файла и для директории
+    def restore_from_backup(self, backup_file_path, is_remove_backup=False):
+        backup_file_path_as_path = Path(backup_file_path)
+        if not backup_file_path_as_path.exists():
+            return False
+
+        self.copy_from(backup_file_path_as_path)
+        if bool(is_remove_backup):
+            os.remove(str(backup_file_path_as_path))
+        return True
 
     def join(self, path):
         return Path(os.path.join(self.get(), path))
@@ -187,6 +207,12 @@ class TextConfigReader:
         self.__config_file_path = Path(config_file_path)
         self.__encoding = str(encoding)
 
+    def __str__(self):
+        return str(self.__config_file_path)
+
+    def __repr__(self):
+        return self.__str__()
+
     def get(self):
         return self.__load_from_config()
 
@@ -202,9 +228,16 @@ class TextConfigReader:
 
 
 class TextConfigWriter:
-    def __init__(self, config_file_path, encoding="utf-8"):
+    def __init__(self, config_file_path, encoding="utf-8", last_backup_file_path=None):
         self.__config_file_path = Path(config_file_path)
         self.__encoding = str(encoding)
+        self.__last_backup_file_path = last_backup_file_path
+
+    def __str__(self):
+        return str(self.__config_file_path)
+
+    def __repr__(self):
+        return self.__str__()
 
     def set(self, data, set_executable=False):
         self.__makedirs()
@@ -215,6 +248,21 @@ class TextConfigWriter:
         if set_executable:
             self.__config_file_path.add_executable()
         return self.__config_file_path
+
+    def set_with_backup(self, data, set_executable=False):
+        if self.__config_file_path.exists():
+            self.__last_backup_file_path = self.__config_file_path.create_backup()
+        self.set(data, set_executable)
+        return self.get_last_backup_file_path()
+
+    def get_last_backup_file_path(self):
+        return self.__last_backup_file_path
+
+    def restore_from_backup(self):
+        if self.__last_backup_file_path is None or not self.__last_backup_file_path.exist():
+            return False
+
+        self.__config_file_path.restore_from_backup(self.get_last_backup_file_path())
 
     def __makedirs(self):
         config_file_dir = os.path.dirname(self.__config_file_path.get())
@@ -2395,10 +2443,12 @@ class VfioPci:
 class Vfio:
     def __init__(self, vfio_pci):
         self.__vfio_pci = vfio_pci
+        self.__iommu = Iommu()
 
     def get_kernel_parameters(self):
         result = [Vfio.__get_vfio(), Vfio.__get_mdev()]
         result.extend(self.__vfio_pci.get_kernel_parameters())
+        result.extend(self.__iommu.get_kernel_parameters())
         return result
 
     @staticmethod
@@ -3363,11 +3413,8 @@ class ConfigParser:
         return self.__from_string.get(self.get_value_as_is(name, content))
 
     def get_value_as_is(self, name, content):
-        print(self.get_regex_for_search_value_by_name(name))
         regex = re.compile(self.get_regex_for_search_value_by_name(name), re.MULTILINE)
         regex_result = regex.search(content)
-
-        print(regex_result)
         if regex_result is None:
             return None
 
@@ -3377,8 +3424,7 @@ class ConfigParser:
 
         return None
 
-    def find_all(self, content):
-        print(self.get_regex())
+    def find_all(self, content, value_as_is=True):
         regex = re.compile(self.get_regex(), re.MULTILINE)
         tmp = regex.findall(content)
         result = dict()
@@ -3389,7 +3435,7 @@ class ConfigParser:
                 value = groups[i]
                 if len(value) > 0:
                     break
-            result.update({name: self.__from_string.get(value)})
+            result[name] = value if value_as_is else self.__from_string.get(value)
         return result
 
     def remove_by_name(self, name, content):
@@ -3429,7 +3475,7 @@ class ConfigParser:
     # https://regex101.com/r/3PLIai/1
 
 
-class GrubLinuxCmdLineParser(ConfigParser):
+class LinuxKernelParamsParser(ConfigParser):
     def __init__(self):
         super().__init__(
             name_parser=ConfigParameterNameParser(is_match_start_of_string=False, underscore_character_set="_-",
@@ -3439,9 +3485,110 @@ class GrubLinuxCmdLineParser(ConfigParser):
             value_parser=ConfigParameterValueParser(is_match_end_of_string=False))
 
 
-# fixme utopia Add module_blacklist merger
-class GrubLinuxCmdLineSerializer(ShellSerializer):
-    def __init__(self, key_for_merging_list=["module_blacklist", "vfio_pci"], key_modify_table=[("-", "_")]):
+class Normalizer:
+    class EmptyValue:
+        pass
+
+    def normalize(self, config):
+        result_normalize = dict()
+        self.__normalize_recursive(config, result_normalize)
+        result = []
+        self.__normalize_recursive2(result_normalize, result)
+        return result
+
+    def __normalize_recursive(self, config, result_ref):
+        if isinstance(config, dict):
+            for key, value in config.items():
+                if not key in result_ref:
+                    result_ref[key] = dict()
+                self.__normalize_recursive(value, result_ref[key])
+        elif isinstance(config, list):
+            for item in config:
+                self.__normalize_recursive(item, result_ref)
+        elif isinstance(config, str):  # Ключи без значений
+            result_ref[config] = Normalizer.EmptyValue()
+
+    def __normalize_recursive2(self, config, result_ref):
+        if isinstance(config, dict):
+            result = []
+            for key, value in config.items():
+                if isinstance(value, Normalizer.EmptyValue):
+                    result.append(key)
+                else:
+                    tmp = []
+                    self.__normalize_recursive2(value, tmp)
+                    if len(tmp) == 0:
+                        result.append({key: {}})
+                    elif len(tmp) == 1:
+                        result.append({key: tmp[0]})
+                    elif len(tmp) > 1:
+                        result.append({key: tmp})
+            if len(result) == 1:
+                result_ref.append(result[0])
+            elif len(result) > 1:
+                result_ref.extend(result)
+
+
+class UnitTest_Normalizer(unittest.TestCase):
+    def test_normalize(self):
+        ref_table = [
+            (
+                [
+                    "vfio",
+                    {"vfio-pci": ["1", "2", "3", "4"]},
+                    {"module-blacklist": ["i915", "kernel_module",
+                                          "kernel_module2",
+                                          "kernel_module3",
+                                          "kernel_module4"]}, {"i915.modeset": "0"},
+                    "mdev", {"iommu": "pt"}, {"intel_iommu": "on"}
+                ],
+
+                [
+                    "vfio",
+                    {"vfio-pci": ["1", "2", "3"]},
+                    {"vfio-pci": ["1", "2", "3", ["4"]]},
+                    {"module-blacklist": [
+                        "i915",
+                        "kernel_module"]},
+                    {"module-blacklist": [
+                        "i915",
+                        "kernel_module2"]},
+                    {"module-blacklist": "kernel_module3"},
+                    {"module-blacklist": [
+                        "kernel_module4"]},
+                    {"module-blacklist": [
+                        "kernel_module3"]},
+                    {"i915.modeset": "0"},
+                    "mdev",
+                    {"iommu": "pt",
+                     "intel_iommu": "on"}
+                ]
+            ),
+
+            (
+                [
+                    {"key": {"subkey": ["value1", "value2"]}},
+                    {"key2": [{"subkey2": {}}, {"subkey3": {}}]}
+                ],
+
+                {"key": [{"subkey": "value1"}, {"subkey": "value2"}, {"subkey": "value1"}],
+                 "key2": {"subkey2": {}, "subkey3": []}}
+            ),
+
+            (
+                ["key"],
+                "key"
+            )
+        ]
+
+        normalizer = Normalizer()
+        for config_normalized, config in ref_table:
+            result = normalizer.normalize(config)
+            self.assertEqual(result, config_normalized, f"\n\nRESULT\n{result}\n\nREF\n{config_normalized}")
+
+
+class LinuxKernelParamsSerializer(ShellSerializer):
+    def __init__(self, key_modify_table=[("-", "_")]):
         super().__init__(key_value_separator_table=[
             {"prefix": "", "separator": "="}], nested_key_value_separator="=",
             nested_serializer=ShellSerializer(quotes_for_string_value="",
@@ -3449,13 +3596,13 @@ class GrubLinuxCmdLineSerializer(ShellSerializer):
                                                   {"prefix": "", "separator": "?"}],
                                               pair_separator=","
                                               ))
-        self.__key_for_merging_list = key_for_merging_list
         self.__modify_key_policy = EscapeLiteral(encode_table=key_modify_table)
+        self.__normalizer = Normalizer()
 
     def serialize(self, config):
         config_copy = copy.deepcopy(config)
         self.__modify_config_keys(config_copy)
-        return super().serialize(config_copy)
+        return super().serialize(self.__normalizer.normalize(config_copy))
 
     def __modify_config_keys(self, config_ref):
         if isinstance(config_ref, dict):
@@ -3471,26 +3618,8 @@ class GrubLinuxCmdLineSerializer(ShellSerializer):
             for item in config_ref:
                 self.__modify_config_keys(item)
 
-    # fixme utopia В отдельный класс + тесты
-    # fixme utopia Применить ословаривание только для определённых ключей
-    def __normalize(self, config):
-        result = dict()
-        self.__normalize_recursive(config, result)
-        return result
 
-    def __normalize_recursive(self, config, result_ref):
-        if isinstance(config, dict):
-            for key, value in config.items():
-                self.__normalize_recursive(value, result_ref[key])
-        elif isinstance(config, list):
-            for item in config:
-                self.__normalize_recursive(item, result_ref)
-        elif isinstance(config, str): # Ключи без значений
-            result_ref[config]=""
-
-
-
-class UnitTest_GrubLinuxCmdLineSerializer(unittest.TestCase):
+class UnitTest_LinuxKernelParamsSerializer(unittest.TestCase):
 
     def test_serialize(self):
         ref_table = {
@@ -3508,7 +3637,7 @@ class UnitTest_GrubLinuxCmdLineSerializer(unittest.TestCase):
             ]
         }
 
-        serializer = GrubLinuxCmdLineSerializer()
+        serializer = LinuxKernelParamsSerializer()
         for config_serialized, config in ref_table.items():
             result = serializer.serialize(config)
             self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
@@ -3615,17 +3744,45 @@ class Power:
 
 
 class Grub:
+    GRUB_CMDLINE_LINUX = "GRUB_CMDLINE_LINUX"
+
+    def __init__(self, grub_config_backup_path, grub_config_file_path=Path("/etc/default/grub")):
+        self.__grub_config_backup_path = grub_config_backup_path
+        self.__grub_config_reader = TextConfigReader(grub_config_file_path)
+        self.__grub_config_writer = TextConfigWriter(grub_config_file_path,
+                                                     last_backup_file_path=grub_config_backup_path)
+        self.__linux_kernel_params_parser = LinuxKernelParamsParser()
+        self.__linux_kernel_params_serializer = LinuxKernelParamsSerializer()
+        self.__normalizer = Normalizer()
+        self.__escape_literal = EscapeLiteral()
+
     def update(self):
         subprocess.check_call(["update-grub"], shell=True)
 
-    def set_cmd_line_linux(self, cmd):
-        return False
+    def append_cmd_line_linux(self, cmd_line_linux):
+        grub_config = self.__grub_config_reader.get()
 
-    def revert_cmd_line_linux(self):
-        return False
+        grub_cmdline_linux = ConfigParser().get_value_as_is(self.GRUB_CMDLINE_LINUX, grub_config)
+        if grub_cmdline_linux is None:
+            print(
+                f"[Grub] {self.GRUB_CMDLINE_LINUX} parameter NOT FOUND in {self.__grub_config_reader}:\n{grub_config}")
+            return None
 
+        linux_kernel_params = self.__normalizer.normalize(
+            self.__linux_kernel_params_parser.find_all(grub_cmdline_linux))
+        linux_kernel_params.extend(cmd_line_linux)
+        new_linux_kernel_params_serialized = self.__linux_kernel_params_serializer.serialize(linux_kernel_params)
 
-# GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt vfio mdev vfio_pci.ids=8086:9a49,8086:a082,8086:a0c8,8086:a0a3,8086:a0a4 i915.modeset=0 video=efifb:off"
+        # fixme utopia add_or_update не реализован
+        ConfigParser().add_or_update(self.GRUB_CMDLINE_LINUX,
+                                     self.__escape_literal.encode(new_linux_kernel_params_serialized))
+
+        print(f"[Grub] Config before:\n{grub_config}\nConfig after:\n{grub_config}")
+        return self.__grub_config_writer.set_with_backup(grub_config)
+
+    def restore_from_backup(self):
+        return self.__grub_config_writer.restore_from_backup()
+
 
 class StartupCrontab:
     COMMAND = "startup_run_all_scripts"
@@ -3774,14 +3931,15 @@ class Startup:
 
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
-                 qemu_vga_pci_passthrough=None, initiate_vga_pci_passthrough=False):
+                 initiate_vga_pci_passthrough=False,
+                 qemu_vga_pci_passthrough=None, grub_config_backup_path=None):
         self.__vm_name = vm_name
         self.__project_config = project_config
         self.__startup = startup
-        self.__block_internet_access = block_internet_access
+        self.__block_internet_access = bool(block_internet_access)
+        self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
         self.__qemu_vga_pci_passthrough = qemu_vga_pci_passthrough
-        self.__initiate_vga_pci_passthrough = initiate_vga_pci_passthrough
-        self.__grub = Grub()
+        self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
         self.__serializer = ShellSerializer()
 
     def run(self):
@@ -3790,7 +3948,6 @@ class VmRunner:
                 self.after_reboot()
             else:
                 self.before_reboot()
-                # self.__run()
         else:
             print("FFFFFFFFFFFFFFFFFFFFFFFFF")
             # self.__run()
@@ -3816,13 +3973,15 @@ class VmRunner:
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
 
         vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
-        print(vfio_pci.get_kernel_parameters())
-        print(vfio_pci.get_qemu_parameters())
+        vfio = Vfio(vfio_pci)
 
-        # self.__grub.set_cmd_line_linux("iommu on")
-        # self.__grub.update()
+        grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
+        if grub_config_backup_path is None:
+            print("Make grub config backup FAIL")
+            return
+        self.__grub.update()
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": ""}]])}'
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
         print(command_line)
@@ -3830,7 +3989,7 @@ class VmRunner:
 
     def after_reboot(self):
         self.__run()
-        self.__grub.revert_cmd_line_linux()
+        self.__grub.restore_from_backup()
         self.__grub.update()
         Power.reboot()
 
@@ -4481,10 +4640,12 @@ def main():
     parser_vm_run.add_argument("vm_name", type=str, help="Virtual machine name")
     parser_vm_run.add_argument("--bi", help="Block internet access, but not the local network",
                                action='store_true')
-    parser_vm_run.add_argument("--QemuVgaPciPassthrough", type=QemuVgaPciPassthrough,
-                               help="PCI VGA list for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--pp", help="Initiate VGA PCI passthrough to virtual machine",
                                action='store_true')
+    parser_vm_run.add_argument("--QemuVgaPciPassthrough", type=QemuVgaPciPassthrough,
+                               help="PCI VGA list for passthrough to virtual machine. Not for human use")
+    parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
+                               help="Grub config backup file path. Not for human use")
 
     parser_vm_ssh_fwd = subparsers.add_parser("vm_ssh_fwd", help="Port forwarding for SSH for virtual machine")
     parser_vm_ssh_fwd.add_argument("vm_name", type=str, help="Virtual machine name")
@@ -4542,7 +4703,8 @@ def main():
 
     elif args.command == "vm_run":
         VmRunner(args.vm_name, project_config=project_config, block_internet_access=args.bi,
-                 qemu_vga_pci_passthrough=args.QemuVgaPciPassthrough, initiate_vga_pci_passthrough=args.pp).run()
+                 initiate_vga_pci_passthrough=args.pp, qemu_vga_pci_passthrough=args.QemuVgaPciPassthrough,
+                 grub_config_backup_path=args.grub_config_backup_path).run()
 
     elif args.command == "vm_ssh_fwd":
         vm_registry = VmRegistry(project_config.get_vm_registry_path())
@@ -4553,10 +4715,9 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        # print(os.environ)
         ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
         print(ggg)
-        print(GrubLinuxCmdLineParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
+        print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
 
 
     elif args.command == StartupCrontab.COMMAND:
