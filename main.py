@@ -258,11 +258,11 @@ class TextConfigWriter:
     def get_last_backup_file_path(self):
         return self.__last_backup_file_path
 
-    def restore_from_backup(self):
+    def restore_from_backup(self, is_remove_backup=False):
         if self.__last_backup_file_path is None or not self.__last_backup_file_path.exist():
             return False
 
-        self.__config_file_path.restore_from_backup(self.get_last_backup_file_path())
+        self.__config_file_path.restore_from_backup(self.get_last_backup_file_path(), is_remove_backup=is_remove_backup)
 
     def __makedirs(self):
         config_file_dir = os.path.dirname(self.__config_file_path.get())
@@ -3006,6 +3006,9 @@ class ConfigNameValueDelimiterParser:
             return f"(?>{self.__delimiter}|)"
         return f"{self.__delimiter}"
 
+    def get_delimiter(self):
+        return self.__delimiter
+
 
 class ConfigParameterValueParser:
     __DOUBLE_QUOTE = "\""
@@ -3403,11 +3406,12 @@ key1_3="None"'''
 
 class ConfigParser:
     def __init__(self, name_parser=ConfigParameterNameParser(), delimiter_parser=ConfigNameValueDelimiterParser(),
-                 value_parser=ConfigParameterValueParser(), from_string=FromString()):
+                 value_parser=ConfigParameterValueParser(), from_string=FromString(), escape_literal=EscapeLiteral()):
         self.__name_parser = name_parser
         self.__delimiter_parser = delimiter_parser
         self.__value_parser = value_parser
         self.__from_string = from_string
+        self.__escape_literal = escape_literal
 
     def get_value(self, name, content):
         return self.__from_string.get(self.get_value_as_is(name, content))
@@ -3443,8 +3447,25 @@ class ConfigParser:
         regex = re.compile(self.get_regex_for_remove_by_name(name), re.MULTILINE)
         content = regex.sub(empty_line, content)
 
-    def add_or_update(self, name, content, with_quotes=True):
-        print(name)
+    def add_or_update(self, name, value, content, with_quotes=True):
+        value = self.__escape_literal.encode(value)
+        value = f'"{value}"' if with_quotes else str(value)
+
+        result = ""
+        last_end = 0
+        for match in re.finditer(self.get_regex_for_search_value_by_name(name), content, flags=re.MULTILINE):
+            for i in range(1, match.lastindex + 1):
+                if match.group(i) is not None:
+                    result += content[last_end:match.start(i)] + value
+                    last_end = match.end(i)
+        result += content[last_end:]
+        if last_end > 0:
+            return result
+        if len(result) > 0 and result[-1] != "\n":
+            result += "\n"
+
+        result += f"{name}{self.__delimiter_parser.get_delimiter()}{value}"
+        return result
 
     def get_regex(self):
         return self.__get_regex_template(self.__name_parser.get_regex())
@@ -3454,25 +3475,73 @@ class ConfigParser:
 
     def get_regex_for_remove_by_name(self, name):
         result = self.__get_regex_template(self.__name_parser.get_regex_for_name(name), with_value_capture=False)
-        return fr"({result})"
+        return f"({result})"
 
     def __get_regex_template(self, name_template, with_value_capture=True):
-        return fr"{name_template}{self.__delimiter_parser.get_regex()}{self.__value_parser.get_regex(with_value_capture)}"
+        return f"{name_template}{self.__delimiter_parser.get_regex()}{self.__value_parser.get_regex(with_value_capture)}"
 
-    # ^([a-zA-Z_][\w]*)="([\s\S]*[^\\])"[\t ]*$|^([a-zA-Z_][\w]*)='([\s\S]*[^\\])'[\t ]*$|^([a-zA-Z_][\w]*)=([^"\t ].*)$
-    # ^([a-zA-Z_][\w]*)="([\s\S]*?[^\\])"|^([a-zA-Z_][\w]*)='([\s\S]*?[^\\])'|^([a-zA-Z_][\w]*)=([^"\t ].*)$
-    # ^([a-zA-Z_][\w]*)="((?:[^"]*(?:\\|\\")*)*)"[\t ]*$
-    # str.replace(r"\\", "")
-    # str.replace(r"\\"", "")
-    # str.replace(r"\\r", "")
-    # str.replace(r"\\r\n", "")
-    # str.replace(r"\\n\r", "")
-    # str.replace(r"\\n", "")
 
-    # https://regex101.com/r/Dr9Dyt/1
-    # Проблема https://regex101.com/r/rdVI51/1
-    # https://regex101.com/r/YMUFSJ/1
-    # https://regex101.com/r/3PLIai/1
+class UnitTest_ConfigParser(unittest.TestCase):
+
+    def test_parse(self):
+        ref_table = {
+            "a=b\nc=d\nhello=123\nstring=\"this is string in double quotes\"\nis_none=nOnE": {"a": "b", "c": "d",
+                                                                                              "hello": 123,
+                                                                                              "string": "this is string in double quotes",
+                                                                                              "is_none": None}
+        }
+
+        config_parser = ConfigParser()
+        for content, key_value in ref_table.items():
+            for key, value in key_value.items():
+                self.assertEqual(config_parser.get_value(key, content), value)
+
+    def test_add_or_update(self):
+        ref_table = [
+            {
+                "key": "key",
+                "new_value": "\'new_value\n\r\"",
+                "test_config": "key=value\nkey2=""\nkey=\"value2\"",
+                "with_quotes": True,
+                "expected_result": "key=\"\\\'new_value\\n\\r\\\"\"\nkey2=""\nkey=\"\\\'new_value\\n\\r\\\"\""
+            },
+            {
+                "key": "key",
+                "new_value": "hello",
+                "test_config": "",
+                "with_quotes": True,
+                "expected_result": "key=\"hello\""
+            },
+            {
+                "key": "key",
+                "new_value": "hello",
+                "test_config": "key2=value2",
+                "with_quotes": True,
+                "expected_result": "key2=value2\nkey=\"hello\""
+            },
+            {
+                "key": "key",
+                "new_value": "hello",
+                "test_config": "key2=value2\n",
+                "with_quotes": True,
+                "expected_result": "key2=value2\nkey=\"hello\""
+            },
+            {
+                "key": "key",
+                "new_value": "hello",
+                "test_config": "key2=value2\n  ",
+                "with_quotes": False,
+                "expected_result": "key2=value2\n  \nkey=hello"
+            }
+        ]
+
+        config_parser = ConfigParser()
+        for item in ref_table:
+            result = config_parser.add_or_update(item["key"], item["new_value"], item["test_config"],
+                                                 item["with_quotes"])
+            expected_result = item["expected_result"]
+            self.assertEqual(result,
+                             expected_result, f"\n\nRESULT\n{result}\n\nREF\n{expected_result}")
 
 
 class LinuxKernelParamsParser(ConfigParser):
@@ -3643,22 +3712,6 @@ class UnitTest_LinuxKernelParamsSerializer(unittest.TestCase):
             self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
 
 
-class UnitTest_ConfigParser(unittest.TestCase):
-
-    def test_parse(self):
-        ref_table = {
-            "a=b\nc=d\nhello=123\nstring=\"this is string in double quotes\"\nis_none=nOnE": {"a": "b", "c": "d",
-                                                                                              "hello": 123,
-                                                                                              "string": "this is string in double quotes",
-                                                                                              "is_none": None}
-        }
-
-        config_parser = ConfigParser()
-        for content, key_value in ref_table.items():
-            for key, value in key_value.items():
-                self.assertEqual(config_parser.get_value(key, content), value)
-
-
 class ShellConfig:
     __SPACE_SYMBOLS = "[\t ]"
     __SPACE_SYMBOLS_ZERO_OR_MORE = f"{__SPACE_SYMBOLS}*"
@@ -3750,37 +3803,39 @@ class Grub:
         self.__grub_config_reader = TextConfigReader(grub_config_file_path)
         self.__grub_config_writer = TextConfigWriter(grub_config_file_path,
                                                      last_backup_file_path=grub_config_backup_path)
-        self.__linux_kernel_params_parser = LinuxKernelParamsParser()
         self.__linux_kernel_params_serializer = LinuxKernelParamsSerializer()
-        self.__normalizer = Normalizer()
-        self.__escape_literal = EscapeLiteral()
+        self.__config_parser = ConfigParser()
 
     def update(self):
+        print("[Grub] Update")
         subprocess.check_call(["update-grub"], shell=True)
 
     def append_cmd_line_linux(self, cmd_line_linux):
         grub_config = self.__grub_config_reader.get()
 
-        grub_cmdline_linux = ConfigParser().get_value_as_is(self.GRUB_CMDLINE_LINUX, grub_config)
+        grub_cmdline_linux = self.__config_parser.get_value(self.GRUB_CMDLINE_LINUX, grub_config)
         if grub_cmdline_linux is None:
             print(
                 f"[Grub] {self.GRUB_CMDLINE_LINUX} parameter NOT FOUND in {self.__grub_config_reader}:\n{grub_config}")
-            return None
+            grub_cmdline_linux = ""
 
-        linux_kernel_params = self.__normalizer.normalize(
-            self.__linux_kernel_params_parser.find_all(grub_cmdline_linux))
-        linux_kernel_params.extend(cmd_line_linux)
-        new_linux_kernel_params_serialized = self.__linux_kernel_params_serializer.serialize(linux_kernel_params)
+        # fixme utopia Прибавляем новые аргументы простой конкатенацией, т.к. в общем случае в GRUB_CMDLINE_LINUX могут
+        #  находиться переменные ($VAR / ${VAR}) или вычислимые выражения (`command substitution` / $(command substitution)),
+        #  т.к. конфигурация grub представляет собой bash файл
+        #  Пытаться делать объединение через разбор параметров GRUB_CMDLINE_LINUX считаю нецелесообразным
+        new_linux_kernel_params_serialized = grub_cmdline_linux + " " + self.__linux_kernel_params_serializer.serialize(
+            cmd_line_linux)
 
-        # fixme utopia add_or_update не реализован
-        ConfigParser().add_or_update(self.GRUB_CMDLINE_LINUX,
-                                     self.__escape_literal.encode(new_linux_kernel_params_serialized))
+        grub_config_modified = self.__config_parser.add_or_update(self.GRUB_CMDLINE_LINUX,
+                                                                  new_linux_kernel_params_serialized,
+                                                                  grub_config)
 
-        print(f"[Grub] Config before:\n{grub_config}\nConfig after:\n{grub_config}")
-        return self.__grub_config_writer.set_with_backup(grub_config)
+        print(f"[Grub] Config before:\n{grub_config}\n\nConfig after:\n{grub_config_modified}\n")
+        return self.__grub_config_writer.set_with_backup(grub_config_modified)
 
     def restore_from_backup(self):
-        return self.__grub_config_writer.restore_from_backup()
+        print(f"[Grub] Restore from backup \"{self.__grub_config_writer.get_last_backup_file_path()}\"")
+        return self.__grub_config_writer.restore_from_backup(is_remove_backup=True)
 
 
 class StartupCrontab:
@@ -3879,6 +3934,7 @@ class StartupCrontab:
             print(f"[Startup] script {startup_script_file_path} ALREADY EXISTS")
             return False
 
+        print(f"[Startup] Create script \"{startup_script_file_path}\":\n{startup_script_content}\n")
         TextConfigWriter(startup_script_file_path).set(startup_script_content, set_executable=True)
         return True
 
