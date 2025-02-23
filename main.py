@@ -65,8 +65,13 @@ class Logger:
             return self.__logger
 
         def __get_log_file_path(self):
-            return os.path.join(self.__get_current_dir_path(),
+            return os.path.join(self.__get_logging_dir_path(),
                                 f"{datetime.datetime.now():%Y-%m-%d}_{self.__LOG_NAME}.log")
+
+        def __get_logging_dir_path(self):
+            result = os.path.join(self.__get_current_dir_path(), "logs")
+            os.makedirs(result)
+            return result
 
         def __get_current_dir_path(self):
             return os.path.dirname(os.path.realpath(__file__))
