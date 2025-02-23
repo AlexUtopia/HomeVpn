@@ -41,6 +41,41 @@ import iptc  # fixme utopia Перейти на nftables, iptables остави�
 import socket
 import platform
 import cpuinfo
+import logging
+import logging.handlers
+
+
+class Logger:
+    class LoggerImpl:
+        __LOG_NAME = "HomeVpn"
+
+        def __init__(self):
+            self.__logger = logging.getLogger(self.__LOG_NAME)
+            self.__logger.setLevel(logging.DEBUG)
+            file_handler = logging.handlers.TimedRotatingFileHandler(self.__get_log_file_path(),
+                                                                     when='midnight', encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(
+                logging.Formatter(
+                    fmt='{asctime} {levelname: <8} [{process}][{thread}] <{funcName}:{lineno}>\t\t{message}',
+                    style='{'))
+            self.__logger.addHandler(file_handler)
+
+        def get_logger(self):
+            return self.__logger
+
+        def __get_log_file_path(self):
+            return os.path.join(self.__get_current_dir_path(),
+                                f"{datetime.datetime.now():%Y-%m-%d}_{self.__LOG_NAME}.log")
+
+        def __get_current_dir_path(self):
+            return os.path.dirname(os.path.realpath(__file__))
+
+    __instance = LoggerImpl()
+
+    @staticmethod
+    def instance():
+        return Logger.__instance.get_logger()
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -378,8 +413,8 @@ class StunClient2:
 
         nat_type, my_ip_address, my_port = stun.get_ip_info(source_port=self.__local_port,
                                                             stun_host=stun_server_hostname, stun_port=stun_server_port)
-        print(
-            "NAT type: {}\nUDP hole punching: {}".format(nat_type, self.__nat_adapted_for_udp_hole_punching(nat_type)))
+        Logger.instance().debug(
+            f"NAT type: {nat_type}\nUDP hole punching: {self.__nat_adapted_for_udp_hole_punching(nat_type)}")
         return IpAddressAndPort(my_ip_address, my_port)
 
     @staticmethod
@@ -392,7 +427,7 @@ class StunClient2:
         result = urllib.parse.urlparse(self.__stun_server_address, allow_fragments=False)
         hostname = result.hostname
         port = self.STUN_PORT_DEFAULT if result.port is None else int(result.port)
-        print("STUN server: {}:{}".format(hostname, port))
+        Logger.instance().debug(f"STUN server: {hostname}:{port}")
         return hostname, port
 
 
@@ -424,12 +459,12 @@ class OpenVpnServer:
             [self.OPEN_VPN, "--config", self.__config_file_path, "--daemon"],
             text=True
         )
-        print("OpenVpn server return: {}".format(result))
+        Logger.instance().debug(f"[OpenVpnServer] Return: {result}")
 
         if result.returncode:
-            raise Exception("OpenVpn server start FAIL: {}".format(result.stderr))
+            raise Exception(f"[OpenVpnServer] Start FAIL: {result.stderr}")
 
-        print("OpenVpn server start OK")
+        Logger.instance().debug("[OpenVpnServer] Start OK")
 
 
 class OpenVpnClient:
@@ -444,12 +479,12 @@ class OpenVpnClient:
             capture_output=True,
             text=True
         )
-        print("OpenVpn client return: {}".format(result))
+        Logger.instance().debug(f"[OpenVpnClient] Return: {result}")
 
         if result.returncode:
-            raise Exception("OpenVpn client start FAIL: {}".format(result.stderr))
+            raise Exception(f"[OpenVpnClient] Start FAIL: {result.stderr}")
 
-        print("OpenVpn client start OK")
+        Logger.instance().debug("[OpenVpnClient] Start OK")
 
 
 class TelegramBotConfig(JsonConfigReader):
@@ -4004,25 +4039,24 @@ class VmRunner:
             else:
                 self.before_reboot()
         else:
-            print("FFFFFFFFFFFFFFFFFFFFFFFFF")
-            # self.__run()
+            self.__run()
 
     def before_reboot(self):
         pci_list = Pci.get_list()
 
         pci_vga_list = pci_list.get_vga_list()
         if len(pci_vga_list) == 0:
-            print("PCI VGA NOT FOUND")
+            Logger.instance().error("[Vm] PCI VGA NOT FOUND")
             return
 
         if len(pci_vga_list) > 1:
-            print("Many VGA!!!")  # fixme utopia Дать выбрать какой VGA пробрасывать
+            Logger.instance().error("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
             return
 
         iommu_group = pci_vga_list[0].iommu_group
 
         if iommu_group is None:
-            print("VGA does not include to iommu group")
+            Logger.instance().error("[Vm] VGA does not include to iommu group")
             return
 
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
@@ -4032,21 +4066,22 @@ class VmRunner:
 
         grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
         if grub_config_backup_path is None:
-            print("Make grub config backup FAIL")
+            Logger.instance().error("[Vm] Make grub config backup FAIL")
             return
         self.__grub.update()
 
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        print(command_line)
         # Power.reboot()
 
     def after_reboot(self):
-        self.__run()
-        self.__grub.restore_from_backup()
-        self.__grub.update()
-        Power.reboot()
+        try:
+            self.__run()
+        finally:
+            self.__grub.restore_from_backup()
+            self.__grub.update()
+            # Power.reboot()
 
     def __run(self):
         network_bridge = NetworkBridge(self.__project_config.get_server_name(),
@@ -4280,7 +4315,6 @@ class QemuVgaPciPassthrough:
         if isinstance(vfio_pci, VfioPci):
             self.__vfio_pci = vfio_pci
         elif isinstance(vfio_pci, str):
-            print(vfio_pci)
             self.__vfio_pci = VfioPci.from_string(vfio_pci)
         else:
             raise Exception(f"[QemuVgaPciPassthrough] vfio_pci TYPE MISMATCH: {type(vfio_pci)}")
@@ -4292,7 +4326,7 @@ class QemuVgaPciPassthrough:
         return self.__str__()
 
     def get_qemu_parameters(self):
-        return self.__vfio_pci.get_get_qemu_parameters()
+        return self.__vfio_pci.get_qemu_parameters()
 
 
 # fixme utopia Обеспечить возможность установки win11
@@ -4326,7 +4360,7 @@ class VirtualMachine:
         self.__tpm.start()
 
         command_line = self.__command_line()
-        print(command_line)
+        Logger.instance().debug(f"[Vm] {command_line}")
         subprocess.check_call(command_line, shell=True)
         self.__tpm.close()
 
@@ -4770,9 +4804,10 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
-        print(ggg)
-        print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
+        Logger.instance().error("FFFF")
+        # ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
+        # print(ggg)
+        # print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
 
 
     elif args.command == StartupCrontab.COMMAND:
