@@ -3813,8 +3813,10 @@ class Power:
     @staticmethod
     def reboot():
         if CurrentOs.is_linux():
+            Logger.instance().warning("[Power] reboot!!!")
             Power.__reboot_linux()
         elif CurrentOs.is_windows():
+            Logger.instance().warning("[Power] reboot!!!")
             Power.__reboot_windows()
         else:
             Logger.instance().warning("[Power] reboot not supported")
@@ -4082,6 +4084,8 @@ class VmRunner:
     def after_reboot(self):
         try:
             self.__run()
+        except Exception as ex:
+            Logger.instance().error(f"[Vm] Run after reboot FAIL: {ex}")
         finally:
             self.__grub.restore_from_backup()
             self.__grub.update()
