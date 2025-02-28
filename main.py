@@ -4082,6 +4082,10 @@ class VmRunner:
         Power.reboot()
 
     def after_reboot(self):
+        sleep_sec = 30
+        # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
+        Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
+        time.sleep(sleep_sec)
         try:
             self.__run()
         except Exception as ex:
