@@ -2455,7 +2455,13 @@ class VfioPci:
     def get_kernel_parameters(self):
         if len(self.__pci_list) == 0:
             return []
-        return [{"vfio_pci.ids": pci.get_id() for pci in self.__pci_list}]
+
+        result = [{"vfio_pci.ids": pci.get_id() for pci in self.__pci_list}]
+
+        for pci in self.__pci_list:
+            result.extend(pci.get_kernel_parameters())
+        return result
+
 
     def get_qemu_parameters(self):
         result = []
@@ -2494,7 +2500,7 @@ class VgaPciIntel(Pci):
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
         result = super().get_kernel_parameters()
-        result.extend([{"i915.modeset": 0}, {"video": "efifb:off"}])
+        result.extend([{"i915.modeset": "0"}, {"video": "efifb:off"}])
         return result
 
     def get_vfio_pci_options_table(self):
