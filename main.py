@@ -69,7 +69,7 @@ class Logger:
 
         def __get_logging_dir_path(self):
             result = self.__get_current_dir_path() / "logs"
-            result.mkdir(parents=True)
+            result.mkdir(parents=True, exist_ok=True)
             return result
 
         def __get_current_dir_path(self):
@@ -298,7 +298,7 @@ class TextConfigWriter:
         return self.__last_backup_file_path
 
     def restore_from_backup(self, is_remove_backup=False):
-        if self.__last_backup_file_path is None or not self.__last_backup_file_path.exist():
+        if self.__last_backup_file_path is None or not self.__last_backup_file_path.exists():
             return False
 
         self.__config_file_path.restore_from_backup(self.get_last_backup_file_path(), is_remove_backup=is_remove_backup)
@@ -1473,6 +1473,7 @@ class DaemonManagerBase:
 
         self.__find_and_kill_target_processes()
         self._close_impl()
+        self.__command_line = None
 
     def clear_at_exit(self):
         try:
@@ -1635,7 +1636,7 @@ class NetworkBridge:
         self.__dns_dhcp_provider.start()
 
     def __clear_bridge_dns_dhcp(self):
-        self.__dns_dhcp_provider.stop()
+        self.__dns_dhcp_provider.close()
 
     def __get_ip_address_and_mask(self):
         ip_address = self.__bridge_ip_address_and_mask.ip
@@ -3848,7 +3849,8 @@ class Grub:
         #  находиться переменные ($VAR / ${VAR}) или вычислимые выражения (`command substitution` / $(command substitution)),
         #  т.к. конфигурация grub представляет собой bash файл
         #  Пытаться делать объединение через разбор параметров GRUB_CMDLINE_LINUX считаю нецелесообразным
-        new_linux_kernel_params_serialized = grub_cmdline_linux + " " + self.__linux_kernel_params_serializer.serialize(
+        separator = "" if len(grub_cmdline_linux) == 0 else " "
+        new_linux_kernel_params_serialized = grub_cmdline_linux + separator + self.__linux_kernel_params_serializer.serialize(
             cmd_line_linux)
 
         grub_config_modified = self.__config_parser.add_or_update(self.GRUB_CMDLINE_LINUX,
@@ -4069,7 +4071,7 @@ class VmRunner:
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        # Power.reboot()
+        Power.reboot()
 
     def after_reboot(self):
         try:
@@ -4077,7 +4079,7 @@ class VmRunner:
         finally:
             self.__grub.restore_from_backup()
             self.__grub.update()
-            # Power.reboot()
+            Power.reboot()
 
     def __run(self):
         network_bridge = NetworkBridge(self.__project_config.get_server_name(),
