@@ -65,16 +65,15 @@ class Logger:
             return self.__logger
 
         def __get_log_file_path(self):
-            return os.path.join(self.__get_logging_dir_path(),
-                                f"{datetime.datetime.now():%Y-%m-%d}_{self.__LOG_NAME}.log")
+            return self.__get_logging_dir_path() / f"{datetime.datetime.now():%Y-%m-%d}_{self.__LOG_NAME}.log"
 
         def __get_logging_dir_path(self):
-            result = os.path.join(self.__get_current_dir_path(), "logs")
-            os.makedirs(result)
+            result = self.__get_current_dir_path() / "logs"
+            result.mkdir(parents=True)
             return result
 
         def __get_current_dir_path(self):
-            return os.path.dirname(os.path.realpath(__file__))
+            return pathlib.Path(__file__).resolve().parent
 
     __instance = LoggerImpl()
 
@@ -419,7 +418,7 @@ class StunClient2:
         nat_type, my_ip_address, my_port = stun.get_ip_info(source_port=self.__local_port,
                                                             stun_host=stun_server_hostname, stun_port=stun_server_port)
         Logger.instance().debug(
-            f"NAT type: {nat_type}\nUDP hole punching: {self.__nat_adapted_for_udp_hole_punching(nat_type)}")
+            f"[StunClient] NAT type: {nat_type}\nUDP hole punching: {self.__nat_adapted_for_udp_hole_punching(nat_type)}")
         return IpAddressAndPort(my_ip_address, my_port)
 
     @staticmethod
@@ -432,7 +431,7 @@ class StunClient2:
         result = urllib.parse.urlparse(self.__stun_server_address, allow_fragments=False)
         hostname = result.hostname
         port = self.STUN_PORT_DEFAULT if result.port is None else int(result.port)
-        Logger.instance().debug(f"STUN server: {hostname}:{port}")
+        Logger.instance().debug(f"[StunClient] STUN server: {hostname}:{port}")
         return hostname, port
 
 
@@ -446,10 +445,10 @@ class MyExternalIpAddressAndPort:
             try:
                 stun_client = StunClient2(stun_server_address, self.__local_port)
                 result = stun_client.get_my_ip_address_and_port()
-                print("My external IP address and port: {}".format(result))
+                Logger.instance().debug(f"[MyExternalIpAddressAndPort] {result}")
                 return result
             except Exception as ex:
-                print("[WARNING] Get my IP address and port FAIL (but we continue): {}".format(ex))
+                Logger.instance().warning(f"[MyExternalIpAddressAndPort] FAIL (but we continue): {ex}")
         raise Exception("My external IP address and port NOT FOUND")
 
 
@@ -507,7 +506,7 @@ class TelegramClient:
 
     def send_message(self, message):
         with urllib.request.urlopen(self.__get_send_message_url(), data=self.__get_data(message)) as f:
-            print("Telegram send message: {}".format(f.read().decode(self.ENCODING)))
+            Logger.instance().debug(f"[TelegramClient] Send message: {f.read().decode(self.ENCODING)}")
 
     # https://core.telegram.org/bots/api#senddocument
     def send_file(self, file_path):
@@ -515,7 +514,7 @@ class TelegramClient:
         files = {'document': (_file_path.get_filename(), open(_file_path.get(), 'rb'), "multipart/form-data")}
         response = requests.post(self.__get_send_document_url(), data={"chat_id": self.__config["chat_id"]},
                                  files=files)
-        print("Telegram send document: {}".format(response.content))
+        Logger.instance().debug(f"[TelegramClient] Send document: {response.content}")
 
     def __get_send_message_url(self):
         return self.__get_url("sendMessage")
@@ -603,9 +602,10 @@ class OpenVpnConfig:
     def get_or_default_internet_network_interface(internet_network_interface_from_config):
         if internet_network_interface_from_config is None:
             result = NetworkInterface.get_internet_if()
-            print("Internet network interface: {}".format(result))
+            Logger.instance().debug(f"[OpenVpnConfig] Internet network interface: {result}")
             return result
-        print("Internet network interface SET MANUALLY: {}".format(internet_network_interface_from_config))
+        Logger.instance().debug(
+            f"[OpenVpnConfig] Internet network interface SET MANUALLY: {internet_network_interface_from_config}")
         return NetworkInterface(internet_network_interface_from_config)
 
     def get_local_network_interface(self):
@@ -618,9 +618,9 @@ class OpenVpnConfig:
     def get_or_default_local_network_interface(local_network_interface):
         if local_network_interface is None:
             result = NetworkInterface.get_internet_if()
-            print("Local network interface: {}".format(result))
+            Logger.instance().debug(f"[OpenVpnConfig] Local network interface: {result}")
             return result
-        print("Local network interface SET MANUALLY: {}".format(local_network_interface))
+        Logger.instance().debug(f"[OpenVpnConfig] Local network interface SET MANUALLY: {local_network_interface}")
         return NetworkInterface(local_network_interface)
 
     def get_dns_config_dir(self):
@@ -1083,7 +1083,7 @@ class BridgeFirewall:
         try:
             self.clear()
         except Exception as ex:
-            print("FFF: {}".format(ex))
+            Logger.instance().error(f"[BridgeFirewall] FAIL: {ex}")
 
     def __setup_filter_bridge_to_internet(self, clear=False):
         # sudo iptables -t filter -A FORWARD -i {self.__bridge_name} -o {self.__internet_if_name} -j ACCEPT
@@ -1103,7 +1103,8 @@ class BridgeFirewall:
         else:
             chain.insert_rule(rule)
         table.commit()
-        print(iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False))
+        Logger.instance().debug(
+            f"[BridgeFirewall] Table FILTER after setup {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
 
     def __setup_nat_postrouting_masquerade(self, clear=False):
         # sudo iptables -t nat -A POSTROUTING -o {self.__internet_if_name} -j MASQUERADE
@@ -1129,7 +1130,8 @@ class BridgeFirewall:
         else:
             chain.insert_rule(rule)
         table.commit()
-        print(iptc.easy.dump_table(iptc.Table.NAT, ipv6=False))
+        Logger.instance().debug(
+            f"[BridgeFirewall] Table NAT after setup {iptc.easy.dump_table(iptc.Table.NAT, ipv6=False)}")
 
     def __setup_filter_internet_to_bridge(self, clear=False):
         # sudo iptables -t filter -A FORWARD -i {self.__internet_if_name} -o {self.__bridge_name} -m state --state RELATED,ESTABLISHED -j ACCEPT
@@ -1153,7 +1155,8 @@ class BridgeFirewall:
         else:
             chain.insert_rule(rule)
         table.commit()
-        print(iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False))
+        Logger.instance().debug(
+            f"[BridgeFirewall] Table FILTER after setup {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
 
 
 # https://en.wikipedia.org/wiki/Hostname
@@ -1314,7 +1317,7 @@ class VmRegistry:
                 result.get_image_path()))
 
         command_line = self.__create_image_command_line(result, image_size_in_gib)
-        print(command_line)
+        Logger.instance().debug(f"[VmRegistry] Create image cmd: {command_line}")
         subprocess.check_call(command_line, shell=True)
         self.__add_to_registry(result)
         self.__save_registry()
@@ -1448,7 +1451,9 @@ class ResolvConf:
 
 
 class DaemonManagerBase:
-    def __init__(self):
+    def __init__(self, label, action):
+        self.__label = label
+        self.__action = action
         self.__command_line = None
         atexit.register(self.clear_at_exit)
 
@@ -1459,7 +1464,7 @@ class DaemonManagerBase:
         self._start_impl()
         self.__command_line = str(self._build_command_line())
 
-        print(self.__command_line)
+        Logger.instance().debug(f"[{self.__label}] {self.__action} cmd: {self.__command_line}")
         subprocess.check_call(self.__command_line, shell=True)
 
     def close(self):
@@ -1472,13 +1477,13 @@ class DaemonManagerBase:
     def clear_at_exit(self):
         try:
             self.close()
-        except Exception:
-            return
+        except Exception as ex:
+            Logger.instance().error(f"[{self.__label}] FAIL: {ex}")
 
     def __find_and_kill_target_processes(self):
         for process in psutil.process_iter():
             if self.__compare_cmd_line(process.cmdline()):
-                print("KILL {}".format(process))
+                Logger.instance().debug(f"[{self.__label}] KILL: {process}")
                 process.kill()
 
     def __compare_cmd_line(self, psutil_process_cmdline):
@@ -1493,43 +1498,31 @@ class DaemonManagerBase:
 # Сгенерировать MAC адрес
 # Внимательно посмотреть на опцию --dhcp-host - она позволяет биндить mac address на hostname
 # Генерируем рандомный mac адрес https://stackoverflow.com/questions/8484877/mac-address-generator-in-python
-class DnsDhcpProvider:
+class DnsDhcpProvider(DaemonManagerBase):
     __HOST_EXTENSION = ".host"
 
     def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf()):
+        super().__init__(label="DnsDhcpProvider", action="Start")
         self.__interface = interface
         self.__dhcp_host_dir = Path(dhcp_host_dir)
         self.__resolv_conf = resolv_conf
-        self.__dnsmasq_command_line = str()
         self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
-        atexit.register(self.stop)
 
-    def start(self):
-        if self.__dnsmasq_command_line:
-            return
-
+    def _start_impl(self):
         self.__make_dhcp_host_dir()
         self.__interface_ip_interface = self.__interface.get_ipv4_interface_if()
         if self.__interface_ip_interface is None:
             raise Exception("Target interface \"{}\" ipv4 address NOT ASSIGN".format(self.__interface))
-        self.__dnsmasq_command_line = self.__build_dnsmasq_command_line()
-
         self.__add_dnsmasq_to_system_dsn_servers_list()
-        print(self.__dnsmasq_command_line)
-        subprocess.check_call(self.__dnsmasq_command_line, shell=True)
 
-    def stop(self):
-        if not self.__dnsmasq_command_line:
-            return
-
-        self.__find_and_kill_target_dnsmasq_processes()
+    def _close_impl(self):
         self.__remove_dnsmasq_from_system_dsn_servers_list()
 
     def add_host(self, vm_meta_data):
         TextConfigWriter(self.__get_dhcp_host_file_path(vm_meta_data)).set(
             self.__build_dhcp_host_file_content(vm_meta_data))
 
-    def __build_dnsmasq_command_line(self):
+    def _build_command_line(self):
         return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir=\"{}\" {}".format(
             self.__interface, self.__dhcp_host_dir, self.__get_dhcp_range_parameter())
 
@@ -1545,17 +1538,6 @@ class DnsDhcpProvider:
     @staticmethod
     def __build_dhcp_host_file_content(vm_meta_data):
         return "{},{}".format(vm_meta_data.get_mac_address_as_string(), vm_meta_data.get_name())
-
-    def __find_and_kill_target_dnsmasq_processes(self):
-        for process in psutil.process_iter():
-            if self.__compare_cmd_line(process.cmdline()):
-                print("KILL {}".format(process))
-                process.kill()
-
-    def __compare_cmd_line(self, psutil_process_cmdline):
-        normalize_command_line = " ".join(shlex.split(self.__dnsmasq_command_line))
-        psutil_command_line = " ".join(psutil_process_cmdline)
-        return psutil_command_line.endswith(normalize_command_line)
 
     def __get_dhcp_range_parameter(self):
         ip_address_start, ip_address_end = self.__get_dhcp_range()
@@ -1590,7 +1572,8 @@ class NetworkBridge:
 
         if internet_network_interface is not None:
             self.__internet_network_interface = NetworkInterface(internet_network_interface)
-            print("Internet network interface SET MANUALLY: {}".format(self.__internet_network_interface))
+            Logger.instance().debug(
+                f"[NetworkBridge] Internet network interface SET MANUALLY: {self.__internet_network_interface}")
         else:
             self.__internet_network_interface = None
 
@@ -1614,7 +1597,7 @@ class NetworkBridge:
             self.__setup_firewall()
             self.__setup_bridge_dns_dhcp()
         except Exception as ex:
-            print("Setup VM bridge FAIL: {}".format(ex))
+            Logger.instance().error(f"[NetworkBridge] FAIL: {ex}")
             self.close()
 
     def close(self):
@@ -1638,7 +1621,7 @@ class NetworkBridge:
     def __setup_firewall(self):
         if self.__internet_network_interface is None:
             self.__internet_network_interface = NetworkInterface.get_internet_if()
-        print("Internet network interface: {}".format(self.__internet_network_interface))
+        Logger.instance().debug(f"[NetworkBridge] Internet network interface: {self.__internet_network_interface}")
         BridgeFirewall(self.__interface, self.__internet_network_interface, self.__block_internet_access).setup()
 
     def __clear_firewall(self):
@@ -1646,7 +1629,7 @@ class NetworkBridge:
             BridgeFirewall(self.__interface, self.__internet_network_interface,
                            self.__block_internet_access).clear_at_exit()
         except Exception as ex:
-            print("[WARNING] Clear firewall FAIL: {}".format(ex))
+            Logger.instance().error(f"[NetworkBridge] FAIL: {ex}")
 
     def __setup_bridge_dns_dhcp(self):
         self.__dns_dhcp_provider.start()
@@ -1738,7 +1721,7 @@ class Virtio:
     def get_win_drivers(self):
         win_drivers_iso_path = self.__get_win_drivers_iso_path()
         if win_drivers_iso_path.exists():
-            print("Virtio win drivers was downloaded: \"{}\"".format(win_drivers_iso_path))
+            Logger.instance().debug(f"[Virtio] Win drivers was downloaded: \"{win_drivers_iso_path}\"")
             return win_drivers_iso_path
 
         self.__download_win_drivers(win_drivers_iso_path)
@@ -1755,9 +1738,10 @@ class Virtio:
     def __download_win_drivers(self, win_drivers_iso_path):
         virtio_win_drivers_url = self.__project_config.get_virtio_win_drivers_url()
 
-        print("Virtio win drivers DOWNLOAD: {} --> \"{}\"".format(virtio_win_drivers_url, win_drivers_iso_path))
+        Logger.instance().debug(
+            f"[Virtio] Win drivers DOWNLOAD: {virtio_win_drivers_url} --> \"{win_drivers_iso_path}\"")
         urllib.request.urlretrieve(virtio_win_drivers_url, str(win_drivers_iso_path))
-        print("Virtio win drivers DOWNLOAD: OK")
+        Logger.instance().debug(f"[Virtio] Win drivers DOWNLOAD: OK")
 
 
 class UdpWatchdog:
@@ -1781,7 +1765,7 @@ class UdpWatchdog:
         try:
             self.__send_upd_packet_to_my_external_ip_address_and_port()
         except Exception as ex:
-            print("[Watchdog] Send UDP packet FAIL: {}".format(ex))
+            Logger.instance().error(f"[Watchdog] Send UDP packet FAIL: {ex}")
             return False
 
         time.sleep(1)
@@ -1791,8 +1775,8 @@ class UdpWatchdog:
         try:
             if self.__is_init:
                 self.__setup_firewall(clear=True)
-        except Exception:
-            return
+        except Exception as ex:
+            Logger.instance().error(f"[Watchdog] FAIL: {ex}")
 
     def __send_upd_packet_to_my_external_ip_address_and_port(self):
         ip_address = self.__my_external_ip_address_and_port.get_ip_address()
@@ -1828,14 +1812,15 @@ class UdpWatchdog:
         else:
             chain.insert_rule(rule)
         table.commit()
-        print(iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False))
+        Logger.instance().debug(
+            f"[Watchdog] Table FILTER after setup {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
 
     def __check_drop_packets_counter(self):
         drop_packets_counter = self.__get_drop_packets_counter()
         if drop_packets_counter is None:
             # fixme utopia По идее здесь надо заново настраивать файервол
-            print("[Watchdog] drop_packets_counter is null: {}".format(
-                iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)))
+            Logger.instance().debug(
+                f"[Watchdog] drop_packets_counter is null: {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
             self.__setup_firewall()
             return False
 
@@ -1845,8 +1830,8 @@ class UdpWatchdog:
 
         # fixme utopia Нужно выравнивать счётчики (т.е. self.__counter = drop_packets_counter) если разница между ними константна некоторое время
 
-        print("[Watchdog] send_packets={} | drop_packets={} | {}".format(self.__counter, drop_packets_counter,
-                                                                         "GOOD" if result else "BAD"))
+        Logger.instance().debug(
+            f'[Watchdog] send_packets={self.__counter} | drop_packets={drop_packets_counter} | {"GOOD" if result else "BAD"}')
         return result
 
     def __get_drop_packets_counter(self):
@@ -2682,25 +2667,24 @@ class VmTcpForwarding:
 
     def add(self):
         if not self.__is_valid_input_port():
-            print("TCP port forwarding DISCARDED")
+            Logger.instance().debug(f"[VmTcpForwarding] TCP port forwarding DISCARDED")
             return
-        print("TCP port forwarding for vm \"{}\": {}:{} --> {}".format(self.__vm_meta_data.get_name(),
-                                                                       self.__local_network_if, self.__input_port,
-                                                                       self.__get_vm_destination_ip_address_and_port()))
+        Logger.instance().debug(
+            f"[VmTcpForwarding] TCP port forwarding for vm \"{self.__vm_meta_data.get_name()}\": {self.__local_network_if}:{self.__input_port} --> {self.__get_vm_destination_ip_address_and_port()}")
         self.__iptables_rule()
 
     def add_with_retry(self):
         sleep_sec = 5
         for i in range(VmTcpForwarding.RETRY_COUNT):
             try:
-                print("{} Try TCP port forwarding".format(i + 1))
+                Logger.instance().debug(f"[VmTcpForwarding] {i + 1} Try TCP port forwarding")
                 self.add()
-                print("TCP port forwarding OK")
+                Logger.instance().debug(f"[VmTcpForwarding] TCP port forwarding OK")
                 return
             except Exception as ex:
-                print(ex)
+                Logger.instance().warning(f"[VmTcpForwarding] FAIL: {ex}")
                 if i == VmTcpForwarding.RETRY_COUNT - 1:
-                    print("TCP port forwarding ATTEMPTS OVER")
+                    Logger.instance().error(f"[VmTcpForwarding] TCP port forwarding ATTEMPTS OVER")
                     return
                 time.sleep(sleep_sec)
 
@@ -2712,8 +2696,8 @@ class VmTcpForwarding:
     def clear_at_exit(self):
         try:
             self.clear()
-        except Exception:
-            return
+        except Exception as ex:
+            Logger.instance().error(f"[VmTcpForwarding] FAIL: {ex}")
 
     def __is_valid_input_port(self):
         return TcpPort.is_valid(self.__input_port)
@@ -2744,6 +2728,8 @@ class VmTcpForwarding:
         else:
             chain.insert_rule(rule)
         table.commit()
+        Logger.instance().debug(
+            f"[VmTcpForwarding] Table NAT after setup {iptc.easy.dump_table(iptc.Table.NAT, ipv6=False)}")
 
     def __get_vm_destination_ip_address_and_port(self):
         return IpAddressAndPort(self.__vm_meta_data.get_ip_address_strong(), self.__output_port)
@@ -2959,31 +2945,30 @@ class StringFromString:
 class FromString:
     def get(self, target_string):
         if not isinstance(target_string, str):
-            print(f"Parse NOT STRING: {target_string}")
+            Logger.instance().debug(f"[FromString] Parse NOT STRING: {target_string}")
             return target_string
 
         is_good, result_as_string = StringFromString(target_string).get()
         if is_good:
-            print(f"Parse as string: {target_string} / {result_as_string}")
+            Logger.instance().debug(f"[FromString] Parse as string: {target_string} / {result_as_string}")
             return result_as_string
 
         is_good, result = NumberFromString(result_as_string).get()
         if is_good:
-            print(f"Parse as number: {result} / {result_as_string}")
+            Logger.instance().debug(f"[FromString] Parse as number: {result} / {result_as_string}")
             return result
 
         is_good, result = BoolFromString(result_as_string).get()
         if is_good:
-            print(f"Parse as bool: {result} / {result_as_string}")
+            Logger.instance().debug(f"[FromString] Parse as bool: {result} / {result_as_string}")
             return result
 
         is_good, result = NoneFromString(result_as_string).get()
         if is_good:
-            print(f"Parse as none: {result} / {result_as_string}")
+            Logger.instance().debug(f"[FromString] Parse as none: {result} / {result_as_string}")
             return result
 
-        print(f"Parse UNKNOWN: {result_as_string}")
-
+        Logger.instance().debug(f"[FromString] Parse UNKNOWN: {result_as_string}")
         return result_as_string
 
 
@@ -3825,7 +3810,7 @@ class Power:
         elif CurrentOs.is_windows():
             Power.__reboot_windows()
         else:
-            print("[Power] reboot not supported")
+            Logger.instance().warning("[Power] reboot not supported")
 
     @staticmethod
     def __reboot_linux():
@@ -3847,7 +3832,7 @@ class Grub:
         self.__config_parser = ConfigParser()
 
     def update(self):
-        print("[Grub] Update")
+        Logger.instance().debug("[Grub] Update")
         subprocess.check_call(["update-grub"], shell=True)
 
     def append_cmd_line_linux(self, cmd_line_linux):
@@ -3855,8 +3840,8 @@ class Grub:
 
         grub_cmdline_linux = self.__config_parser.get_value(self.GRUB_CMDLINE_LINUX, grub_config)
         if grub_cmdline_linux is None:
-            print(
-                f"[Grub] {self.GRUB_CMDLINE_LINUX} parameter NOT FOUND in {self.__grub_config_reader}:\n{grub_config}")
+            Logger.instance().warning(
+                f"[Grub] {self.GRUB_CMDLINE_LINUX} parameter NOT FOUND in \"{self.__grub_config_reader}\":\n{grub_config}")
             grub_cmdline_linux = ""
 
         # fixme utopia Прибавляем новые аргументы простой конкатенацией, т.к. в общем случае в GRUB_CMDLINE_LINUX могут
@@ -3870,11 +3855,12 @@ class Grub:
                                                                   new_linux_kernel_params_serialized,
                                                                   grub_config)
 
-        print(f"[Grub] Config before:\n{grub_config}\n\nConfig after:\n{grub_config_modified}\n")
+        Logger.instance().debug(f"[Grub] Config before:\n{grub_config}\n\nConfig after:\n{grub_config_modified}\n")
         return self.__grub_config_writer.set_with_backup(grub_config_modified)
 
     def restore_from_backup(self):
-        print(f"[Grub] Restore from backup \"{self.__grub_config_writer.get_last_backup_file_path()}\"")
+        Logger.instance().debug(
+            f"[Grub] Restore from backup \"{self.__grub_config_writer.get_last_backup_file_path()}\"")
         return self.__grub_config_writer.restore_from_backup(is_remove_backup=True)
 
 
@@ -3964,17 +3950,17 @@ class StartupCrontab:
             if next(cron.find_comment(self.SUPERVISOR_SCRIPT_ID), None) is not None:
                 return
 
-            print(f"[Startup] register supervisor script: {command}")
+            Logger.instance().debug(f"[Startup] Register supervisor script: {command}")
             job = cron.new(command=command, comment=self.SUPERVISOR_SCRIPT_ID)
             job.every_reboot()
 
     def __create_startup_script_file(self, startup_script_name, startup_script_content):
         startup_script_file_path = self.__get_startup_script_file_path(startup_script_name)
         if self.__is_startup_script_file_exists(startup_script_name):
-            print(f"[Startup] script {startup_script_file_path} ALREADY EXISTS")
+            Logger.instance().debug(f"[Startup] Script \"{startup_script_file_path}\" ALREADY EXISTS")
             return False
 
-        print(f"[Startup] Create script \"{startup_script_file_path}\":\n{startup_script_content}\n")
+        Logger.instance().debug(f"[Startup] Create script \"{startup_script_file_path}\":\n{startup_script_content}\n")
         TextConfigWriter(startup_script_file_path).set(startup_script_content, set_executable=True)
         return True
 
@@ -3985,7 +3971,12 @@ class StartupCrontab:
         if startup_script_name.is_background_executing:
             command += ' &'
 
-        subprocess.run(command, shell=True, text=True)
+        Logger.instance().debug(f"[Startup] Run script \"{startup_script_file_path}\": {command}")
+        try:
+            result = subprocess.run(command, shell=True, text=True)
+            Logger.instance().debug(f'[Startup] Run script result {"FAIL" if result.returncode else "OK"}: {result}')
+        except Exception as ex:
+            Logger.instance().debug(f"[Startup] Run script FAIL: {ex}")
 
     def __get_startup_script_file_path(self, startup_script_name):
         return self.__get_startup_script_dir().join(startup_script_name.get())
@@ -4147,7 +4138,7 @@ class TpmEmulator(DaemonManagerBase):
             ))
 
     def __init__(self, vm_meta_data, is_tpm2_0=True, log_level=20):
-        super().__init__()
+        super().__init__(label="TpmEmulator", action="Start")
         self.__vm_meta_data = vm_meta_data
         self.__is_tpm2_0 = is_tpm2_0
         self.__log_level = log_level
@@ -4365,7 +4356,7 @@ class VirtualMachine:
         self.__tpm.start()
 
         command_line = self.__command_line()
-        Logger.instance().debug(f"[Vm] {command_line}")
+        Logger.instance().debug(f"[Vm] Run cmd: {command_line}")
         subprocess.check_call(command_line, shell=True)
         self.__tpm.close()
 
