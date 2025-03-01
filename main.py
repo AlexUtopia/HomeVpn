@@ -2462,7 +2462,6 @@ class VfioPci:
             result.extend(pci.get_kernel_parameters())
         return result
 
-
     def get_qemu_parameters(self):
         result = []
         for pci in self.__pci_list:
@@ -2503,9 +2502,11 @@ class VgaPciIntel(Pci):
         result.extend([{"i915.modeset": "0"}, {"video": "efifb:off"}])
         return result
 
+    # https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
+    # https://www.reddit.com/r/VFIO/comments/i9dbyp/this_is_how_i_managed_to_passthrough_my_igd/
     def get_vfio_pci_options_table(self):
         result = super().get_vfio_pci_options_table()
-        result.update({"display": "auto", "x-vga": "on", "x-igd-opregion": "on"})
+        result.update({"display": "auto", "x-vga": "on", "addr": "02.0"})  # , "x-igd-opregion": "on"
         return result
 
     def get_qemu_parameters(self):
@@ -3861,6 +3862,8 @@ class Grub:
         new_linux_kernel_params_serialized = grub_cmdline_linux + separator + self.__linux_kernel_params_serializer.serialize(
             cmd_line_linux)
 
+        new_linux_kernel_params_serialized += " modules_load=vfio,vfio_pci"
+
         grub_config_modified = self.__config_parser.add_or_update(self.GRUB_CMDLINE_LINUX,
                                                                   new_linux_kernel_params_serialized,
                                                                   grub_config)
@@ -3983,7 +3986,7 @@ class StartupCrontab:
 
         Logger.instance().debug(f"[Startup] Run script \"{startup_script_file_path}\": {command}")
         try:
-            result = subprocess.run(command, shell=True, text=True)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
             Logger.instance().debug(f'[Startup] Run script result {"FAIL" if result.returncode else "OK"}: {result}')
         except Exception as ex:
             Logger.instance().debug(f"[Startup] Run script FAIL: {ex}")
@@ -4059,8 +4062,9 @@ class VmRunner:
             Logger.instance().error("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
             return
 
+        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
+        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
         iommu_group = pci_vga_list[0].iommu_group
-
         if iommu_group is None:
             Logger.instance().error("[Vm] VGA does not include to iommu group")
             return
@@ -4086,6 +4090,9 @@ class VmRunner:
         # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
         Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
         time.sleep(sleep_sec)
+        dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
+        Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
+        Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
         try:
             self.__run()
         except Exception as ex:
@@ -4373,7 +4380,8 @@ class VirtualMachine:
 
         command_line = self.__command_line()
         Logger.instance().debug(f"[Vm] Run cmd: {command_line}")
-        subprocess.check_call(command_line, shell=True)
+        result = subprocess.run(command_line, shell=True, capture_output=True, text=True)
+        Logger.instance().debug(f"[Vm] Run result:\nSTDOUT\n{result.stdout}\nSTDERR\n{result.stderr}\n")
         self.__tpm.close()
 
     def __command_line(self):
@@ -4438,8 +4446,8 @@ class VirtualMachine:
         return "-monitor telnet:127.0.0.1:55555,server,nowait"
 
     def __cpu(self):
-        # CPU который поддерживается Windows 11
-        return "-cpu Icelake-Server-v5 -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
+        # CPU который поддерживается Windows 11 Icelake-Server-v5
+        return "-cpu host -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
 
     def __get_qemu_vga_command_line(self):
         return self.__serializer.serialize(self.__qemu_vga.get_qemu_parameters())
