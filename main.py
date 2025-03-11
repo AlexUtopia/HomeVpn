@@ -2353,7 +2353,7 @@ class Pci:
         return f"{self.vendor_id:04x}:{self.device_id:04x}"
 
     def get_kernel_parameters(self):
-        return []
+        return [{"module_blacklist": self.kernel_module}]
 
     def get_vfio_pci_options_table(self):
         return {"multifunction": "on"}
@@ -2490,7 +2490,7 @@ class VfioPci:
         if len(self.__pci_list) == 0:
             return []
 
-        result = [{"vfio_pci.ids": pci.get_id() for pci in self.__pci_list}]
+        result = [{"vfio_pci.ids": [pci.get_id() for pci in self.__pci_list]}]
 
         for pci in self.__pci_list:
             result.extend(pci.get_kernel_parameters())
@@ -2533,7 +2533,7 @@ class VgaPciIntel(Pci):
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
         result = super().get_kernel_parameters()
-        result.extend([{"module_blacklist": f"{self.kernel_module},snd_hda_intel,snd_hda_codec_hdmi"},
+        result.extend([{"module_blacklist": f"snd_hda_intel,snd_hda_codec_hdmi"},
                        {"video": "efifb:off,vesafb:off,vesa:off,simplefb:off"}, {"l1tf": "full,force"},
                        {"kvm.ignore_msrs": "1"}, {"vfio_io_iommu_type1.allow_unsafe_interrupts": "1"},
                        {"initcall_blacklist": "sysfb_init"}])  # {"i915.modeset": "0"}
@@ -4937,6 +4937,8 @@ def main():
             print("GGGGGG")
         else:
             print("FFFFFFF")
+
+        print([{"vfio_pci.ids": [pci.get_id() for pci in pci_list]}])
 
         # ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
         # print(ggg)
