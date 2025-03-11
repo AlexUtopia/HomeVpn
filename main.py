@@ -2165,6 +2165,17 @@ class PciClassCode(int):
     BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
     BASE_CLASS_VGA = 0x03
 
+    BASE_CLASS_SERIAL_BUS_CONTROLLER = 0x0C
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB = 0x03
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI = 0x00
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_OHCI = 0x10
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_EHCI = 0x20
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI = 0x30
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_WITHOUT_SPECIFIC_PROG_IF = 0x80
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_DEVICE = 0xFE
+
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_SMBUS = 0x05
+
     REGEX = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
 
     def __new__(cls, class_code):
@@ -2181,6 +2192,16 @@ class PciClassCode(int):
     def is_vga(self):
         return self.get_base_class() == self.BASE_CLASS_VGA or (
                 self.get_base_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
+
+    def is_usb(self):
+        return self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER and self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB
+
+    def is_usb_host_controller(self, prog_if):
+        return self.is_usb() and (
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI or
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_OHCI or
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_EHCI or
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI)
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
@@ -2372,7 +2393,7 @@ class Pci:
                 if pci.iommu_group in result:
                     result[pci.iommu_group].append(pci)
                 else:
-                    result.update({pci.iommu_group: Pci.PciList([pci])})
+                    result[pci.iommu_group] = Pci.PciList([pci])
             return result
 
         def get_pci_list_by_iommu_group(self, iommu_group):
@@ -2387,6 +2408,19 @@ class Pci:
                 if pci.class_code.is_vga():
                     result.append(pci)
             return result
+
+        def get_usb_host_list(self):
+            result = Pci.PciList()
+            for pci in self:
+                if pci.class_code.is_usb_host_controller(0):
+                    result.append(pci)
+            return result
+
+        def is_each_device_in_its_own_iommu_group(self, pci_list_for_checking):
+            for pci in pci_list_for_checking:
+                if len(self.get_pci_list_by_iommu_group(pci.iommu_group)) != 1:
+                    return False
+            return True
 
     @staticmethod
     def get_list():
@@ -2499,20 +2533,28 @@ class VgaPciIntel(Pci):
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
         result = super().get_kernel_parameters()
-        result.extend([{"i915.modeset": "0"}, {"video": "efifb:off"}])
+        result.extend([{"module_blacklist": f"{self.kernel_module},snd_hda_intel,snd_hda_codec_hdmi"},
+                       {"video": "efifb:off,vesafb:off,vesa:off,simplefb:off"}, {"l1tf": "full,force"},
+                       {"kvm.ignore_msrs": "1"}, {"vfio_io_iommu_type1.allow_unsafe_interrupts": "1"},
+                       {"initcall_blacklist": "sysfb_init"}])  # {"i915.modeset": "0"}
         return result
 
     # https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
     # https://www.reddit.com/r/VFIO/comments/i9dbyp/this_is_how_i_managed_to_passthrough_my_igd/
     def get_vfio_pci_options_table(self):
         result = super().get_vfio_pci_options_table()
-        result.update({"display": "auto", "x-vga": "on", "addr": "02.0"})  # , "x-igd-opregion": "on"
+        # result.update({"display": "auto", "x-vga": "on"})  # , "x-igd-opregion": "on" , "addr": "02.0"
+        result.update(
+            {"x-igd-gms": "9", "addr": "0x02", "rombar": "0", "romfile": "/home/utopia/vgabios.bin", "display": "auto",
+             "x-vga": "on", "x-igd-opregion": "on"})  # ,
         return result
 
     def get_qemu_parameters(self):
         result = super().get_qemu_parameters()
         if len(result) > 0:
             result.append({"-vga": "none"})
+            # result.append({"-machine": "pc-i440fx-2.2"})
+            # result.append({"-device": { "vfio-pci-igd-lpc-bridge": { "addr": "0x1f" } }})
         return result
 
     @staticmethod
@@ -2664,7 +2706,7 @@ class TcpPort:
 
 
 class VmTcpForwarding:
-    RETRY_COUNT = 40
+    RETRY_COUNT = 30
 
     def __init__(self, vm_meta_data, local_network_if, input_port, output_port):
         self.__vm_meta_data = vm_meta_data
@@ -3862,7 +3904,7 @@ class Grub:
         new_linux_kernel_params_serialized = grub_cmdline_linux + separator + self.__linux_kernel_params_serializer.serialize(
             cmd_line_linux)
 
-        new_linux_kernel_params_serialized += " modules_load=vfio,vfio_pci"
+        new_linux_kernel_params_serialized += " modules_load=vfio,vfio_pci,vfio_virqfd,vfio_iommu_type1"
 
         grub_config_modified = self.__config_parser.add_or_update(self.GRUB_CMDLINE_LINUX,
                                                                   new_linux_kernel_params_serialized,
@@ -4026,107 +4068,6 @@ class Startup:
 
     def run_all_scripts(self):
         self.__startup_impl.run_all_scripts()
-
-
-class VmRunner:
-    def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
-                 initiate_vga_pci_passthrough=False,
-                 qemu_vga_pci_passthrough=None, grub_config_backup_path=None):
-        self.__vm_name = vm_name
-        self.__project_config = project_config
-        self.__startup = startup
-        self.__block_internet_access = bool(block_internet_access)
-        self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
-        self.__qemu_vga_pci_passthrough = qemu_vga_pci_passthrough
-        self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
-        self.__serializer = ShellSerializer()
-
-    def run(self):
-        if self.__initiate_vga_pci_passthrough:
-            if self.__qemu_vga_pci_passthrough:
-                self.after_reboot()
-            else:
-                self.before_reboot()
-        else:
-            self.__run()
-
-    def before_reboot(self):
-        pci_list = Pci.get_list()
-
-        pci_vga_list = pci_list.get_vga_list()
-        if len(pci_vga_list) == 0:
-            Logger.instance().error("[Vm] PCI VGA NOT FOUND")
-            return
-
-        if len(pci_vga_list) > 1:
-            Logger.instance().error("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
-            return
-
-        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
-        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
-        iommu_group = pci_vga_list[0].iommu_group
-        if iommu_group is None:
-            Logger.instance().error("[Vm] VGA does not include to iommu group")
-            return
-
-        pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
-
-        vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
-        vfio = Vfio(vfio_pci)
-
-        grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
-        if grub_config_backup_path is None:
-            Logger.instance().error("[Vm] Make grub config backup FAIL")
-            return
-        self.__grub.update()
-
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
-
-        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        Power.reboot()
-
-    def after_reboot(self):
-        sleep_sec = 30
-        # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
-        Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
-        time.sleep(sleep_sec)
-        dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
-        Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
-        Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
-        try:
-            self.__run()
-        except Exception as ex:
-            Logger.instance().error(f"[Vm] Run after reboot FAIL: {ex}")
-        finally:
-            self.__grub.restore_from_backup()
-            self.__grub.update()
-            Power.reboot()
-
-    def __run(self):
-        network_bridge = NetworkBridge(self.__project_config.get_server_name(),
-                                       self.__project_config.get_vm_bridge_ip_address_and_mask(),
-                                       self.__project_config.get_dns_config_dir(),
-                                       self.__project_config.get_internet_network_interface(),
-                                       block_internet_access=self.__block_internet_access)
-
-        vm_registry = VmRegistry(self.__project_config.get_vm_registry_path())
-        vm_meta_data = vm_registry.get_with_verifying(self.__vm_name)
-
-        local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
-            self.__project_config.get_local_network_interface())
-
-        vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
-                                            vm_meta_data.get_ssh_forward_port())
-        vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
-                                            vm_meta_data.get_rdp_forward_port())
-        tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
-                                                                 vm_rdp_forwarding.add_with_retry()))
-        tcp_forwarding_thread.start()
-
-        virtio = Virtio(self.__project_config)
-        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=self.__qemu_vga_pci_passthrough)
-        vm.run()
-        tcp_forwarding_thread.join()
 
 
 # https://qemu-project.gitlab.io/qemu/specs/tpm.html
@@ -4302,9 +4243,15 @@ class QemuUefi:
 
 
 class QemuBios:
+    def __init__(self, chipset=None):
+        self.__chipset = chipset
+
     # SeaBIOS используется по умолчанию, дополнительные аргументы не требуются
     def get_qemu_parameters(self):
-        return []
+        if self.__chipset is None:
+            return []
+        else:
+            return [{"-machine": self.__chipset}]
 
 
 # https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
@@ -4358,6 +4305,14 @@ class QemuVgaPciPassthrough:
 # - 4 GB RAM
 # - CPU Icelake-Server-v5
 class VirtualMachine:
+    QEMU_PLATFORM_I440FX_BIOS = "i440fx+bios"
+    QEMU_PLATFORM_Q35_BIOS = "q35+bios"
+    QEMU_PLATFORM_Q35_UEFI = "q35+uefi"
+    QEMU_PLATFORM_Q35_UEFI_SECURE = "q35+uefi-secure"
+
+    QEMU_PLATFORM_LIST = [QEMU_PLATFORM_I440FX_BIOS, QEMU_PLATFORM_Q35_BIOS, QEMU_PLATFORM_Q35_UEFI,
+                          QEMU_PLATFORM_Q35_UEFI_SECURE]
+
     def __init__(self, network_bridge,
                  vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
                  path_to_iso_installer=None, virtio=None, tpm=None, qemu_serial=None, qemu_logging=None,
@@ -4367,7 +4322,7 @@ class VirtualMachine:
         self.__vm_meta_data = vm_meta_data
         self.__path_to_iso_installer = path_to_iso_installer
         self.__virtio = virtio
-        self.__tpm = TpmEmulator(vm_meta_data) if tpm is None else tpm
+        self.__tpm = tpm
         self.__qemu_serial = QemuSerial(vm_meta_data) if qemu_serial is None else qemu_serial
         self.__qemu_logging = QemuLogging(vm_meta_data) if qemu_logging is None else qemu_logging
         self.__qemu_bios = QemuUefi(vm_meta_data) if qemu_bios is None else qemu_bios
@@ -4376,13 +4331,15 @@ class VirtualMachine:
 
     def run(self):
         self.__network_bridge.create()
-        self.__tpm.start()
+        if self.__tpm:
+            self.__tpm.start()
 
         command_line = self.__command_line()
         Logger.instance().debug(f"[Vm] Run cmd: {command_line}")
         result = subprocess.run(command_line, shell=True, capture_output=True, text=True)
         Logger.instance().debug(f"[Vm] Run result:\nSTDOUT\n{result.stdout}\nSTDERR\n{result.stderr}\n")
-        self.__tpm.close()
+        if self.__tpm:
+            self.__tpm.close()
 
     def __command_line(self):
         command_parts_list = [self.__qemu_command_line(), self.__kvm_enable(), self.__ram_size(),
@@ -4409,7 +4366,7 @@ class VirtualMachine:
 
     @staticmethod
     def __ram_size():  # fixme utopia Использовать psutil
-        return "-m 8192"
+        return "-m 12000"
 
     def __network(self):
         self.__tap.create()
@@ -4421,7 +4378,7 @@ class VirtualMachine:
         # fixme utopia Присвоим ip адрес vm через mac адрес
         # https://superuser.com/questions/1413011/setting-a-static-ip-upon-qemu-vm-creation
 
-        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac={2}".format(
+        return "-netdev tap,ifname={0},script=no,downscript=no,id={1} -device virtio-net,netdev={1},mac={2},addr=0x3".format(
             tap_name, netdev_id, self.__vm_meta_data.get_mac_address_as_string())
 
     def __disk(self):
@@ -4473,16 +4430,142 @@ class VirtualMachine:
         return "-drive file=\"{}\",media=cdrom,if=ide".format(self.__virtio.get_win_drivers())
 
     def __get_tpm_command_line(self):
+        if not self.__tpm:
+            return ""
         return self.__serializer.serialize(self.__tpm.get_qemu_parameters())
 
     def __get_qemu_serial_command_line(self):
-        return self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
+        return ""  # self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
 
     def __get_qemu_logging_command_line(self):
-        return self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
+        return ""  # self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
 
     def __get_qemu_bios_command_line(self):
         return self.__serializer.serialize(self.__qemu_bios.get_qemu_parameters())
+
+
+class VmRunner:
+    def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
+                 initiate_vga_pci_passthrough=False,
+                 qemu_vga_pci_passthrough=None, grub_config_backup_path=None,
+                 vm_platform=VirtualMachine.QEMU_PLATFORM_I440FX_BIOS):
+        self.__vm_name = vm_name
+        self.__project_config = project_config
+        self.__startup = startup
+        self.__block_internet_access = bool(block_internet_access)
+        self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
+        self.__qemu_vga_pci_passthrough = qemu_vga_pci_passthrough
+        self.__vm_platform = vm_platform
+        self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
+        self.__serializer = ShellSerializer()
+
+    def run(self):
+        if self.__initiate_vga_pci_passthrough:
+            if self.__qemu_vga_pci_passthrough:
+                self.after_reboot()
+            else:
+                self.before_reboot()
+        else:
+            self.__run()
+
+    def before_reboot(self):
+        pci_list = Pci.get_list()
+
+        pci_vga_list = pci_list.get_vga_list()
+        if len(pci_vga_list) == 0:
+            Logger.instance().error("[Vm] PCI VGA NOT FOUND")
+            return
+
+        if len(pci_vga_list) > 1:
+            Logger.instance().error("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
+            return
+
+        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
+        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
+        iommu_group = pci_vga_list[0].iommu_group
+        if iommu_group is None:
+            Logger.instance().error("[Vm] VGA does not include to iommu group")
+            return
+
+        pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
+
+        usb_host_controller_list = pci_list.get_usb_host_list()
+        if not pci_list.is_each_device_in_its_own_iommu_group(usb_host_controller_list):
+            Logger.instance().error("[Vm] USB host controller NO PASSTHROUGH")
+        else:
+            pci_list_by_vga_iommu_group.extend(usb_host_controller_list)
+
+        vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
+        vfio = Vfio(vfio_pci)
+
+        grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
+        if grub_config_backup_path is None:
+            Logger.instance().error("[Vm] Make grub config backup FAIL")
+            return
+        self.__grub.update()
+
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
+
+        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
+        Power.reboot()
+
+    def after_reboot(self):
+        sleep_sec = 30
+        # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
+        Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
+        time.sleep(sleep_sec)
+        dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
+        Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
+        Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
+
+        for i in range(1):
+            try:
+                self.__run()
+            except Exception as ex:
+                Logger.instance().error(f"[Vm] {i} Run after reboot FAIL: {ex}")
+
+        self.__grub.restore_from_backup()
+        self.__grub.update()
+        # Power.reboot()
+
+    def __run(self):
+        network_bridge = NetworkBridge(self.__project_config.get_server_name(),
+                                       self.__project_config.get_vm_bridge_ip_address_and_mask(),
+                                       self.__project_config.get_dns_config_dir(),
+                                       self.__project_config.get_internet_network_interface(),
+                                       block_internet_access=self.__block_internet_access)
+
+        vm_registry = VmRegistry(self.__project_config.get_vm_registry_path())
+        vm_meta_data = vm_registry.get_with_verifying(self.__vm_name)
+
+        local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
+            self.__project_config.get_local_network_interface())
+
+        vm_ssh_forwarding = VmSshForwarding(vm_meta_data, local_network_interface,
+                                            vm_meta_data.get_ssh_forward_port())
+        vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
+                                            vm_meta_data.get_rdp_forward_port())
+        tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
+                                                                 vm_rdp_forwarding.add_with_retry()))
+        tcp_forwarding_thread.start()
+
+        virtio = Virtio(self.__project_config)
+
+        qemu_bios = QemuBios()
+        tpm = None
+        if self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_BIOS:
+            qemu_bios = QemuBios("q35")
+        elif self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI:
+            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=False)
+            tpm = TpmEmulator(vm_meta_data)
+        elif self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI_SECURE:
+            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=True)
+            tpm = TpmEmulator(vm_meta_data)
+
+        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=self.__qemu_vga_pci_passthrough,
+                            qemu_bios=qemu_bios, tpm=tpm)
+        vm.run()
+        tcp_forwarding_thread.join()
 
 
 class OsNameAndVersion:
@@ -4720,6 +4803,8 @@ class InstallCommandLine:
 
 
 def main():
+    Logger.instance().debug(f'My cmd: {" ".join(sys.orig_argv)}')
+
     project_config = OpenVpnConfig()
     parser = argparse.ArgumentParser(prog=project_config.get_server_name(), description="HomeVpn project executable")
 
@@ -4744,6 +4829,9 @@ def main():
     parser_vm_install.add_argument("os_distr_path", type=Path, help="OS distributive iso image path")
     parser_vm_install.add_argument("--bi", help="Block internet access, but not the local network",
                                    action='store_true')
+    parser_vm_install.add_argument("--vm_platform", type=str,
+                                   help=f"QEMU platform: {', '.join(VirtualMachine.QEMU_PLATFORM_LIST)}",
+                                   default=VirtualMachine.QEMU_PLATFORM_I440FX_BIOS)
 
     parser_vm_run = subparsers.add_parser("vm_run", help="Run virtual machine")
     parser_vm_run.add_argument("vm_name", type=str, help="Virtual machine name")
@@ -4751,6 +4839,9 @@ def main():
                                action='store_true')
     parser_vm_run.add_argument("--pp", help="Initiate VGA PCI passthrough to virtual machine",
                                action='store_true')
+    parser_vm_run.add_argument("--vm_platform", type=str,
+                               help=f"QEMU platform: {', '.join(VirtualMachine.QEMU_PLATFORM_LIST)}",
+                               default=VirtualMachine.QEMU_PLATFORM_I440FX_BIOS)
     parser_vm_run.add_argument("--QemuVgaPciPassthrough", type=QemuVgaPciPassthrough,
                                help="PCI VGA list for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
@@ -4807,13 +4898,26 @@ def main():
         vm_registry = VmRegistry(project_config.get_vm_registry_path())
         vm_meta_data = vm_registry.get_with_verifying(args.vm_name)
         virtio = Virtio(project_config)
-        vm = VirtualMachine(network_bridge, vm_meta_data, args.os_distr_path, virtio=virtio)
+
+        qemu_bios = QemuBios()
+        tpm = None
+        if args.vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_BIOS:
+            qemu_bios = QemuBios("q35")
+        elif args.vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI:
+            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=False)
+            tpm = TpmEmulator(vm_meta_data)
+        elif args.vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI_SECURE:
+            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=True)
+            tpm = TpmEmulator(vm_meta_data)
+
+        vm = VirtualMachine(network_bridge, vm_meta_data, args.os_distr_path, virtio=virtio, qemu_bios=qemu_bios,
+                            tpm=tpm)
         vm.run()
 
     elif args.command == "vm_run":
         VmRunner(args.vm_name, project_config=project_config, block_internet_access=args.bi,
                  initiate_vga_pci_passthrough=args.pp, qemu_vga_pci_passthrough=args.QemuVgaPciPassthrough,
-                 grub_config_backup_path=args.grub_config_backup_path).run()
+                 grub_config_backup_path=args.grub_config_backup_path, vm_platform=args.vm_platform).run()
 
     elif args.command == "vm_ssh_fwd":
         vm_registry = VmRegistry(project_config.get_vm_registry_path())
@@ -4824,7 +4928,16 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        Logger.instance().error("FFFF")
+        pci_list = Pci.get_list()
+        print(pci_list)
+
+        usb_host_controller_list = pci_list.get_usb_host_list()
+        print(usb_host_controller_list)
+        if not pci_list.is_each_device_in_its_own_iommu_group(pci_list):
+            print("GGGGGG")
+        else:
+            print("FFFFFFF")
+
         # ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
         # print(ggg)
         # print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
