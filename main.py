@@ -2545,14 +2545,18 @@ class VgaPciIntel(Pci):
         result = super().get_vfio_pci_options_table()
         # result.update({"display": "auto", "x-vga": "on"})  # , "x-igd-opregion": "on" , "addr": "02.0"
         result.update(
-            {"x-igd-gms": "9", "addr": "0x02", "rombar": "0", "romfile": "/home/utopia/vgabios.bin", "display": "auto",
-             "x-vga": "on", "x-igd-opregion": "on"})  # ,
+            #     {"x-vga": "on", "x-igd-opregion": "on"})
+
+            {"x-igd-gms": "9", "addr": "0x02", "rombar": 0, "romfile": "/home/utopia/vgabios3.bin",
+             "x-vga": "on", "x-igd-opregion": "on"})  # , #"romfile": "/home/utopia/vgabios.bin", "romsize": "65536"
         return result
 
     def get_qemu_parameters(self):
         result = super().get_qemu_parameters()
         if len(result) > 0:
             result.append({"-vga": "none"})
+            #result.append({"-fw_cfg": {"name": "opt/igd-opregion", "file": "/home/utopia/HomeVpn/opregion.bin"}})
+            #result.append({"-fw_cfg": {"name": "opt/igd-bdsm-size", "file": "/home/utopia/HomeVpn/bdsmSize.bin"}})
             # result.append({"-machine": "pc-i440fx-2.2"})
             # result.append({"-device": { "vfio-pci-igd-lpc-bridge": { "addr": "0x1f" } }})
         return result
@@ -4171,7 +4175,7 @@ class QemuSerial:
     def get_qemu_parameters(self):
         self.__get_serial_state_dir_path().makedirs()
         return [{"-chardev": {
-            "stdio": {"id": self.__get_serial_chardev_id(), "mux": "on", "logfile": self.__get_serial_log_file_path(),
+            "file": {"id": self.__get_serial_chardev_id(), "mux": "on", "path": self.__get_serial_log_file_path(),
                       "signal": "off"}}}, {"-serial": f"chardev:{self.__get_serial_chardev_id()}"}]
 
     def __get_serial_chardev_id(self):
@@ -4248,10 +4252,15 @@ class QemuBios:
 
     # SeaBIOS используется по умолчанию, дополнительные аргументы не требуются
     def get_qemu_parameters(self):
-        if self.__chipset is None:
-            return []
-        else:
-            return [{"-machine": self.__chipset}]
+        # https://www.seabios.org/Debugging
+        # https://forums.gentoo.org/viewtopic-p-8812362.html?sid=f8b324e3711f9796b6a777e198212a6d
+        result = [{"-chardev": {"file": {"path": "/home/utopia/HomeVpn/vm/seabios.log", "id": "seabios"}}, "-device": {
+            "isa-debugcon": {"iobase": 0x402, "chardev": "seabios"}}}]
+        if self.__chipset is not None:
+            result.append({"-machine": self.__chipset})
+        return result
+
+
 
 
 # https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
@@ -4326,7 +4335,7 @@ class VirtualMachine:
         self.__qemu_serial = QemuSerial(vm_meta_data) if qemu_serial is None else qemu_serial
         self.__qemu_logging = QemuLogging(vm_meta_data) if qemu_logging is None else qemu_logging
         self.__qemu_bios = QemuUefi(vm_meta_data) if qemu_bios is None else qemu_bios
-        self.__qemu_vga = QemuVgaVirtio() if qemu_vga is None else qemu_vga
+        self.__qemu_vga = QemuVgaDefault() if qemu_vga is None else qemu_vga
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -4353,6 +4362,7 @@ class VirtualMachine:
 
     @staticmethod
     def __qemu_command_line():
+        #return str(Path(".").join("qemu").join("build").join(f"qemu-system-{platform.machine()}"))
         return "qemu-system-{}".format(platform.machine())
 
     @staticmethod
@@ -4435,7 +4445,7 @@ class VirtualMachine:
         return self.__serializer.serialize(self.__tpm.get_qemu_parameters())
 
     def __get_qemu_serial_command_line(self):
-        return ""  # self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
+        return "" # self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
 
     def __get_qemu_logging_command_line(self):
         return ""  # self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
@@ -4489,11 +4499,11 @@ class VmRunner:
 
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
 
-        usb_host_controller_list = pci_list.get_usb_host_list()
-        if not pci_list.is_each_device_in_its_own_iommu_group(usb_host_controller_list):
-            Logger.instance().error("[Vm] USB host controller NO PASSTHROUGH")
-        else:
-            pci_list_by_vga_iommu_group.extend(usb_host_controller_list)
+        # usb_host_controller_list = pci_list.get_usb_host_list()
+        # if not pci_list.is_each_device_in_its_own_iommu_group(usb_host_controller_list):
+        #     Logger.instance().error("[Vm] USB host controller NO PASSTHROUGH")
+        # else:
+        #     pci_list_by_vga_iommu_group.extend(usb_host_controller_list)
 
         vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
         vfio = Vfio(vfio_pci)
