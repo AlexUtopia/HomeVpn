@@ -2383,6 +2383,8 @@ class Pci:
     def get_qemu_parameters(self, vm_meta_data):
         return [VfioPci.get_device_for_passthrough(self, vm_meta_data)]
 
+    # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
+    # https://stackoverflow.com/a/52174005
     def get_rom(self, dir_path_for_save_rom_file):
         PCI_DOMAIN_DEFAULT = "0000"
 
