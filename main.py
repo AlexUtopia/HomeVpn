@@ -191,6 +191,9 @@ class Path:
     def exists(self):
         return os.path.exists(self.get())
 
+    def file_exists(self):
+        return self.exists() and os.path.isfile(self.get())
+
     def exists_by_wildcard(self, wildcard):
         return bool(list(pathlib.Path(self.get()).glob(wildcard)))
 
@@ -2193,15 +2196,28 @@ class PciClassCode(int):
         return self.get_base_class() == self.BASE_CLASS_VGA or (
                 self.get_base_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
 
+    def is_usb_host_controller(self, prog_if):
+        return self.is_usb_uhci_controller(prog_if) or self.is_usb_ohci_controller(
+            prog_if) or self.is_usb_ehci_controller(prog_if) or self.is_usb_xhci_controller(prog_if)
+
+    def is_usb_uhci_controller(self, prog_if):
+        return self.is_usb() and (
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI)
+
+    def is_usb_ohci_controller(self, prog_if):
+        return self.is_usb() and (
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_OHCI)
+
+    def is_usb_ehci_controller(self, prog_if):
+        return self.is_usb() and (
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_EHCI)
+
+    def is_usb_xhci_controller(self, prog_if):
+        return self.is_usb() and (
+                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI)
+
     def is_usb(self):
         return self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER and self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB
-
-    def is_usb_host_controller(self, prog_if):
-        return self.is_usb() and (
-                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI or
-                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_OHCI or
-                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_EHCI or
-                prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI)
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
@@ -2254,6 +2270,7 @@ class Pci:
     __VENDOR_ID = "vendor_id"
     __DEVICE_ID = "device_id"
     __REVISION = "revision"
+    __PROG_IF = "prog_if"
     __SUBSYSTEM_NAME = "subsystem_name"
     __SUBSYSTEM_VENDOR_ID = "subsystem_vendor_id"
     __SUBSYSTEM_ID = "subsystem_id"
@@ -2263,7 +2280,7 @@ class Pci:
     __REGEX_HEX8 = "[0-9a-fA-F]{2}"  # fixme utopia Использовать BitUtils.get_regex
     __REGEX_HEX16 = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
 
-    __REGEX = f"(?P<{__ADDRESS}>{__REGEX_HEX8}:{__REGEX_HEX8}\.\d+) (?P<{__CLASS_NAME}>.*) \[(?P<{__CLASS_CODE}>{PciClassCode.REGEX})\]: (?P<{__DEVICE_NAME}>.*) \[(?P<{__VENDOR_ID}>{__REGEX_HEX16}):(?P<{__DEVICE_ID}>{__REGEX_HEX16})\] \(rev (?P<{__REVISION}>{__REGEX_HEX8})\)|Subsystem: (?P<{__SUBSYSTEM_NAME}>.*) \[(?P<{__SUBSYSTEM_VENDOR_ID}>{__REGEX_HEX16}):(?P<{__SUBSYSTEM_ID}>{__REGEX_HEX16})\]|IOMMU group: (?P<{__IOMMU_GROUP}>[\d]+)|Kernel driver in use: (?P<{__KERNEL_MODULE}>.*)"
+    __REGEX = f"(?P<{__ADDRESS}>{__REGEX_HEX8}:{__REGEX_HEX8}\.\d+) (?P<{__CLASS_NAME}>.*) \[(?P<{__CLASS_CODE}>{PciClassCode.REGEX})\]: (?P<{__DEVICE_NAME}>.*) \[(?P<{__VENDOR_ID}>{__REGEX_HEX16}):(?P<{__DEVICE_ID}>{__REGEX_HEX16})\] \(rev (?P<{__REVISION}>{__REGEX_HEX8})\)(?> \(prog-if (?P<{__PROG_IF}>{__REGEX_HEX8}) \[.*\]\))?|Subsystem: (?P<{__SUBSYSTEM_NAME}>.*) \[(?P<{__SUBSYSTEM_VENDOR_ID}>{__REGEX_HEX16}):(?P<{__SUBSYSTEM_ID}>{__REGEX_HEX16})\]|IOMMU group: (?P<{__IOMMU_GROUP}>[\d]+)|Kernel driver in use: (?P<{__KERNEL_MODULE}>.*)"
 
     # https://pkgs.org/search/?q=pciutils
     # https://man7.org/linux/man-pages/man8/lspci.8.html
@@ -2277,6 +2294,7 @@ class Pci:
         self.vendor_id = PciVendorId(0)
         self.device_id = 0
         self.revision = 0
+        self.prog_if = 0
         self.subsystem_name = ""
         self.subsystem_vendor_id = PciVendorId(0)
         self.subsystem_id = 0
@@ -2291,6 +2309,7 @@ class Pci:
         self.vendor_id = pci.vendor_id
         self.device_id = pci.device_id
         self.revision = pci.revision
+        self.prog_if = pci.prog_if
         self.subsystem_name = pci.subsystem_name
         self.subsystem_vendor_id = pci.subsystem_vendor_id
         self.subsystem_id = pci.subsystem_id
@@ -2305,6 +2324,7 @@ class Pci:
             self.__VENDOR_ID: self.vendor_id,
             self.__DEVICE_ID: self.device_id,
             self.__REVISION: self.revision,
+            self.__PROG_IF: self.prog_if,
             self.__SUBSYSTEM_NAME: self.subsystem_name,
             self.__SUBSYSTEM_VENDOR_ID: self.subsystem_vendor_id,
             self.__SUBSYSTEM_ID: self.subsystem_id,
@@ -2325,6 +2345,8 @@ class Pci:
             value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False,
                                                        base=BitUtils.HEXADECIMAL_BASE)
         elif key == self.__REVISION:
+            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEXADECIMAL_BASE)
+        elif key == self.__PROG_IF:
             value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEXADECIMAL_BASE)
         elif key == self.__SUBSYSTEM_VENDOR_ID:
             value_native = PciVendorId(value)
@@ -2355,11 +2377,34 @@ class Pci:
     def get_kernel_parameters(self):
         return [{"module_blacklist": self.kernel_module}]
 
-    def get_vfio_pci_options_table(self):
+    def get_vfio_pci_options_table(self, vm_meta_data):
         return {"multifunction": "on"}
 
-    def get_qemu_parameters(self):
-        return [VfioPci.get_device_for_passthrough(self)]
+    def get_qemu_parameters(self, vm_meta_data):
+        return [VfioPci.get_device_for_passthrough(self, vm_meta_data)]
+
+    def get_rom(self, dir_path_for_save_rom_file):
+        PCI_DOMAIN_DEFAULT = "0000"
+
+        rom_file_path = Path(f"/sys/bus/pci/devices/{PCI_DOMAIN_DEFAULT}:{self.address}/rom")
+        if not rom_file_path.file_exists():
+            Logger.instance().warning(f"[PCI:{self.address}] ROM NOT FOUND: {rom_file_file}")
+            return None
+
+        with open(rom_file_file.get(), "at") as f:
+            f.write("1")
+
+        Path(dir_path_for_save_rom_file).makedirs()
+        result = Path(path_for_save_rom_file).join(self.get_rom_file_name())
+        result.copy_from(rom_file_path)
+
+        with open(rom_file_file.get(), "at") as f:
+            f.write("0")
+
+        return result
+
+    def get_rom_file_name(self):
+        return f"{self.get_id()}_{self.address}_rom.bin"
 
     class PciList(list):
 
@@ -2412,7 +2457,7 @@ class Pci:
         def get_usb_host_list(self):
             result = Pci.PciList()
             for pci in self:
-                if pci.class_code.is_usb_host_controller(0):
+                if pci.class_code.is_usb_host_controller(pci.prog_if):
                     result.append(pci)
             return result
 
@@ -2477,13 +2522,13 @@ class VfioPci:
         return VfioPci(Pci.PciList.from_json(model))
 
     @staticmethod
-    def get_device_for_passthrough(pci):
+    def get_device_for_passthrough(pci, vm_meta_data):
         # PCI устройство нельзя пробросить если оно не включено в iommu группу
         if pci.iommu_group is None:
             return {}
 
         vfio_pci_options_table = {"host": pci.address}
-        vfio_pci_options_table.update(pci.get_vfio_pci_options_table())
+        vfio_pci_options_table.update(pci.get_vfio_pci_options_table(vm_meta_data))
         return {"-device": {"vfio-pci": vfio_pci_options_table}}
 
     def get_kernel_parameters(self):
@@ -2496,10 +2541,10 @@ class VfioPci:
             result.extend(pci.get_kernel_parameters())
         return result
 
-    def get_qemu_parameters(self):
+    def get_qemu_parameters(self, vm_meta_data):
         result = []
         for pci in self.__pci_list:
-            result.extend(pci.get_qemu_parameters())
+            result.extend(pci.get_qemu_parameters(vm_meta_data))
         return result
 
 
@@ -2511,52 +2556,44 @@ class Vfio:
         self.__iommu = Iommu()
 
     def get_kernel_parameters(self):
-        result = [Vfio.__get_vfio(), Vfio.__get_mdev()]
+        result = [{"modules_load": ["vfio", "vfio_pci", "vfio_iommu_type1", "vfio_virqfd"]}]
         result.extend(self.__vfio_pci.get_kernel_parameters())
         result.extend(self.__iommu.get_kernel_parameters())
         return result
 
-    @staticmethod
-    def __get_vfio():
-        return "vfio"
-
-    @staticmethod
-    def __get_mdev():  # fixme utopia Это нам требуется только для GVT-G (mediated) проброса GPU Intel
-        return "mdev"
-
 
 class VgaPciIntel(Pci):
     def __init__(self, pci):
-        pass
+        super().__init__()
         self._init(pci)
 
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
-    def get_kernel_parameters(self):  # module_blacklist=pci.kernel_module
+    def get_kernel_parameters(self):
         result = super().get_kernel_parameters()
-        result.extend([{"module_blacklist": f"snd_hda_intel,snd_hda_codec_hdmi"},
+        result.extend([{"module_blacklist": ["snd_hda_intel","snd_hda_codec_hdmi"]},
                        {"video": "efifb:off,vesafb:off,vesa:off,simplefb:off"}, {"l1tf": "full,force"},
                        {"kvm.ignore_msrs": "1"}, {"vfio_io_iommu_type1.allow_unsafe_interrupts": "1"},
-                       {"initcall_blacklist": "sysfb_init"}])  # {"i915.modeset": "0"}
+                       {"initcall_blacklist": "sysfb_init"}])
         return result
 
     # https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
     # https://www.reddit.com/r/VFIO/comments/i9dbyp/this_is_how_i_managed_to_passthrough_my_igd/
-    def get_vfio_pci_options_table(self):
-        result = super().get_vfio_pci_options_table()
-        # result.update({"display": "auto", "x-vga": "on"})  # , "x-igd-opregion": "on" , "addr": "02.0"
-        result.update(
-            #     {"x-vga": "on", "x-igd-opregion": "on"})
+    def get_vfio_pci_options_table(self, vm_meta_data):
+        result = super().get_vfio_pci_options_table(vm_meta_data)
+        result.update({"x-igd-gms": "9", "addr": "0x02", "rombar": 0, "x-vga": "on", "x-igd-opregion": "on"})
 
-            {"x-igd-gms": "9", "addr": "0x02", "rombar": 0, "romfile": "/home/utopia/vgabios3.bin",
-             "x-vga": "on", "x-igd-opregion": "on"})  # , #"romfile": "/home/utopia/vgabios.bin", "romsize": "65536"
+        rom_file_path = self.get_rom(vm_meta_data.get_working_dir_path())
+        if rom_file_path is not None:
+            result["romfile"] = rom_file_path
+
         return result
 
-    def get_qemu_parameters(self):
-        result = super().get_qemu_parameters()
+    def get_qemu_parameters(self, vm_meta_data):
+        result = super().get_qemu_parameters(vm_meta_data)
         if len(result) > 0:
             result.append({"-vga": "none"})
-            #result.append({"-fw_cfg": {"name": "opt/igd-opregion", "file": "/home/utopia/HomeVpn/opregion.bin"}})
-            #result.append({"-fw_cfg": {"name": "opt/igd-bdsm-size", "file": "/home/utopia/HomeVpn/bdsmSize.bin"}})
+            # result.append({"-fw_cfg": {"name": "opt/igd-opregion", "file": "/home/utopia/HomeVpn/opregion.bin"}})
+            # result.append({"-fw_cfg": {"name": "opt/igd-bdsm-size", "file": "/home/utopia/HomeVpn/bdsmSize.bin"}})
             # result.append({"-machine": "pc-i440fx-2.2"})
             # result.append({"-device": { "vfio-pci-igd-lpc-bridge": { "addr": "0x1f" } }})
         return result
@@ -2564,6 +2601,82 @@ class VgaPciIntel(Pci):
     @staticmethod
     def is_my_instance(pci):
         return pci.class_code.is_vga() and pci.vendor_id.is_intel()
+
+
+class UsbUhciPci(Pci):
+    def __init__(self, pci):
+        super().__init__()
+        self._init(pci)
+
+    def get_kernel_parameters(self):
+        return ["usbcore.nousb"]
+
+    def get_vfio_pci_options_table(self, vm_meta_data):
+        return super().get_vfio_pci_options_table(vm_meta_data)
+
+    def get_qemu_parameters(self, vm_meta_data):
+        return super().get_qemu_parameters(vm_meta_data)
+
+    @staticmethod
+    def is_my_instance(pci):
+        return pci.class_code.is_usb_uhci_controller(pci.prog_if)
+
+
+class UsbOhciPci(Pci):
+    def __init__(self, pci):
+        super().__init__()
+        self._init(pci)
+
+    def get_kernel_parameters(self):
+        return ["usbcore.nousb"]
+
+    def get_vfio_pci_options_table(self, vm_meta_data):
+        return super().get_vfio_pci_options_table(vm_meta_data)
+
+    def get_qemu_parameters(self, vm_meta_data):
+        return super().get_qemu_parameters(vm_meta_data)
+
+    @staticmethod
+    def is_my_instance(pci):
+        return pci.class_code.is_usb_ohci_controller(pci.prog_if)
+
+
+class UsbEhciPci(Pci):
+    def __init__(self, pci):
+        super().__init__()
+        self._init(pci)
+
+    def get_kernel_parameters(self):
+        return ["usbcore.nousb"]
+
+    def get_vfio_pci_options_table(self, vm_meta_data):
+        return super().get_vfio_pci_options_table(vm_meta_data)
+
+    def get_qemu_parameters(self, vm_meta_data):
+        return super().get_qemu_parameters(vm_meta_data)
+
+    @staticmethod
+    def is_my_instance(pci):
+        return pci.class_code.is_usb_ehci_controller(pci.prog_if)
+
+
+class UsbXhciPci(Pci):
+    def __init__(self, pci):
+        super().__init__()
+        self._init(pci)
+
+    def get_kernel_parameters(self):
+        return ["usbcore.nousb"]
+
+    def get_vfio_pci_options_table(self, vm_meta_data):
+        return super().get_vfio_pci_options_table(vm_meta_data)
+
+    def get_qemu_parameters(self, vm_meta_data):
+        return super().get_qemu_parameters(vm_meta_data)
+
+    @staticmethod
+    def is_my_instance(pci):
+        return pci.class_code.is_usb_xhci_controller(pci.prog_if)
 
 
 # fixme utopia Parser for command line
@@ -3908,8 +4021,6 @@ class Grub:
         new_linux_kernel_params_serialized = grub_cmdline_linux + separator + self.__linux_kernel_params_serializer.serialize(
             cmd_line_linux)
 
-        new_linux_kernel_params_serialized += " modules_load=vfio,vfio_pci,vfio_virqfd,vfio_iommu_type1"
-
         grub_config_modified = self.__config_parser.add_or_update(self.GRUB_CMDLINE_LINUX,
                                                                   new_linux_kernel_params_serialized,
                                                                   grub_config)
@@ -4176,7 +4287,7 @@ class QemuSerial:
         self.__get_serial_state_dir_path().makedirs()
         return [{"-chardev": {
             "file": {"id": self.__get_serial_chardev_id(), "mux": "on", "path": self.__get_serial_log_file_path(),
-                      "signal": "off"}}}, {"-serial": f"chardev:{self.__get_serial_chardev_id()}"}]
+                     "signal": "off"}}}, {"-serial": f"chardev:{self.__get_serial_chardev_id()}"}]
 
     def __get_serial_chardev_id(self):
         return f"{self.PREFIX}-{self.__vm_meta_data.get_name()}-chardev-id{self.__index}"
@@ -4261,8 +4372,6 @@ class QemuBios:
         return result
 
 
-
-
 # https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
 # https://www.qemu.org/docs/master/system/invocation.html#hxtool-3
 # https://wiki.archlinux.org/title/QEMU#virtio
@@ -4273,7 +4382,7 @@ class QemuVgaVirtio:
     def __init__(self):
         pass
 
-    def get_qemu_parameters(self):
+    def get_qemu_parameters(self, vm_meta_data):
         return [{"-device": "virtio-vga-gl", "-display": {"sdl": {"gl": "on"}}}]
 
 
@@ -4281,7 +4390,7 @@ class QemuVgaDefault:
     def __init__(self):
         pass
 
-    def get_qemu_parameters(self):
+    def get_qemu_parameters(self, vm_meta_data):
         return [{"-vga": "std", "-display": {"gtk": {}}}]
 
 
@@ -4300,8 +4409,8 @@ class QemuVgaPciPassthrough:
     def __repr__(self):
         return self.__str__()
 
-    def get_qemu_parameters(self):
-        return self.__vfio_pci.get_qemu_parameters()
+    def get_qemu_parameters(self, vm_meta_data):
+        return self.__vfio_pci.get_qemu_parameters(vm_meta_data)
 
 
 # fixme utopia Обеспечить возможность установки win11
@@ -4362,7 +4471,7 @@ class VirtualMachine:
 
     @staticmethod
     def __qemu_command_line():
-        #return str(Path(".").join("qemu").join("build").join(f"qemu-system-{platform.machine()}"))
+        # return str(Path(".").join("qemu").join("build").join(f"qemu-system-{platform.machine()}"))
         return "qemu-system-{}".format(platform.machine())
 
     @staticmethod
@@ -4417,7 +4526,7 @@ class VirtualMachine:
         return "-cpu host -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
 
     def __get_qemu_vga_command_line(self):
-        return self.__serializer.serialize(self.__qemu_vga.get_qemu_parameters())
+        return self.__serializer.serialize(self.__qemu_vga.get_qemu_parameters(self.__vm_meta_data))
 
     def __usb(self):
         usb_device_array = [
@@ -4445,7 +4554,7 @@ class VirtualMachine:
         return self.__serializer.serialize(self.__tpm.get_qemu_parameters())
 
     def __get_qemu_serial_command_line(self):
-        return "" # self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
+        return ""  # self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
 
     def __get_qemu_logging_command_line(self):
         return ""  # self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
@@ -4499,11 +4608,11 @@ class VmRunner:
 
         pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
 
-        # usb_host_controller_list = pci_list.get_usb_host_list()
-        # if not pci_list.is_each_device_in_its_own_iommu_group(usb_host_controller_list):
-        #     Logger.instance().error("[Vm] USB host controller NO PASSTHROUGH")
-        # else:
-        #     pci_list_by_vga_iommu_group.extend(usb_host_controller_list)
+        usb_host_controller_list = pci_list.get_usb_host_list()
+        if not pci_list.is_each_device_in_its_own_iommu_group(usb_host_controller_list):
+            Logger.instance().error("[Vm] USB host controller NO PASSTHROUGH")
+        else:
+            pci_list_by_vga_iommu_group.extend(usb_host_controller_list)
 
         vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
         vfio = Vfio(vfio_pci)
@@ -4517,7 +4626,7 @@ class VmRunner:
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        Power.reboot()
+        # Power.reboot()
 
     def after_reboot(self):
         sleep_sec = 30
