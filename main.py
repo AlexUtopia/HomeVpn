@@ -82,6 +82,283 @@ class Logger:
         return Logger.__instance.get_logger()
 
 
+class BitUtils:
+    DECIMAL_BASE = 10
+    HEXADECIMAL_BASE = 16
+    OCTAL_BASE = 8
+    BINARY_BASE = 2
+    TETRAD_IN_BYTE = 2
+    BITS_IN_TETRAD = 4
+    LSB_TETRAD_MASK = 0x0F
+    MSB_TETRAD_MASK = 0xF0
+    BITS_IN_BYTE = BITS_IN_TETRAD * TETRAD_IN_BYTE
+    UINT8_MIN = 0
+    UINT8_MAX = 0xFF
+    INT8_MIN = -128
+    INT8_MAX = 127
+    UINT16_MIN = 0
+    UINT16_MAX = 0xFFFF
+    INT16_MIN = -32768
+    INT16_MAX = 32767
+    UINT8_MASK = UINT8_MAX
+    UINT16_MASK = UINT16_MAX
+    BIT_COUNT_MAX = sys.maxsize.bit_length() + 1
+    BASE_DIGIT_LIST = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    BASE_MIN = 2
+    BASE_MAX = len(BASE_DIGIT_LIST)
+    DIGIT_COUNT_MIN = 1
+
+    @staticmethod
+    def is_decimal(val_as_string):
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.DECIMAL_BASE, prefix="(?!0[0-9])"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def is_hexadecimal(val_as_string):
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.HEXADECIMAL_BASE, prefix="0x[0]*"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def is_binary(val_as_string):
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.BINARY_BASE, prefix="0b[0]*"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def is_octal(val_as_string):
+        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.OCTAL_BASE, prefix="0[0]*"),
+                           re.MULTILINE | re.IGNORECASE)
+        match = regex.search(val_as_string)
+        return match is not None
+
+    @staticmethod
+    def __get_regex_for_check_int(base, prefix):
+        BitUtils.__check_base(base)
+        return f"^(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}$"
+
+    @staticmethod
+    def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
+        BitUtils.__check_base(base)
+        result = 0
+        if type(val) is str:
+            result = int(val, base)
+        elif type(val) is int:
+            result = val
+        else:
+            raise Exception("Value unknown type: {}".format(str(val)))
+        BitUtils.check_int(result, bit_count, signed)
+        return result
+
+    @staticmethod
+    def get_regex(val_max, base):
+        BitUtils.__check_int_type(val_max)
+        val_max = abs(val_max)
+
+        val_max_as_str = BitUtils.to_string(val_max, base)
+        digit_count = len(val_max_as_str)
+
+        # Заполнение всех digits нулями, пробелами или ничем
+
+        # Правило для первого элемента, последнего элемента, и всех прочих
+
+        # регулярка для val_max = 157, заполнение нулями
+        # [0-1](?(?<=1)[0-5]|[0-9])(?(?<=15)[0-6]|[0-9])
+        # [1-10](?(?<=1)[0-5]|(?(?<=0)[1-90]|[0-5]))(?(?<=15)[0-6]|[0-9])
+
+        # регулярка для val_max = 157, заполнение пробелами
+        # [1-1 ](?(?<=1)[0-5]|(?(?<= )[1-9 ]|[0-5]))(?(?<=15)[0-6]|[0-9])
+
+        # регулярка для val_max = 157, заполнение ничем
+        # ограничение по максимальной разрядности
+        # [1-1]{0,1}+(?(?<=1)[0-5]|[0-9]){0,1}+(?(?<=15)[0-6]|[0-9])
+        # добавляется ревнивая квантификация и оптимизация условия 2.1
+
+        # диапазон 0 до val_max
+        #
+
+        # Система счисления запись
+        return ""
+
+    @staticmethod
+    def check_int(val, bit_count, signed):
+        BitUtils.__check_int_type(val)
+        val_min = BitUtils.get_int_min_value(bit_count, signed)
+        val_max = BitUtils.get_int_max_value(bit_count, signed)
+        BitUtils.__check_range(val, val_min, val_max)
+
+    @staticmethod
+    def to_string(val, base, to_lower=False):
+        BitUtils.__check_int_type(val)
+        BitUtils.__check_base(base)
+        if val == 0:
+            return "0"
+
+        result = ""
+        if val < 0:
+            result += "-"
+            val = abs(val)
+
+        while val > 0:
+            result += BitUtils.BASE_DIGIT_LIST[val % base]
+            val = val / base
+        result = result[::-1]
+        if to_lower:
+            return result.lower()
+        return result
+
+    @staticmethod
+    def get_max_by_base(base, digit_count):
+        BitUtils.__check_base(base)
+        # BitUtils.__check_digit_count(digit_count) # fixme utopia Сделать
+
+        digit_value_max = BitUtils.get_digit_value_max(base)
+        result = 0
+        while digit_count > 0:
+            result = (result * base) + digit_value_max
+            digit_count = digit_count - 1
+        return result
+
+    @staticmethod
+    def get_digit_value_max(base):
+        BitUtils.__check_base(base)
+        return base - 1
+
+    @staticmethod
+    def get_digit_count_max(base):
+        BitUtils.__check_base(base)
+        int_max = BitUtils.get_int_max_value(BitUtils.BIT_COUNT_MAX, signed=False)
+        # Теоретически может быть -1 (int64 = 0xFFFFFFFFFFFFFFFF), например, для Python2
+        return BitUtils.get_digit_count(int_max, base)
+
+    @staticmethod
+    def get_digit_count(val, base):
+        BitUtils.__check_int_type(val)
+        BitUtils.__check_base(base)
+        if val == 0:
+            return 1
+        val = abs(val)
+
+        result = 0
+        while val > 0:
+            val = val // base
+            result = result + 1
+        return result
+
+    @staticmethod
+    def get_min_by_base(base, digit_count):
+        return 0
+
+    @staticmethod
+    def get_int_min_max_value(bit_count, signed):
+        return BitUtils.get_int_min_value(bit_count, signed), BitUtils.get_int_max_value(bit_count, signed)
+
+    @staticmethod
+    def get_int_min_value(bit_count, signed):
+        BitUtils.__check_bit_count(bit_count)
+        if signed:
+            return ~0 << bit_count - 1
+        return 0
+
+    @staticmethod
+    def get_int_max_value(bit_count, signed):
+        BitUtils.__check_bit_count(bit_count)
+        if signed:
+            return ~(~0 << bit_count - 1)
+        return ~(~0 << bit_count)
+
+    @staticmethod
+    def __check_bit_count(bit_count):
+        BitUtils.__check_int_type(bit_count)
+        bit_count_min = 1
+        bit_count_max = BitUtils.BIT_COUNT_MAX
+        BitUtils.__check_range(bit_count, bit_count_min, bit_count_max)
+
+    @staticmethod
+    def __check_base(base):
+        BitUtils.__check_int_type(base)
+        BitUtils.__check_range(base, BitUtils.BASE_MIN, BitUtils.BASE_MAX)
+
+    @staticmethod
+    def __check_int_type(val):
+        if not isinstance(val, int):
+            raise Exception("Value unknown type, must be int: {}".format(str(val)))
+
+    @staticmethod
+    def __check_range(val, val_min, val_max):
+        if val_min > val_max:
+            raise Exception("Value min ({}) more value max ({}))".format(val_min, val_max))
+        if val_min > val > val_max:
+            raise Exception("Value invalid range: {}, (min={}, max={})".format(str(val), val_min, val_max))
+
+
+class UnitTest_BitUtils(unittest.TestCase):
+
+    def test_is_decimal(self):
+        ref_table = {
+            "1": [(10, True), (16, False), (2, False), (8, False)],
+            "-1": [(10, True), (16, False), (2, False), (8, False)],
+            "0": [(10, True), (16, False), (2, False), (8, False)],
+            "9999": [(10, True), (16, False), (2, False), (8, False)],
+            "-9999": [(10, True), (16, False), (2, False), (8, False)],
+            "+9999": [(10, True), (16, False), (2, False), (8, False)],
+            "0x0": [(10, False), (16, True), (2, False), (8, False)],
+            "0x00": [(10, False), (16, True), (2, False), (8, False)],
+            "0x0000": [(10, False), (16, True), (2, False), (8, False)],
+            "0x00000000": [(10, False), (16, True), (2, False), (8, False)],
+            "0x0000000000000000": [(10, False), (16, True), (2, False), (8, False)],
+            "0x00000000000000000000000000000000": [(10, False), (16, True), (2, False), (8, False)],
+            "-0xff": [(10, False), (16, True), (2, False), (8, False)],
+            "+0xFe": [(10, False), (16, True), (2, False), (8, False)],
+            "+0x0000123456789ABCDEF": [(10, False), (16, True), (2, False), (8, False)],
+            "-0xFFFFFFFFFFFFFFFF": [(10, False), (16, True), (2, False), (8, False)],
+            "+0xFFFFFFFFFFFFFFFF": [(10, False), (16, True), (2, False), (8, False)],
+            "0b0": [(10, False), (16, False), (2, True), (8, False)],
+            "0b00000000": [(10, False), (16, False), (2, True), (8, False)],
+            "-0b010101010101": [(10, False), (16, False), (2, True), (8, False)],
+            "+0b010101010101": [(10, False), (16, False), (2, True), (8, False)],
+            "01": [(10, False), (16, False), (2, False), (8, True)],
+            "-01": [(10, False), (16, False), (2, False), (8, True)],
+            "+01": [(10, False), (16, False), (2, False), (8, True)],
+            "07": [(10, False), (16, False), (2, False), (8, True)],
+            "00": [(10, False), (16, False), (2, False), (8, True)],
+            "01234567890ABCDEF": [(10, False), (16, False), (2, False), (8, False)]
+        }
+
+        for key, table in ref_table.items():
+            for base, result in table:
+                if base == 10:
+                    self.assertEqual(BitUtils.is_decimal(key), result, f"base={base}, key={key}")
+                elif base == 16:
+                    self.assertEqual(BitUtils.is_hexadecimal(key), result, f"base={base}, key={key}")
+                elif base == 2:
+                    self.assertEqual(BitUtils.is_binary(key), result, f"base={base}, key={key}")
+                elif base == 8:
+                    self.assertEqual(BitUtils.is_octal(key), result, f"base={base}, key={key}")
+                else:
+                    self.assertTrue(False, f"Unknown base={base}")
+
+    def test_get_digit_count(self):
+        ref_table = {
+            "9999": (10, 4),
+            "10": (10, 2),
+            "0xFFFF": (16, 4),
+            "0x00FFFF": (16, 4),
+            "0xFFFFFFFF": (16, 8),
+            "0xFFFFFFFFFFFFFFFF": (16, 16),
+            "0b0101": (2, 3),
+            "012": (8, 2)
+        }
+
+        for key, value in ref_table.items():
+            base, result = value
+            self.assertEqual(BitUtils.get_digit_count(int(key, base), base), result, f"base={base}, key={key}")
+
+
 # https://tproger.ru/translations/demystifying-decorators-in-python/
 
 # https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
@@ -153,6 +430,119 @@ class CurrentOs:
         # https://www.fastwebhost.in/blog/how-to-find-if-linux-is-running-on-32-bit-or-64-bit/
         # https://wiki.termux.com/wiki/FAQ
         return platform.architecture()[0].lower() == "64bit"
+
+    # https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/boot-to-uefi-mode-or-legacy-bios-mode?view=windows-11
+    # https://www.hindicodingcommunity.com/2023/02/how-to-check-whether-secure-boot-is.html
+    # https://www.ninjaone.com/blog/confirm-if-secure-boot-is-enabled-or-disabled/
+    # https://www.tenforums.com/tutorials/85195-check-if-windows-10-using-uefi-legacy-bios.html
+    # https://stackoverflow.com/questions/65314573/how-to-check-device-boot-mode-uefi-or-legacy
+    # https://stackoverflow.com/questions/18172197/programmatically-determine-if-windows-8-secure-boot-is-enabled
+    # https://learn.microsoft.com/en-us/powershell/module/secureboot/?view=windowsserver2025-ps
+    @staticmethod
+    def is_bios_boot():
+        if CurrentOs.is_linux():
+            return not Path("sys/firmware/efi").exist()
+        elif CurrentOs.is_windows():
+            return False
+        return False
+
+    @staticmethod
+    def is_uefi_boot():
+        if CurrentOs.is_linux():
+            return Path("sys/firmware/efi").exist()
+        elif CurrentOs.is_windows():
+            return False
+        return False
+
+    # https://wiki.debian.org/SecureBoot#What_is_UEFI_Secure_Boot.3F
+    # https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#Checking_Secure_Boot_status
+    @staticmethod
+    def is_uefi_secure_boot(self):
+        return CurrentOs.is_uefi_boot() and False
+
+
+# fixme utopia Проверить на многоядерных системах (у меня есть)
+class Cpu:
+    # https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=gcc/common/config/i386/cpuinfo.h;h=a6ede14a3ccb9f5e5eaa8866e2f29c35d3234285;hb=HEAD
+    # https://codeberg.org/smxi/inxi/src/branch/master/inxi#L12095
+    # https://github.com/torvalds/linux/blob/master/arch/x86/events/intel/core.c#L6527
+    # https://en.wikichip.org/wiki/intel/microarchitectures
+    # https://en.wikipedia.org/wiki/CPUID
+
+    ALL_STEPPINGS = list(range(BitUtils.get_int_max_value(bit_count=4, signed=False) + 1))
+
+    # fixme utopia Comet
+    INTEL_MICROARCHITECTURE = {"westmere": {"family": 0x06, "model": [0x25, 0x2C, 0x2F],
+                                            "introduction_date": datetime.datetime("2010-01-01")},
+                               "sandybridge": {"family": 0x06, "model": [0x2A, 0x2D],
+                                                "introduction_date": datetime.datetime("2010-09-13")},
+                               "saltwell": {"family": 0x06, "model": [0x27, 0x35, 0x36],
+                                            "introduction_date": datetime.datetime("2011-01-01")},
+                               "ivybridge": {"family": 0x06, "model": [0x3A, 0x3E],
+                                              "introduction_date": datetime.datetime("2011-05-04")},
+                               "silvermont": {"family": 0x06, "model": [0x37, 0x4A, 0x4D, 0x5A, 0x5D],
+                                              "introduction_date": datetime.datetime("2013-01-01")},
+                               "haswell": {"family": 0x06, "model": [0x3C, 0x3F, 0x45, 0x46],
+                                           "introduction_date": datetime.datetime("2013-06-04")},
+                               "broadwell": {"family": 0x06, "model": [0x3D, 0x47, 0x4F, 0x56],
+                                             "introduction_date": datetime.datetime("2014-10-01")},
+                               "airmont": {"family": 0x06, "model": [0x4C],
+                                           "introduction_date": datetime.datetime("2015-01-01")},
+                               "skylake": {"family": 0x06, "model": {0x4E: ALL_STEPPINGS, 0x55: [0, 1, 2, 3, 4]},
+                                           "introduction_date": datetime.datetime("2015-08-05")},
+                               "goldmont": {"family": 0x06, "model": [0x5C, 0x5F],
+                                            "introduction_date": datetime.datetime("2016-08-30")},
+                               "kabylake": {"family": 0x06, "model": {0x8E: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                                                                       0x9E: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15]},
+                                             "introduction_date": datetime.datetime("2016-08-30")},
+                               "skylake-server": {"family": 0x06, "model": [0x5E],
+                                             "introduction_date": datetime.datetime("2017-05-04")},
+                               "coffeelake": {"family": 0x06, "model": {0x8E: 10,
+                                                                         0x9E: [10, 11, 12, 13]},
+                                               "introduction_date": datetime.datetime("2017-05-04")},
+                               "goldmont-plus": {"family": 0x06, "model": [0x7A],
+                                                 "introduction_date": datetime.datetime("2017-12-11")},
+                               "knights_mill": {"family": 0x06, "model": [0x85],
+                                                 "introduction_date": datetime.datetime("2017-12-18")},
+                               "amberlake": {"family": 0x06, "model": {0x8E: [9]},
+                                                "introduction_date": datetime.datetime("2018-04-01")},
+                               "whiskeylake": {"family": 0x06, "model": {0x8E: [11, 12]},
+                                              "introduction_date": datetime.datetime("2018-04-01")},
+                               "cannonlake": {"family": 0x06, "model": [0x66, 0x67],
+                                                "introduction_date": datetime.datetime("2018-05-15")},
+                               "cascadelake": {"family": 0x06, "model": {0x55: [5, 6, 7]},
+                                               "introduction_date": datetime.datetime("2019-01-01")},
+
+                               # fixme utopia Не заполнено
+                               "tremont": {"family": 0x06, "model": {0x55: [5, 6, 7]},
+                                                "introduction_date": datetime.datetime("2019-01-01")},
+
+                               }
+
+    def is_intel(self):
+        return self.__is_cpu_vendor("intel")
+
+    def is_intel_above_sanbybridge(self):
+        return False
+
+    def is_intel_above_broadwell(self):
+        return False
+
+    def get_intel_microarchitecture_name(self):
+        if not self.is_intel():
+            return None
+
+        cpu_info = cpuinfo.get_cpu_info()
+        family = int(cpu_info["family"])
+        model = int(cpu_info["model"])
+        stepping = int(cpu_info["stepping"])
+        if
+
+    def __is_cpu_vendor(self, cpu_vendor):
+        try:
+            return str(cpu_vendor) in str(cpuinfo.get_cpu_info()['vendor_id_raw']).strip().lower()
+        except Exception:
+            return False
 
 
 class Path:
@@ -1884,283 +2274,6 @@ class Iommu:
             return False
 
 
-class BitUtils:
-    DECIMAL_BASE = 10
-    HEXADECIMAL_BASE = 16
-    OCTAL_BASE = 8
-    BINARY_BASE = 2
-    TETRAD_IN_BYTE = 2
-    BITS_IN_TETRAD = 4
-    LSB_TETRAD_MASK = 0x0F
-    MSB_TETRAD_MASK = 0xF0
-    BITS_IN_BYTE = BITS_IN_TETRAD * TETRAD_IN_BYTE
-    UINT8_MIN = 0
-    UINT8_MAX = 0xFF
-    INT8_MIN = -128
-    INT8_MAX = 127
-    UINT16_MIN = 0
-    UINT16_MAX = 0xFFFF
-    INT16_MIN = -32768
-    INT16_MAX = 32767
-    UINT8_MASK = UINT8_MAX
-    UINT16_MASK = UINT16_MAX
-    BIT_COUNT_MAX = sys.maxsize.bit_length() + 1
-    BASE_DIGIT_LIST = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    BASE_MIN = 2
-    BASE_MAX = len(BASE_DIGIT_LIST)
-    DIGIT_COUNT_MIN = 1
-
-    @staticmethod
-    def is_decimal(val_as_string):
-        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.DECIMAL_BASE, prefix="(?!0[0-9])"),
-                           re.MULTILINE | re.IGNORECASE)
-        match = regex.search(val_as_string)
-        return match is not None
-
-    @staticmethod
-    def is_hexadecimal(val_as_string):
-        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.HEXADECIMAL_BASE, prefix="0x[0]*"),
-                           re.MULTILINE | re.IGNORECASE)
-        match = regex.search(val_as_string)
-        return match is not None
-
-    @staticmethod
-    def is_binary(val_as_string):
-        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.BINARY_BASE, prefix="0b[0]*"),
-                           re.MULTILINE | re.IGNORECASE)
-        match = regex.search(val_as_string)
-        return match is not None
-
-    @staticmethod
-    def is_octal(val_as_string):
-        regex = re.compile(BitUtils.__get_regex_for_check_int(base=BitUtils.OCTAL_BASE, prefix="0[0]*"),
-                           re.MULTILINE | re.IGNORECASE)
-        match = regex.search(val_as_string)
-        return match is not None
-
-    @staticmethod
-    def __get_regex_for_check_int(base, prefix):
-        BitUtils.__check_base(base)
-        return f"^(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}$"
-
-    @staticmethod
-    def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
-        BitUtils.__check_base(base)
-        result = 0
-        if type(val) is str:
-            result = int(val, base)
-        elif type(val) is int:
-            result = val
-        else:
-            raise Exception("Value unknown type: {}".format(str(val)))
-        BitUtils.check_int(result, bit_count, signed)
-        return result
-
-    @staticmethod
-    def get_regex(val_max, base):
-        BitUtils.__check_int_type(val_max)
-        val_max = abs(val_max)
-
-        val_max_as_str = BitUtils.to_string(val_max, base)
-        digit_count = len(val_max_as_str)
-
-        # Заполнение всех digits нулями, пробелами или ничем
-
-        # Правило для первого элемента, последнего элемента, и всех прочих
-
-        # регулярка для val_max = 157, заполнение нулями
-        # [0-1](?(?<=1)[0-5]|[0-9])(?(?<=15)[0-6]|[0-9])
-        # [1-10](?(?<=1)[0-5]|(?(?<=0)[1-90]|[0-5]))(?(?<=15)[0-6]|[0-9])
-
-        # регулярка для val_max = 157, заполнение пробелами
-        # [1-1 ](?(?<=1)[0-5]|(?(?<= )[1-9 ]|[0-5]))(?(?<=15)[0-6]|[0-9])
-
-        # регулярка для val_max = 157, заполнение ничем
-        # ограничение по максимальной разрядности
-        # [1-1]{0,1}+(?(?<=1)[0-5]|[0-9]){0,1}+(?(?<=15)[0-6]|[0-9])
-        # добавляется ревнивая квантификация и оптимизация условия 2.1
-
-        # диапазон 0 до val_max
-        #
-
-        # Система счисления запись
-        return ""
-
-    @staticmethod
-    def check_int(val, bit_count, signed):
-        BitUtils.__check_int_type(val)
-        val_min = BitUtils.get_int_min_value(bit_count, signed)
-        val_max = BitUtils.get_int_max_value(bit_count, signed)
-        BitUtils.__check_range(val, val_min, val_max)
-
-    @staticmethod
-    def to_string(val, base, to_lower=False):
-        BitUtils.__check_int_type(val)
-        BitUtils.__check_base(base)
-        if val == 0:
-            return "0"
-
-        result = ""
-        if val < 0:
-            result += "-"
-            val = abs(val)
-
-        while val > 0:
-            result += BitUtils.BASE_DIGIT_LIST[val % base]
-            val = val / base
-        result = result[::-1]
-        if to_lower:
-            return result.lower()
-        return result
-
-    @staticmethod
-    def get_max_by_base(base, digit_count):
-        BitUtils.__check_base(base)
-        # BitUtils.__check_digit_count(digit_count) # fixme utopia Сделать
-
-        digit_value_max = BitUtils.get_digit_value_max(base)
-        result = 0
-        while digit_count > 0:
-            result = (result * base) + digit_value_max
-            digit_count = digit_count - 1
-        return result
-
-    @staticmethod
-    def get_digit_value_max(base):
-        BitUtils.__check_base(base)
-        return base - 1
-
-    @staticmethod
-    def get_digit_count_max(base):
-        BitUtils.__check_base(base)
-        int_max = BitUtils.get_int_max_value(BitUtils.BIT_COUNT_MAX, signed=False)
-        # Теоретически может быть -1 (int64 = 0xFFFFFFFFFFFFFFFF), например, для Python2
-        return BitUtils.get_digit_count(int_max, base)
-
-    @staticmethod
-    def get_digit_count(val, base):
-        BitUtils.__check_int_type(val)
-        BitUtils.__check_base(base)
-        if val == 0:
-            return 1
-        val = abs(val)
-
-        result = 0
-        while val > 0:
-            val = val // base
-            result = result + 1
-        return result
-
-    @staticmethod
-    def get_min_by_base(base, digit_count):
-        return 0
-
-    @staticmethod
-    def get_int_min_max_value(bit_count, signed):
-        return BitUtils.get_int_min_value(bit_count, signed), BitUtils.get_int_max_value(bit_count, signed)
-
-    @staticmethod
-    def get_int_min_value(bit_count, signed):
-        BitUtils.__check_bit_count(bit_count)
-        if signed:
-            return ~0 << bit_count - 1
-        return 0
-
-    @staticmethod
-    def get_int_max_value(bit_count, signed):
-        BitUtils.__check_bit_count(bit_count)
-        if signed:
-            return ~(~0 << bit_count - 1)
-        return ~(~0 << bit_count)
-
-    @staticmethod
-    def __check_bit_count(bit_count):
-        BitUtils.__check_int_type(bit_count)
-        bit_count_min = 1
-        bit_count_max = BitUtils.BIT_COUNT_MAX
-        BitUtils.__check_range(bit_count, bit_count_min, bit_count_max)
-
-    @staticmethod
-    def __check_base(base):
-        BitUtils.__check_int_type(base)
-        BitUtils.__check_range(base, BitUtils.BASE_MIN, BitUtils.BASE_MAX)
-
-    @staticmethod
-    def __check_int_type(val):
-        if not isinstance(val, int):
-            raise Exception("Value unknown type, must be int: {}".format(str(val)))
-
-    @staticmethod
-    def __check_range(val, val_min, val_max):
-        if val_min > val_max:
-            raise Exception("Value min ({}) more value max ({}))".format(val_min, val_max))
-        if val_min > val > val_max:
-            raise Exception("Value invalid range: {}, (min={}, max={})".format(str(val), val_min, val_max))
-
-
-class UnitTest_BitUtils(unittest.TestCase):
-
-    def test_is_decimal(self):
-        ref_table = {
-            "1": [(10, True), (16, False), (2, False), (8, False)],
-            "-1": [(10, True), (16, False), (2, False), (8, False)],
-            "0": [(10, True), (16, False), (2, False), (8, False)],
-            "9999": [(10, True), (16, False), (2, False), (8, False)],
-            "-9999": [(10, True), (16, False), (2, False), (8, False)],
-            "+9999": [(10, True), (16, False), (2, False), (8, False)],
-            "0x0": [(10, False), (16, True), (2, False), (8, False)],
-            "0x00": [(10, False), (16, True), (2, False), (8, False)],
-            "0x0000": [(10, False), (16, True), (2, False), (8, False)],
-            "0x00000000": [(10, False), (16, True), (2, False), (8, False)],
-            "0x0000000000000000": [(10, False), (16, True), (2, False), (8, False)],
-            "0x00000000000000000000000000000000": [(10, False), (16, True), (2, False), (8, False)],
-            "-0xff": [(10, False), (16, True), (2, False), (8, False)],
-            "+0xFe": [(10, False), (16, True), (2, False), (8, False)],
-            "+0x0000123456789ABCDEF": [(10, False), (16, True), (2, False), (8, False)],
-            "-0xFFFFFFFFFFFFFFFF": [(10, False), (16, True), (2, False), (8, False)],
-            "+0xFFFFFFFFFFFFFFFF": [(10, False), (16, True), (2, False), (8, False)],
-            "0b0": [(10, False), (16, False), (2, True), (8, False)],
-            "0b00000000": [(10, False), (16, False), (2, True), (8, False)],
-            "-0b010101010101": [(10, False), (16, False), (2, True), (8, False)],
-            "+0b010101010101": [(10, False), (16, False), (2, True), (8, False)],
-            "01": [(10, False), (16, False), (2, False), (8, True)],
-            "-01": [(10, False), (16, False), (2, False), (8, True)],
-            "+01": [(10, False), (16, False), (2, False), (8, True)],
-            "07": [(10, False), (16, False), (2, False), (8, True)],
-            "00": [(10, False), (16, False), (2, False), (8, True)],
-            "01234567890ABCDEF": [(10, False), (16, False), (2, False), (8, False)]
-        }
-
-        for key, table in ref_table.items():
-            for base, result in table:
-                if base == 10:
-                    self.assertEqual(BitUtils.is_decimal(key), result, f"base={base}, key={key}")
-                elif base == 16:
-                    self.assertEqual(BitUtils.is_hexadecimal(key), result, f"base={base}, key={key}")
-                elif base == 2:
-                    self.assertEqual(BitUtils.is_binary(key), result, f"base={base}, key={key}")
-                elif base == 8:
-                    self.assertEqual(BitUtils.is_octal(key), result, f"base={base}, key={key}")
-                else:
-                    self.assertTrue(False, f"Unknown base={base}")
-
-    def test_get_digit_count(self):
-        ref_table = {
-            "9999": (10, 4),
-            "10": (10, 2),
-            "0xFFFF": (16, 4),
-            "0x00FFFF": (16, 4),
-            "0xFFFFFFFF": (16, 8),
-            "0xFFFFFFFFFFFFFFFF": (16, 16),
-            "0b0101": (2, 3),
-            "012": (8, 2)
-        }
-
-        for key, value in ref_table.items():
-            base, result = value
-            self.assertEqual(BitUtils.get_digit_count(int(key, base), base), result, f"base={base}, key={key}")
-
-
 # https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf
 class PciClassCode(int):
     BASE_CLASS_BACKWARD_COMPATIBILITY = 0x00
@@ -2383,6 +2496,9 @@ class Pci:
     def get_qemu_parameters(self, vm_meta_data):
         return [VfioPci.get_device_for_passthrough(self, vm_meta_data)]
 
+    def is_other_vga_disable(self):
+        return False
+
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
     def get_rom(self, dir_path_for_save_rom_file):
@@ -2549,6 +2665,17 @@ class VfioPci:
             result.extend(pci.get_qemu_parameters(vm_meta_data))
         return result
 
+    # VGA должен быть единственным в системе
+
+    ## Заблокировать ли прочие VGA для данной виртуальной машины
+    # @details Требуется для обеспечения проброса Intel integrated GPU (IGD, Intel Graphics Device) в так называемом legacy режиме, подробно https://gitlab.com/qemu-project/qemu/-/blob/master/docs/igd-assign.txt?ref_type=heads
+    # @return true - заблокировать прочие VGA для данной виртуальной машины; false - можно использовать множественные VGA, в том числе виртуальные
+    def is_other_vga_disable(self):
+        for pci in self.__pci_list:
+            if pci.is_other_vga_disable():
+                return True
+        return False
+
 
 # https://docs.kernel.org/driver-api/vfio-mediated-device.html
 # https://docs.kernel.org/driver-api/vfio.html
@@ -2564,6 +2691,7 @@ class Vfio:
         return result
 
 
+# fixme utopia Будет ли работать проброс VGA на хост машине с bios а вирт машину с uefi?
 class VgaPciIntel(Pci):
     def __init__(self, pci):
         super().__init__()
@@ -2572,7 +2700,7 @@ class VgaPciIntel(Pci):
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):
         result = super().get_kernel_parameters()
-        result.extend([{"module_blacklist": ["snd_hda_intel","snd_hda_codec_hdmi"]},
+        result.extend([{"module_blacklist": ["snd_hda_intel", "snd_hda_codec_hdmi"]},
                        {"video": "efifb:off,vesafb:off,vesa:off,simplefb:off"}, {"l1tf": "full,force"},
                        {"kvm.ignore_msrs": "1"}, {"vfio_io_iommu_type1.allow_unsafe_interrupts": "1"},
                        {"initcall_blacklist": "sysfb_init"}])
@@ -2599,6 +2727,15 @@ class VgaPciIntel(Pci):
             # result.append({"-machine": "pc-i440fx-2.2"})
             # result.append({"-device": { "vfio-pci-igd-lpc-bridge": { "addr": "0x1f" } }})
         return result
+
+    # fixme utopia Для cpu broadwell++ поддержка UPT режима проброса, до sandybridge включительно is_other_vga_disable = True
+    def is_other_vga_disable(self):
+        return False
+
+    # Из-за невозможности использования
+    def check_chipset(self, vm_platform):
+        # fixme utopia Для cpu не поддерживающих UPT используем только i440fx чипсет
+        return False
 
     @staticmethod
     def is_my_instance(pci):
@@ -4396,14 +4533,14 @@ class QemuVgaDefault:
         return [{"-vga": "std", "-display": {"gtk": {}}}]
 
 
-class QemuVgaPciPassthrough:
+class QemuPciPassthrough:
     def __init__(self, vfio_pci):
         if isinstance(vfio_pci, VfioPci):
             self.__vfio_pci = vfio_pci
         elif isinstance(vfio_pci, str):
             self.__vfio_pci = VfioPci.from_string(vfio_pci)
         else:
-            raise Exception(f"[QemuVgaPciPassthrough] vfio_pci TYPE MISMATCH: {type(vfio_pci)}")
+            raise Exception(f"[QemuPciPassthrough] vfio_pci TYPE MISMATCH: {type(vfio_pci)}")
 
     def __str__(self):
         return str(self.__vfio_pci)
@@ -4413,6 +4550,9 @@ class QemuVgaPciPassthrough:
 
     def get_qemu_parameters(self, vm_meta_data):
         return self.__vfio_pci.get_qemu_parameters(vm_meta_data)
+
+    def is_vga_disable(self):
+        return self.__vfio_pci.is_vga_disable()
 
 
 # fixme utopia Обеспечить возможность установки win11
@@ -4568,6 +4708,7 @@ class VirtualMachine:
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
                  initiate_vga_pci_passthrough=False,
+                 initiate_usb_host_passthrough=False,
                  qemu_vga_pci_passthrough=None, grub_config_backup_path=None,
                  vm_platform=VirtualMachine.QEMU_PLATFORM_I440FX_BIOS):
         self.__vm_name = vm_name
@@ -4575,6 +4716,7 @@ class VmRunner:
         self.__startup = startup
         self.__block_internet_access = bool(block_internet_access)
         self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
+        self.__initiate_usb_host_passthrough = initiate_usb_host_passthrough
         self.__qemu_vga_pci_passthrough = qemu_vga_pci_passthrough
         self.__vm_platform = vm_platform
         self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
@@ -4625,7 +4767,7 @@ class VmRunner:
             return
         self.__grub.update()
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuVgaPciPassthrough": str(QemuVgaPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--pp" if self.__initiate_vga_pci_passthrough else ""]])}'
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuPciPassthrough": str(QemuPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--vga-passthrough" if self.__initiate_vga_pci_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
         # Power.reboot()
@@ -4678,7 +4820,6 @@ class VmRunner:
             qemu_bios = QemuBios("q35")
         elif self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI:
             qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=False)
-            tpm = TpmEmulator(vm_meta_data)
         elif self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI_SECURE:
             qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=True)
             tpm = TpmEmulator(vm_meta_data)
@@ -4958,13 +5099,20 @@ def main():
     parser_vm_run.add_argument("vm_name", type=str, help="Virtual machine name")
     parser_vm_run.add_argument("--bi", help="Block internet access, but not the local network",
                                action='store_true')
-    parser_vm_run.add_argument("--pp", help="Initiate VGA PCI passthrough to virtual machine",
+    parser_vm_run.add_argument("--vga-passthrough", help="Initiate VGA PCI passthrough to virtual machine",
                                action='store_true')
     parser_vm_run.add_argument("--vm_platform", type=str,
                                help=f"QEMU platform: {', '.join(VirtualMachine.QEMU_PLATFORM_LIST)}",
                                default=VirtualMachine.QEMU_PLATFORM_I440FX_BIOS)
-    parser_vm_run.add_argument("--QemuVgaPciPassthrough", type=QemuVgaPciPassthrough,
+    parser_vm_run.add_argument("--usb-host-passthrough",
+                               help="Initiate all USB host PCI passthrough to virtual machine",
+                               action='store_true')
+    # fixme utopia Пробрасываем только PCI без уточнения, если среди пробрасываемых устройств есть VGA, то виртуальный VGA не используем?
+    #  но как быть с SRIOV, например?
+    parser_vm_run.add_argument("--QemuPciPassthrough", type=QemuPciPassthrough,
                                help="PCI VGA list for passthrough to virtual machine. Not for human use")
+    parser_vm_run.add_argument("--QemuUsbHostPciPassthrough", type=QemuUsbHostPciPassthrough,
+                               help="PCI USB host for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
                                help="Grub config backup file path. Not for human use")
 
@@ -5004,7 +5152,7 @@ def main():
     elif args.command == "vm_create":
         print(VmRegistry(project_config.get_vm_registry_path()).create(args.vm_name, args.image_size).get_image_path())
 
-    elif args.command == "vm_install":
+    elif args.command == "vm_install":  # fixme utopia Обобщить с vm_run
         if not args.os_distr_path.exists():
             raise Exception("OS distributive image \"{}\" NOT FOUND".format(args.os_distr_path))
 
@@ -5037,7 +5185,9 @@ def main():
 
     elif args.command == "vm_run":
         VmRunner(args.vm_name, project_config=project_config, block_internet_access=args.bi,
-                 initiate_vga_pci_passthrough=args.pp, qemu_vga_pci_passthrough=args.QemuVgaPciPassthrough,
+                 initiate_vga_pci_passthrough=args.vga_passthrough,
+                 initiate_usb_host_passthrough=args.usb_host_passthrough,
+                 qemu_vga_pci_passthrough=args.QemuPciPassthrough,
                  grub_config_backup_path=args.grub_config_backup_path, vm_platform=args.vm_platform).run()
 
     elif args.command == "vm_ssh_fwd":
