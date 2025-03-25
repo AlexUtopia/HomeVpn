@@ -468,82 +468,165 @@ class Cpu:
     # https://github.com/torvalds/linux/blob/master/arch/x86/events/intel/core.c#L6527
     # https://en.wikichip.org/wiki/intel/microarchitectures
     # https://en.wikipedia.org/wiki/CPUID
+    # https://www.etallen.com/cpuid.html
 
-    ALL_STEPPINGS = list(range(BitUtils.get_int_max_value(bit_count=4, signed=False) + 1))
+    __CPU_VENDOR = "cpu_vendor"
+    __CPU_UARCH_CODENAME = "cpu_uarch_codename"
+    __CPU_UARCH_FAMILY = "cpu_uarch_family"
+    __CPU_TECHNICAL_PROCESS = "cpu_technical_process"
 
-    # fixme utopia Comet
-    INTEL_MICROARCHITECTURE = {"westmere": {"family": 0x06, "model": [0x25, 0x2C, 0x2F],
-                                            "introduction_date": datetime.datetime("2010-01-01")},
-                               "sandybridge": {"family": 0x06, "model": [0x2A, 0x2D],
-                                                "introduction_date": datetime.datetime("2010-09-13")},
-                               "saltwell": {"family": 0x06, "model": [0x27, 0x35, 0x36],
-                                            "introduction_date": datetime.datetime("2011-01-01")},
-                               "ivybridge": {"family": 0x06, "model": [0x3A, 0x3E],
-                                              "introduction_date": datetime.datetime("2011-05-04")},
-                               "silvermont": {"family": 0x06, "model": [0x37, 0x4A, 0x4D, 0x5A, 0x5D],
-                                              "introduction_date": datetime.datetime("2013-01-01")},
-                               "haswell": {"family": 0x06, "model": [0x3C, 0x3F, 0x45, 0x46],
-                                           "introduction_date": datetime.datetime("2013-06-04")},
-                               "broadwell": {"family": 0x06, "model": [0x3D, 0x47, 0x4F, 0x56],
-                                             "introduction_date": datetime.datetime("2014-10-01")},
-                               "airmont": {"family": 0x06, "model": [0x4C],
-                                           "introduction_date": datetime.datetime("2015-01-01")},
-                               "skylake": {"family": 0x06, "model": {0x4E: ALL_STEPPINGS, 0x55: [0, 1, 2, 3, 4]},
-                                           "introduction_date": datetime.datetime("2015-08-05")},
-                               "goldmont": {"family": 0x06, "model": [0x5C, 0x5F],
-                                            "introduction_date": datetime.datetime("2016-08-30")},
-                               "kabylake": {"family": 0x06, "model": {0x8E: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                                                                       0x9E: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15]},
-                                             "introduction_date": datetime.datetime("2016-08-30")},
-                               "skylake-server": {"family": 0x06, "model": [0x5E],
-                                             "introduction_date": datetime.datetime("2017-05-04")},
-                               "coffeelake": {"family": 0x06, "model": {0x8E: 10,
-                                                                         0x9E: [10, 11, 12, 13]},
-                                               "introduction_date": datetime.datetime("2017-05-04")},
-                               "goldmont-plus": {"family": 0x06, "model": [0x7A],
-                                                 "introduction_date": datetime.datetime("2017-12-11")},
-                               "knights_mill": {"family": 0x06, "model": [0x85],
-                                                 "introduction_date": datetime.datetime("2017-12-18")},
-                               "amberlake": {"family": 0x06, "model": {0x8E: [9]},
-                                                "introduction_date": datetime.datetime("2018-04-01")},
-                               "whiskeylake": {"family": 0x06, "model": {0x8E: [11, 12]},
-                                              "introduction_date": datetime.datetime("2018-04-01")},
-                               "cannonlake": {"family": 0x06, "model": [0x66, 0x67],
-                                                "introduction_date": datetime.datetime("2018-05-15")},
-                               "cascadelake": {"family": 0x06, "model": {0x55: [5, 6, 7]},
-                                               "introduction_date": datetime.datetime("2019-01-01")},
+    __REGEX = f"\(uarch synth\) = (?P<{__CPU_VENDOR}>[a-zA-Z]) (?P<{__CPU_UARCH_CODENAME}>.*)(?> \\{{(?P<{__CPU_UARCH_FAMILY}>.*)\\}})?(?>, (?P<{__CPU_TECHNICAL_PROCESS}>.*))?$"
 
-                               # fixme utopia Не заполнено
-                               "tremont": {"family": 0x06, "model": {0x55: [5, 6, 7]},
-                                                "introduction_date": datetime.datetime("2019-01-01")},
+    __CMD_LINE = "cpuid -1"
 
-                               }
+    # Микроархитектуры CPU расположены в хронологическом порядке появления на свет
+    INTEL_UARCH_TABLE = [{"family": 0x06, "uarch": "", "uarch_family": "P6 Pentium II"},
+                         {"family": 0x06, "uarch": "", "uarch_family": "P6 Pentium III"},
+                         {"family": 0x06, "uarch": "", "uarch_family": "P6 Pentium M"},
+                         {"family": 0x06, "uarch": "Dothan"},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/2643/products-formerly-dothan.html
+                         {"family": 0x06, "uarch": "Yonah"},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/2673/products-formerly-yonah.html
+                         {"family": 0x06, "uarch": "Merom"},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/2683/products-formerly-merom.html
+                         {"family": 0x06, "uarch": "Penryn"},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/26543/products-formerly-penryn.html
+                         {"family": 0x06, "uarch": "Bonnell"},
+                         {"family": 0x06, "uarch": "Nehalem"},
+                         {"family": 0x06, "uarch": "Westmere"},
+                         {"family": 0x06, "uarch": "Sandy Bridge",
+                          "CoreNameList": ["Sandy Bridge M", "Sandy Bridge", "Sandy Bridge E"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/29900/products-formerly-sandy-bridge.html
+                         {"family": 0x06, "uarch": "Saltwell"},
+                         # https://en.wikichip.org/wiki/intel/microarchitectures/saltwell
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/43824/penwell.html
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/60105/products-formerly-centerton.html
+
+                         {"family": 0x06, "uarch": "Ivy Bridge"},
+                         {"family": 0x06, "uarch": "Silvermont"},
+                         {"family": 0x06, "uarch": "Haswell"},
+                         {"family": 0x06, "uarch": "Broadwell",
+                          "CoreNameList": ["Broadwell Y", "Broadwell U", "Broadwell H", "Broadwell DT",
+                                           "Broadwell EP", "Broadwell EX", "Broadwell E"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/38530/products-formerly-broadwell.html
+                         {"family": 0x06, "uarch": "Airmont"},
+                         {"family": 0x06, "uarch": "Skylake"},
+                         {"family": 0x06, "uarch": "Kaby Lake"},
+                         {"family": 0x06, "uarch": "Goldmont"},
+                         {"family": 0x06, "uarch": "Coffee Lake"},
+                         {"family": 0x06, "uarch": "Goldmont Plus"},
+                         {"family": 0x06, "uarch": "Knights Mill"},
+                         {"family": 0x06, "uarch": "Palm Cove", "CoreNameList": ["Cannon Lake U"]},
+                         # https://www.intel.com/content/www/us/en/products/sku/136863/intel-core-i38121u-processor-4m-cache-up-to-3-20-ghz/specifications.html
+                         {"family": 0x06, "uarch": "Cascade Lake"},
+                         {"family": 0x06, "uarch": "Tremont", "CoreNameList": ["Lakefield"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/81657/products-formerly-lakefield.html
+                         {"family": 0x06, "uarch": "Sunny Cove", "CoreNameList": ["Lakefield"]},
+                         {"family": 0x06, "uarch": "Willow Cove",
+                          "CoreNameList": ["Tiger Lake Y", "Tiger Lake U", "Tiger Lake H35", "Tiger Lake H"]},
+                         {"family": 0x06, "uarch": "Cooper Lake",
+                          "CoreNameList": ["Cooper Lake X", "Cooper Lake W", "Cooper Lake SP", "Cooper Lake AP"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/189143/products-formerly-cooper-lake.html
+                         {"family": 0x06, "uarch": "Gracemont"},
+                         {"family": 0x06, "uarch": "Cypress Cove"},
+                         {"family": 0x06, "uarch": "Golden Cove"},
+                         {"family": 0x06, "uarch": "Raptor Cove"},
+                         {"family": 0x06, "uarch": "Sapphire Rapids"},
+                         {"family": 0x06, "uarch": "Emerald Rapids"},
+                         {"family": 0x06, "uarch": "Redwood Cove"},
+                         {"family": 0x06, "uarch": "Granite Rapids"},
+                         {"family": 0x06, "uarch": "Sierra Forest"},
+                         {"family": 0x06, "uarch": "Lion Cove", "CoreNameList": ["Lunar Lake"]},
+                         {"family": 0x06, "uarch": "Skymont", "CoreNameList": ["Lunar Lake"]},
+                         {"family": 0x06, "uarch": "Crestmont",
+                          "CoreNameList": ["Meteor Lake M", "Meteor Lake N", "Meteor Lake S"]},
+                         {"family": 0x06, "uarch": "Redwood Cove",
+                          "CoreNameList": ["Meteor Lake M", "Meteor Lake N", "Meteor Lake S"]},
+                         {"family": 0x06, "uarch": "Cougar Cove", "CoreNameList": ["Panther Lake"]},
+                         {"family": 0x06, "uarch": "Darkmont", "CoreNameList": ["Panther Lake"]}
+                         ]
+
+    def is_intel_above_sandybridge(self):
+        return self.is_intel_above_uarch_codename("Sandy Bridge")
+
+    def is_intel_above_broadwell(self):
+        return self.is_intel_above_uarch_codename("Broadwell")
 
     def is_intel(self):
         return self.__is_cpu_vendor("intel")
 
-    def is_intel_above_sanbybridge(self):
-        return False
+    def get_uarch_codename(self):
+        return self.__get_cpuid_vendor_and_uarch_info().get(self.__CPU_UARCH_CODENAME)
 
-    def is_intel_above_broadwell(self):
-        return False
+    def get_uarch_codename_and_family(self):
+        cpuid_vendor_and_uarch_info = self.__get_cpuid_vendor_and_uarch_info()
+        return cpuid_vendor_and_uarch_info.get(self.__CPU_UARCH_CODENAME), cpuid_vendor_and_uarch_info.get(
+            self.__CPU_UARCH_FAMILY)
 
-    def get_intel_microarchitecture_name(self):
-        if not self.is_intel():
-            return None
+    def get_cpu_vendor(self):
+        return Cpu.__trim_and_lower(self.__get_cpuid_vendor_and_uarch_info().get(self.__CPU_VENDOR))
 
-        cpu_info = cpuinfo.get_cpu_info()
-        family = int(cpu_info["family"])
-        model = int(cpu_info["model"])
-        stepping = int(cpu_info["stepping"])
-        if
-
-    def __is_cpu_vendor(self, cpu_vendor):
+    # fixme utopia cpuid нет под arm - надо возвращать как было
+    def __is_cpu_vendor(self, target_cpu_vendor):
         try:
-            return str(cpu_vendor) in str(cpuinfo.get_cpu_info()['vendor_id_raw']).strip().lower()
+            cpu_vendor = self.get_cpu_vendor()
+            if cpu_vendor is None:
+                return False
+            return Cpu.__trim_and_lower(target_cpu_vendor) in cpu_vendor
         except Exception:
             return False
 
+    # fixme utopia Результат закэшировать
+    def __get_cpuid_vendor_and_uarch_info(self):
+        cpuid_output = Cpu.__run_cpuid()
+
+        regex = re.compile(self.__REGEX)
+        match = regex.search(cpuid_output)
+        if match is None:
+            return {}
+
+        return match.groupdict().items()
+
+    @staticmethod
+    def __run_cpuid():
+        cmd_result = subprocess.run(Cpu.__CMD_LINE, shell=True, capture_output=True, text=True)
+        if cmd_result.returncode:
+            return ""
+        return cmd_result.stdout
+
+    def is_intel_above_uarch_codename(self, target_uarch_codename, target_uarch_family=None):
+        if not is_intel():
+            return False
+
+        current_uarch_codename, current_uarch_family = self.get_uarch_codename_and_family()
+        return self.__get_uarch_index(self.INTEL_UARCH_TABLE, current_uarch_codename,
+                                      current_uarch_family) >= self.__get_uarch_index(self.INTEL_UARCH_TABLE,
+                                                                                      target_uarch_codename,
+                                                                                      target_uarch_family)
+
+    def __get_uarch_index(self, uarch_table, target_uarch_codename, target_uarch_family=None):
+        result = 0
+        target_uarch_codename = Cpu.__trim_and_lower(target_uarch_codename)
+        target_uarch_family = Cpu.__trim_and_lower(target_uarch_family)
+
+        for item in uarch_table:
+            if target_uarch_codename is None:
+                if target_uarch_family is not None:
+                    uarch_family = Cpu.__trim_and_lower(item.get("uarch_family"))
+                    if uarch_family is not None and uarch_family in target_uarch_family:
+                        break
+            else:
+                uarch_codename = Cpu.__trim_and_lower(item.get("uarch"))
+                if uarch_codename is not None and uarch_codename in target_uarch_codename:
+                    break
+            result += 1
+        return result
+
+    @staticmethod
+    def __trim_and_lower(value):
+        if value is None:
+            return value
+        return str(value).strip().lower()
 
 class Path:
     def __init__(self, path):
