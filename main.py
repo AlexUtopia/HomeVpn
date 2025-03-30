@@ -82,6 +82,52 @@ class Logger:
         return Logger.__instance.get_logger()
 
 
+class RegexConstants:
+    CAPTURE_ALL = fr"(.*)"
+    WHITESPACES = r"\s"
+    WHITESPACE_CHARACTER_SET = fr"[{WHITESPACES}]"
+    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}*"
+    SPACE_SYMBOLS_ONE_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}+"
+    NEWLINE_CHARACTER_SET = r"[\n\r]"
+    ONE_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}+"
+    ZERO_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}*"
+    ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
+    ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
+    ASCII_LETTER = "a-zA-Z"
+    ASCII_LETTER_CHARACTER_SET = f"[{ASCII_LETTER}]"
+    ASCII_PRINTABLE = "\x20-\0x7E"
+    ASCII_PRINTABLE_CHARACTER_SET = f"[{ASCII_PRINTABLE}]"
+
+    ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
+                                      (")", "\)"), ("$", "\$"), ("-", "\-"), (">", "\>"),
+                                      ("<", "\<"), ("|", "\|"), ("?", "\?"), ("^", "\^")]
+
+    @staticmethod
+    def atomic_group(value):
+        return f"(?>{value})"
+
+    @staticmethod
+    def to_character_set(character_set, is_remove_duplicate=True):
+        result = ""
+        if isinstance(character_set, list) or isinstance(character_set, set):
+            for item in character_set:
+                result += RegexConstants.to_character_set(item)
+            result = RegexConstants.to_character_set(result)
+        elif isinstance(character_set, str):
+            if is_remove_duplicate:
+                character_set_as_list = list(set(character_set))
+                character_set_as_list.sort()
+                result = "".join(character_set_as_list)
+            else:
+                result = character_set
+        return result
+
+    @staticmethod
+    def character_set_escape(character_set, is_remove_duplicate=True):
+        return EscapeLiteral(encode_table=RegexConstants.ENCODE_TABLE_FOR_CHARACTER_SET).encode(
+            RegexConstants.to_character_set(character_set, is_remove_duplicate))
+
+
 class BitUtils:
     DECIMAL_BASE = 10
     HEXADECIMAL_BASE = 16
@@ -145,12 +191,12 @@ class BitUtils:
     def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
         BitUtils.__check_base(base)
         result = 0
-        if type(val) is str:
+        if isinstance(val, str):
             result = int(val, base)
-        elif type(val) is int:
+        elif isinstance(val, int):
             result = val
         else:
-            raise Exception("Value unknown type: {}".format(str(val)))
+            raise Exception(f"Value unknown type: {val} | {type(val)}")
         BitUtils.check_int(result, bit_count, signed)
         return result
 
@@ -229,9 +275,9 @@ class BitUtils:
         return base - 1
 
     @staticmethod
-    def get_digit_count_max(base):
+    def get_digit_count_max(base, bit_count=BIT_COUNT_MAX):
         BitUtils.__check_base(base)
-        int_max = BitUtils.get_int_max_value(BitUtils.BIT_COUNT_MAX, signed=False)
+        int_max = BitUtils.get_int_max_value(bit_count, signed=False)
         # Теоретически может быть -1 (int64 = 0xFFFFFFFFFFFFFFFF), например, для Python2
         return BitUtils.get_digit_count(int_max, base)
 
@@ -359,6 +405,52 @@ class UnitTest_BitUtils(unittest.TestCase):
             self.assertEqual(BitUtils.get_digit_count(int(key, base), base), result, f"base={base}, key={key}")
 
 
+class UInt8Hex(int):
+    def __new__(cls, value=0):
+        return super(UInt8Hex, cls).__new__(cls, BitUtils.get_int_with_check(value, bit_count=8, signed=False,
+                                                                             base=BitUtils.HEXADECIMAL_BASE))
+
+    def __str__(self):
+        return f"{int(self):02x}"
+
+    @staticmethod
+    def get_regex():
+        return "[0-9a-fA-F]{2}"
+
+
+class UInt16Hex(int):
+    def __new__(cls, value=0):
+        return super(UInt16Hex, cls).__new__(cls, BitUtils.get_int_with_check(value, bit_count=16, signed=False,
+                                                                              base=BitUtils.HEXADECIMAL_BASE))
+
+    def __str__(self):
+        return f"{int(self):04x}"
+
+    @staticmethod
+    def get_regex():
+        return "[0-9a-fA-F]{4}"
+
+
+class UInt8(int):
+    def __new__(cls, value=0):
+        return super(UInt8, cls).__new__(cls, BitUtils.get_int_with_check(value, bit_count=8, signed=False,
+                                                                          base=BitUtils.DECIMAL_BASE))
+
+    def __str__(self):
+        return f"{int(self)}"
+
+    @staticmethod
+    def get_regex():
+        return f"[0-9]{{1,{BitUtils.get_digit_count_max(BitUtils.DECIMAL_BASE, bit_count=8)}}}"
+
+
+class String(str):
+
+    @staticmethod
+    def get_regex():
+        return f".*"
+
+
 # https://tproger.ru/translations/demystifying-decorators-in-python/
 
 # https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
@@ -461,7 +553,7 @@ class CurrentOs:
         return CurrentOs.is_uefi_boot() and False
 
 
-# fixme utopia Проверить на многоядерных системах (у меня есть)
+# fixme utopia Проверить на многопроцессорных системах (у меня есть)
 class Cpu:
     # https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=gcc/common/config/i386/cpuinfo.h;h=a6ede14a3ccb9f5e5eaa8866e2f29c35d3234285;hb=HEAD
     # https://codeberg.org/smxi/inxi/src/branch/master/inxi#L12095
@@ -475,14 +567,14 @@ class Cpu:
     __CPU_UARCH_FAMILY = "cpu_uarch_family"
     __CPU_TECHNICAL_PROCESS = "cpu_technical_process"
 
-    __REGEX = f"\(uarch synth\) = (?P<{__CPU_VENDOR}>[a-zA-Z]) (?P<{__CPU_UARCH_CODENAME}>.*)(?> \\{{(?P<{__CPU_UARCH_FAMILY}>.*)\\}})?(?>, (?P<{__CPU_TECHNICAL_PROCESS}>.*))?$"
+    __REGEX = f"\(uarch synth\) = (?P<{__CPU_VENDOR}>{RegexConstants.ASCII_LETTER_CHARACTER_SET}+)(?> (?P<{__CPU_UARCH_CODENAME}>{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+))?(?> \\{{(?P<{__CPU_UARCH_FAMILY}>{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+)\\}})?(?>, (?P<{__CPU_TECHNICAL_PROCESS}>{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+))?$"
 
     __CMD_LINE = "cpuid -1"
 
     # Микроархитектуры CPU расположены в хронологическом порядке появления на свет
-    INTEL_UARCH_TABLE = [{"family": 0x06, "uarch": "", "uarch_family": "P6 Pentium II"},
-                         {"family": 0x06, "uarch": "", "uarch_family": "P6 Pentium III"},
-                         {"family": 0x06, "uarch": "", "uarch_family": "P6 Pentium M"},
+    INTEL_UARCH_TABLE = [{"family": 0x06, "uarch_family": "P6 Pentium II"},
+                         {"family": 0x06, "uarch_family": "P6 Pentium III"},
+                         {"family": 0x06, "uarch_family": "P6 Pentium M"},
                          {"family": 0x06, "uarch": "Dothan"},
                          # https://www.intel.com/content/www/us/en/ark/products/codename/2643/products-formerly-dothan.html
                          {"family": 0x06, "uarch": "Yonah"},
@@ -495,7 +587,7 @@ class Cpu:
                          {"family": 0x06, "uarch": "Nehalem"},
                          {"family": 0x06, "uarch": "Westmere"},
                          {"family": 0x06, "uarch": "Sandy Bridge",
-                          "CoreNameList": ["Sandy Bridge M", "Sandy Bridge", "Sandy Bridge E"]},
+                          "core_name_list": ["Sandy Bridge M", "Sandy Bridge", "Sandy Bridge E"]},
                          # https://www.intel.com/content/www/us/en/ark/products/codename/29900/products-formerly-sandy-bridge.html
                          {"family": 0x06, "uarch": "Saltwell"},
                          # https://en.wikichip.org/wiki/intel/microarchitectures/saltwell
@@ -504,10 +596,17 @@ class Cpu:
 
                          {"family": 0x06, "uarch": "Ivy Bridge"},
                          {"family": 0x06, "uarch": "Silvermont"},
-                         {"family": 0x06, "uarch": "Haswell"},
+                         {"family": 0x06, "uarch": "Haswell",
+                          "core_name_list": ["Haswell DT", "Haswell MB", "Haswell H", "Haswell ULT", "Haswell ULX",
+                                             "Haswell EP", "Haswell EX", "Haswell E"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/42174/products-formerly-haswell.html
+
+                         {"family": 0x06, "uarch": "Knights Landing", "core_name_list": ["Knights Landing"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/48999/products-formerly-knights-landing.html
+
                          {"family": 0x06, "uarch": "Broadwell",
-                          "CoreNameList": ["Broadwell Y", "Broadwell U", "Broadwell H", "Broadwell DT",
-                                           "Broadwell EP", "Broadwell EX", "Broadwell E"]},
+                          "core_name_list": ["Broadwell Y", "Broadwell U", "Broadwell H", "Broadwell DT",
+                                             "Broadwell EP", "Broadwell EX", "Broadwell E"]},
                          # https://www.intel.com/content/www/us/en/ark/products/codename/38530/products-formerly-broadwell.html
                          {"family": 0x06, "uarch": "Airmont"},
                          {"family": 0x06, "uarch": "Skylake"},
@@ -516,19 +615,23 @@ class Cpu:
                          {"family": 0x06, "uarch": "Coffee Lake"},
                          {"family": 0x06, "uarch": "Goldmont Plus"},
                          {"family": 0x06, "uarch": "Knights Mill"},
-                         {"family": 0x06, "uarch": "Palm Cove", "CoreNameList": ["Cannon Lake U"]},
+                         {"family": 0x06, "uarch": "Palm Cove", "core_name_list": ["Cannon Lake U"]},
                          # https://www.intel.com/content/www/us/en/products/sku/136863/intel-core-i38121u-processor-4m-cache-up-to-3-20-ghz/specifications.html
                          {"family": 0x06, "uarch": "Cascade Lake"},
-                         {"family": 0x06, "uarch": "Tremont", "CoreNameList": ["Lakefield"]},
+                         {"family": 0x06, "uarch": "Tremont", "core_name_list": ["Lakefield", "Snow Ridge"]},
                          # https://www.intel.com/content/www/us/en/ark/products/codename/81657/products-formerly-lakefield.html
-                         {"family": 0x06, "uarch": "Sunny Cove", "CoreNameList": ["Lakefield"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/87586/products-formerly-snow-ridge.html
+
+                         {"family": 0x06, "uarch": "Sunny Cove", "core_name_list": ["Lakefield"]},
                          {"family": 0x06, "uarch": "Willow Cove",
-                          "CoreNameList": ["Tiger Lake Y", "Tiger Lake U", "Tiger Lake H35", "Tiger Lake H"]},
+                          "core_name_list": ["Tiger Lake Y", "Tiger Lake U", "Tiger Lake H35", "Tiger Lake H"]},
                          {"family": 0x06, "uarch": "Cooper Lake",
-                          "CoreNameList": ["Cooper Lake X", "Cooper Lake W", "Cooper Lake SP", "Cooper Lake AP"]},
+                          "core_name_list": ["Cooper Lake X", "Cooper Lake W", "Cooper Lake SP", "Cooper Lake AP"]},
                          # https://www.intel.com/content/www/us/en/ark/products/codename/189143/products-formerly-cooper-lake.html
                          {"family": 0x06, "uarch": "Gracemont"},
-                         {"family": 0x06, "uarch": "Cypress Cove"},
+                         {"family": 0x06, "uarch": "Cypress Cove",
+                          "core_name_list": ["Rocket Lake S", "Rocket Lake U"]},
+                         # https://www.intel.com/content/www/us/en/ark/products/codename/192985/products-formerly-rocket-lake.html
                          {"family": 0x06, "uarch": "Golden Cove"},
                          {"family": 0x06, "uarch": "Raptor Cove"},
                          {"family": 0x06, "uarch": "Sapphire Rapids"},
@@ -536,14 +639,14 @@ class Cpu:
                          {"family": 0x06, "uarch": "Redwood Cove"},
                          {"family": 0x06, "uarch": "Granite Rapids"},
                          {"family": 0x06, "uarch": "Sierra Forest"},
-                         {"family": 0x06, "uarch": "Lion Cove", "CoreNameList": ["Lunar Lake"]},
-                         {"family": 0x06, "uarch": "Skymont", "CoreNameList": ["Lunar Lake"]},
+                         {"family": 0x06, "uarch": "Lion Cove", "core_name_list": ["Lunar Lake"]},
+                         {"family": 0x06, "uarch": "Skymont", "core_name_list": ["Lunar Lake"]},
                          {"family": 0x06, "uarch": "Crestmont",
-                          "CoreNameList": ["Meteor Lake M", "Meteor Lake N", "Meteor Lake S"]},
+                          "core_name_list": ["Meteor Lake M", "Meteor Lake N", "Meteor Lake S"]},
                          {"family": 0x06, "uarch": "Redwood Cove",
-                          "CoreNameList": ["Meteor Lake M", "Meteor Lake N", "Meteor Lake S"]},
-                         {"family": 0x06, "uarch": "Cougar Cove", "CoreNameList": ["Panther Lake"]},
-                         {"family": 0x06, "uarch": "Darkmont", "CoreNameList": ["Panther Lake"]}
+                          "core_name_list": ["Meteor Lake M", "Meteor Lake N", "Meteor Lake S"]},
+                         {"family": 0x06, "uarch": "Cougar Cove", "core_name_list": ["Panther Lake"]},
+                         {"family": 0x06, "uarch": "Darkmont", "core_name_list": ["Panther Lake"]}
                          ]
 
     def is_intel_above_sandybridge(self):
@@ -551,6 +654,9 @@ class Cpu:
 
     def is_intel_above_broadwell(self):
         return self.is_intel_above_uarch_codename("Broadwell")
+
+    def is_intel_integrated_vga_iris_xe(self):
+        return self.is_intel_above_uarch_codename("Willow Cove")
 
     def is_intel(self):
         return self.__is_cpu_vendor("intel")
@@ -564,9 +670,8 @@ class Cpu:
             self.__CPU_UARCH_FAMILY)
 
     def get_cpu_vendor(self):
-        return Cpu.__trim_and_lower(self.__get_cpuid_vendor_and_uarch_info().get(self.__CPU_VENDOR))
+        return Cpu.__trim_and_lower(cpuinfo.get_cpu_info().get("vendor_id_raw"))
 
-    # fixme utopia cpuid нет под arm - надо возвращать как было
     def __is_cpu_vendor(self, target_cpu_vendor):
         try:
             cpu_vendor = self.get_cpu_vendor()
@@ -576,7 +681,6 @@ class Cpu:
         except Exception:
             return False
 
-    # fixme utopia Результат закэшировать
     def __get_cpuid_vendor_and_uarch_info(self):
         cpuid_output = Cpu.__run_cpuid()
 
@@ -627,6 +731,7 @@ class Cpu:
         if value is None:
             return value
         return str(value).strip().lower()
+
 
 class Path:
     def __init__(self, path):
@@ -2358,7 +2463,7 @@ class Iommu:
 
 
 # https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf
-class PciClassCode(int):
+class PciClassCode(UInt16Hex):
     BASE_CLASS_BACKWARD_COMPATIBILITY = 0x00
     BASE_CLASS_BACKWARD_COMPATIBILITY_ALL_EXCEPT_VGA = 0x00
     BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
@@ -2375,11 +2480,8 @@ class PciClassCode(int):
 
     BASE_CLASS_SERIAL_BUS_CONTROLLER_SMBUS = 0x05
 
-    REGEX = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
-
-    def __new__(cls, class_code):
-        return super(PciClassCode, cls).__new__(cls, BitUtils.get_int_with_check(class_code, bit_count=16, signed=False,
-                                                                                 base=BitUtils.HEXADECIMAL_BASE))
+    def __new__(cls, class_code=0):
+        return super(PciClassCode, cls).__new__(cls, class_code)
 
     def get_base_class(self):
         return (self.__int__() >> BitUtils.BITS_IN_BYTE) & BitUtils.LSB_TETRAD_MASK
@@ -2417,12 +2519,11 @@ class PciClassCode(int):
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
-class PciVendorId(int):
+class PciVendorId(UInt16Hex):
     INTEL = 0x8086
 
-    def __new__(cls, vendor_id):
-        return super(PciVendorId, cls).__new__(cls, BitUtils.get_int_with_check(vendor_id, bit_count=16, signed=False,
-                                                                                base=BitUtils.HEXADECIMAL_BASE))
+    def __new__(cls, vendor_id=0):
+        return super(PciVendorId, cls).__new__(cls, vendor_id)
 
     def is_intel(self):
         return self.__int__() == self.INTEL
@@ -2455,11 +2556,200 @@ class UnitTest_get_all_subclasses(unittest.TestCase):
         self.assertEqual(subclass_name_list, ["Bing", "Baz", "Bar"])
 
 
+class BaseParser:
+    def __init__(self, table):
+        self.__table = table
+        self.init_fields_default()
+
+    def __setitem__(self, key, value):
+        metadata = self.__table.get(key)
+        if metadata is None:
+            return
+
+        field_type = self.__get_field_type(metadata)
+        if field_type is None:
+            return
+
+        setattr(self, key, field_type(value))
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __str__(self):
+        return json.dumps(self.get_fields_as_dict())
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_fields_as_dict(self):
+        result = dict()
+        for field_name, metadata in self.__table.items():
+            field_value = self[field_name]
+            if isinstance(field_value, BaseParser):
+                result[field_name] = field_value.get_fields_as_dict()
+            else:
+                result[field_name] = field_value
+        return result
+
+    def init_fields_default(self):
+        for field_name, metadata in self.__table.items():
+            if "default" in metadata:
+                self[field_name] = metadata.get("default")
+            else:
+                setattr(self, field_name, self.__get_field_type(metadata)())
+
+    def init_fields(self, re_object, value_as_str):
+        if not isinstance(value_as_str, str):
+            return False
+
+        match = re_object.match(str(value_as_str))
+        if match is None:
+            return False
+
+        for field_name, value in match.groupdict().items():
+            if value is not None:
+                self[field_name] = value
+        return True
+
+    # fixme utopia Юнит тесты
+    def copy_if(self, other):
+        if isinstance(self, type(other)) or isinstance(other, type(self)) or isinstance(other, dict):
+            for field_name, metadata in self.__table.items():
+                if field_name in other.__dict__:
+                    self[field_name] = other[field_name]
+                else:
+                    setattr(self, field_name, self.__get_field_type(metadata)())
+            return True
+        else:
+            return False
+
+    # @staticmethod
+    # def from_string(model):
+    #     Pci.from_json(json.loads(model))
+    #
+    # @staticmethod
+    # def from_json(model):
+    #     result = Pci()
+    #     for key, value in model.items():
+    #         result[key] = value
+    #     return Pci.__build(result)
+
+    def get_regex_for(self, field_name, is_capture=True):
+        metadata = self.__table.get(field_name)
+        if metadata is None:
+            return ""
+
+        field_type = self.__get_field_type(metadata)
+        if field_type is None:
+            return ""
+
+        if is_capture:
+            return f"(?P<{field_name}>{field_type.get_regex()})"
+        else:
+            return field_type.get_regex()
+
+    def __get_field_type(self, metadata):
+        return metadata.get("type")
+
+
+class PciAddress(BaseParser):
+    __DOMAIN = "domain"
+    __BUS = "bus"
+    __SLOT = "slot"
+    __FUNC = "func"
+
+    DOMAIN_DEFAULT = "0000"
+
+    __TABLE = {__DOMAIN: {"type": UInt16Hex, "default": DOMAIN_DEFAULT},
+               __BUS: {"type": UInt8Hex},
+               __SLOT: {"type": UInt8Hex},
+               __FUNC: {"type": UInt8}}
+
+    def __init__(self, pci_address=None):
+        super(PciAddress, self).__init__(PciAddress.__TABLE)
+        if pci_address is None: # Создать умолчательный объект
+            return
+
+        if self.copy_if(pci_address): # Копирующий конструктор (в том числе если pci_address - это словарь)
+            return
+
+        if isinstance(pci_address, str): # Создать объект из строки, например, из результата разбора выхлопа lspci
+            if self.init_fields(re.compile(PciAddress.get_regex(is_capture=True, is_start_end_of_line=True)),
+                                str(pci_address)):
+                return
+
+        raise Exception(f"[PciAddress] Format FAIL: {pci_address} | {type(pci_address)}")
+
+    def __str__(self):
+        return f"{self.domain}:{self.get_address_without_domain()}"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_address_without_domain(self):
+        return f"{self.bus}:{self.slot}.{self.func}"
+
+    @staticmethod
+    def get_regex(is_capture=False, is_start_end_of_line=False):
+        tmp = PciAddress()
+        result = ""
+        if is_start_end_of_line:
+            result += "^"
+        result += f"(?>{tmp.get_regex_for(PciAddress.__DOMAIN, is_capture)}:)?"
+        result += f"{tmp.get_regex_for(PciAddress.__BUS, is_capture)}:"
+        result += f"{tmp.get_regex_for(PciAddress.__SLOT, is_capture)}\."
+        result += f"{tmp.get_regex_for(PciAddress.__FUNC, is_capture)}"
+        if is_start_end_of_line:
+            result += "$"
+        return result
+
+
+class UnitTest_PciAddress(unittest.TestCase):
+
+    def test(self):
+        ref_table = {
+            "":
+                {"is_exception": True},
+            "Hello world":
+                {"is_exception": True},
+            17:
+                {"is_exception": True},
+            "0000:00:00.0":
+                {"expected": "0000:00:00.0", "is_exception": False,
+                 "expected_dict": {"domain": 0, "bus": 0, "slot": 0, "func": 0}},
+            "0000:00:02.0":
+                {"expected": "0000:00:02.0", "is_exception": False,
+                 "expected_dict": {"domain": 0, "bus": 0, "slot": 2, "func": 0}},
+            "0000:00:1F.1":
+                {"expected": "0000:00:1f.1", "is_exception": False,
+                 "expected_dict": {"domain": 0, "bus": 0, "slot": 0x1F, "func": 1}},
+            "00:1F.1":
+                {"expected": "0000:00:1f.1", "is_exception": False,
+                 "expected_dict": {"domain": 0, "bus": 0, "slot": 0x1F, "func": 1}}
+        }
+
+        for key, test_data in ref_table.items():
+            pci_address = None
+            try:
+                pci_address = PciAddress(key)
+                self.assertFalse(test_data["is_exception"], f"No exception for \"{key}\"")
+            except Exception as ex:
+                self.assertTrue(test_data["is_exception"], f"Exception for \"{key}\": {ex}")
+
+            if pci_address is not None:
+                self.assertEqual(pci_address.get_fields_as_dict(), test_data["expected_dict"])
+                self.assertEqual(str(PciAddress(key)), test_data["expected"])
+
+    def test_is_str(self):
+        pci_address = PciAddress("0000:00:1f.1")
+        self.assertTrue(isinstance(pci_address, str), f"PciAddress is not inherit from str")
+
+
 # https://en.wikipedia.org/wiki/PCI_configuration_space
 # fixme utopia SR-IOV capability
 # https://forums.servethehome.com/index.php?threads/quick-check-if-your-pcie-device-has-sr-iov-capability.39675/
-class Pci:
-    __ADDRESS = "address"  # [[[[<domain>]:]<bus>]:][<slot>][.[<func>]]
+class Pci(BaseParser):
+    __ADDRESS = "address"
     __CLASS_NAME = "class_name"
     __CLASS_CODE = "class_code"
     __DEVICE_NAME = "device_name"
@@ -2473,88 +2763,30 @@ class Pci:
     __IOMMU_GROUP = "iommu_group"
     __KERNEL_MODULE = "kernel_module"
 
-    __REGEX_HEX8 = "[0-9a-fA-F]{2}"  # fixme utopia Использовать BitUtils.get_regex
-    __REGEX_HEX16 = "[0-9a-fA-F]{4}"  # fixme utopia Использовать BitUtils.get_regex
-
-    __REGEX = f"(?P<{__ADDRESS}>{__REGEX_HEX8}:{__REGEX_HEX8}\.\d+) (?P<{__CLASS_NAME}>.*) \[(?P<{__CLASS_CODE}>{PciClassCode.REGEX})\]: (?P<{__DEVICE_NAME}>.*) \[(?P<{__VENDOR_ID}>{__REGEX_HEX16}):(?P<{__DEVICE_ID}>{__REGEX_HEX16})\] \(rev (?P<{__REVISION}>{__REGEX_HEX8})\)(?> \(prog-if (?P<{__PROG_IF}>{__REGEX_HEX8}) \[.*\]\))?|Subsystem: (?P<{__SUBSYSTEM_NAME}>.*) \[(?P<{__SUBSYSTEM_VENDOR_ID}>{__REGEX_HEX16}):(?P<{__SUBSYSTEM_ID}>{__REGEX_HEX16})\]|IOMMU group: (?P<{__IOMMU_GROUP}>[\d]+)|Kernel driver in use: (?P<{__KERNEL_MODULE}>.*)"
+    __TABLE = {__ADDRESS: {"type": PciAddress},
+               __CLASS_NAME: {"type": String},
+               __CLASS_CODE: {"type": PciClassCode},
+               __DEVICE_NAME: {"type": String},
+               __VENDOR_ID: {"type": PciVendorId},
+               __DEVICE_ID: {"type": UInt16Hex},
+               __REVISION: {"type": UInt8Hex},
+               __PROG_IF: {"type": UInt8Hex},
+               __SUBSYSTEM_NAME: {"type": String},
+               __SUBSYSTEM_VENDOR_ID: {"type": PciVendorId},
+               __SUBSYSTEM_ID: {"type": UInt16Hex},
+               __IOMMU_GROUP: {"type": UInt8},
+               __KERNEL_MODULE: {"type": String}
+               }
 
     # https://pkgs.org/search/?q=pciutils
     # https://man7.org/linux/man-pages/man8/lspci.8.html
-    __CMD_LINE = "lspci -nnk -vvv"
+    __CMD_LINE = "lspci -nnk -vvv -D"
 
     def __init__(self):
-        self.address = ""
-        self.class_name = ""
-        self.class_code = PciClassCode(0)
-        self.device_name = ""
-        self.vendor_id = PciVendorId(0)
-        self.device_id = 0
-        self.revision = 0
-        self.prog_if = 0
-        self.subsystem_name = ""
-        self.subsystem_vendor_id = PciVendorId(0)
-        self.subsystem_id = 0
-        self.iommu_group = None
-        self.kernel_module = ""
+        super(Pci, self).__init__(self.__TABLE)
 
     def _init(self, pci):
-        self.address = pci.address
-        self.class_name = pci.class_name
-        self.class_code = pci.class_code
-        self.device_name = pci.device_name
-        self.vendor_id = pci.vendor_id
-        self.device_id = pci.device_id
-        self.revision = pci.revision
-        self.prog_if = pci.prog_if
-        self.subsystem_name = pci.subsystem_name
-        self.subsystem_vendor_id = pci.subsystem_vendor_id
-        self.subsystem_id = pci.subsystem_id
-        self.iommu_group = pci.iommu_group
-        self.kernel_module = pci.kernel_module
-
-    def __str__(self):
-        return json.dumps({
-            self.__ADDRESS: self.address,
-            self.__CLASS_CODE: self.class_code,
-            self.__DEVICE_NAME: self.class_name,
-            self.__VENDOR_ID: self.vendor_id,
-            self.__DEVICE_ID: self.device_id,
-            self.__REVISION: self.revision,
-            self.__PROG_IF: self.prog_if,
-            self.__SUBSYSTEM_NAME: self.subsystem_name,
-            self.__SUBSYSTEM_VENDOR_ID: self.subsystem_vendor_id,
-            self.__SUBSYSTEM_ID: self.subsystem_id,
-            self.__IOMMU_GROUP: self.iommu_group,
-            self.__KERNEL_MODULE: self.kernel_module
-        })
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __setitem__(self, key, value):
-        value_native = value
-        if key == self.__CLASS_CODE:
-            value_native = PciClassCode(value)
-        elif key == self.__VENDOR_ID:
-            value_native = PciVendorId(value)
-        elif key == self.__DEVICE_ID:
-            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False,
-                                                       base=BitUtils.HEXADECIMAL_BASE)
-        elif key == self.__REVISION:
-            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEXADECIMAL_BASE)
-        elif key == self.__PROG_IF:
-            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.HEXADECIMAL_BASE)
-        elif key == self.__SUBSYSTEM_VENDOR_ID:
-            value_native = PciVendorId(value)
-        elif key == self.__SUBSYSTEM_ID:
-            value_native = BitUtils.get_int_with_check(value, bit_count=16, signed=False,
-                                                       base=BitUtils.HEXADECIMAL_BASE)
-        elif key == self.__IOMMU_GROUP:
-            value_native = BitUtils.get_int_with_check(value, bit_count=8, signed=False, base=BitUtils.DECIMAL_BASE)
-        setattr(self, key, value_native)
-
-    def __getitem__(self, key):
-        return getattr(self, key)
+        self.copy_if(pci)
 
     @staticmethod
     def from_string(model):
@@ -2568,7 +2800,7 @@ class Pci:
         return Pci.__build(result)
 
     def get_id(self):
-        return f"{self.vendor_id:04x}:{self.device_id:04x}"
+        return f"{self.vendor_id}:{self.device_id}"
 
     def get_kernel_parameters(self):
         return [{"module_blacklist": self.kernel_module}]
@@ -2582,24 +2814,31 @@ class Pci:
     def is_other_vga_disable(self):
         return False
 
+    def check_chipset(self, qemu_platform):
+        pass
+
+    def get_supplier(self):
+        pass
+
+    def get_consumer(self):
+        pass
+
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
     def get_rom(self, dir_path_for_save_rom_file):
-        PCI_DOMAIN_DEFAULT = "0000"
-
-        rom_file_path = Path(f"/sys/bus/pci/devices/{PCI_DOMAIN_DEFAULT}:{self.address}/rom")
+        rom_file_path = Path(f"/sys/bus/pci/devices/{self.address}/rom")
         if not rom_file_path.file_exists():
-            Logger.instance().warning(f"[PCI:{self.address}] ROM NOT FOUND: {rom_file_file}")
+            Logger.instance().warning(f"[PCI:{self.address}] ROM NOT FOUND: {rom_file_path}")
             return None
 
-        with open(rom_file_file.get(), "at") as f:
+        with open(rom_file_path.get(), "at") as f:
             f.write("1")
 
         Path(dir_path_for_save_rom_file).makedirs()
-        result = Path(path_for_save_rom_file).join(self.get_rom_file_name())
+        result = Path(dir_path_for_save_rom_file).join(self.get_rom_file_name())
         result.copy_from(rom_file_path)
 
-        with open(rom_file_file.get(), "at") as f:
+        with open(rom_file_path.get(), "at") as f:
             f.write("0")
 
         return result
@@ -2610,7 +2849,7 @@ class Pci:
     class PciList(list):
 
         def __str__(self):
-            return json.dumps(self, default=lambda o: o.__dict__)
+            return json.dumps(self, default=lambda o: o.get_fields_as_dict())
 
         def __repr__(self):
             return self.__str__()
@@ -2648,7 +2887,7 @@ class Pci:
                 return pci_table_by_iommu_group[iommu_group]
             return Pci.PciList()
 
-        def get_vga_list(self):
+        def get_vga_list(self, with_consumer=False):
             result = Pci.PciList()
             for pci in self:
                 if pci.class_code.is_vga():
@@ -2668,13 +2907,15 @@ class Pci:
                     return False
             return True
 
+        # fixme utopia Метод: в задействованных iommu группах имеются только целевые утсройства и больше никаких
+
     @staticmethod
     def get_list():
         result = Pci.PciList()
 
         lspci_out = Pci.__run_lspci()
 
-        for match in re.finditer(Pci.__REGEX, lspci_out, flags=re.MULTILINE):
+        for match in re.finditer(Pci.__get_regex(), lspci_out, flags=re.MULTILINE):
             for key, value in match.groupdict().items():
                 if value is not None:
                     if key == Pci.__ADDRESS:
@@ -2685,6 +2926,26 @@ class Pci:
 
         for index, pci in enumerate(result):
             result[index] = Pci.__build(pci)
+        return result
+
+    @staticmethod
+    def __get_regex():
+        tmp = Pci()
+        result = ""
+        result += f"{tmp.get_regex_for(Pci.__ADDRESS)} "
+        result += f"{tmp.get_regex_for(Pci.__CLASS_NAME)} "
+        result += f"\[{tmp.get_regex_for(Pci.__CLASS_CODE)}]: "
+        result += f"{tmp.get_regex_for(Pci.__DEVICE_NAME)} "
+        result += f"\[{tmp.get_regex_for(Pci.__VENDOR_ID)}:{tmp.get_regex_for(Pci.__DEVICE_ID)}\] "
+        result += f"\(rev {tmp.get_regex_for(Pci.__REVISION)}\)"
+        result += f"(?> \(prog-if {tmp.get_regex_for(Pci.__PROG_IF)} \[.*\]\))?"
+        result += "|"
+        result += f"Subsystem: {tmp.get_regex_for(Pci.__SUBSYSTEM_NAME)} "
+        result += f"\[{tmp.get_regex_for(Pci.__SUBSYSTEM_VENDOR_ID)}:{tmp.get_regex_for(Pci.__SUBSYSTEM_ID)}\]"
+        result += "|"
+        result += f"IOMMU group: {tmp.get_regex_for(Pci.__IOMMU_GROUP)}"
+        result += "|"
+        result += f"Kernel driver in use: {tmp.get_regex_for(Pci.__KERNEL_MODULE)}"
         return result
 
     @staticmethod
@@ -2751,7 +3012,7 @@ class VfioPci:
     # VGA должен быть единственным в системе
 
     ## Заблокировать ли прочие VGA для данной виртуальной машины
-    # @details Требуется для обеспечения проброса Intel integrated GPU (IGD, Intel Graphics Device) в так называемом legacy режиме, подробно https://gitlab.com/qemu-project/qemu/-/blob/master/docs/igd-assign.txt?ref_type=heads
+    # @details Требуется для обеспечения проброса Intel integrated GPU (IGD, Integrated Graphics Device) в так называемом legacy режиме, подробно https://gitlab.com/qemu-project/qemu/-/blob/master/docs/igd-assign.txt?ref_type=heads
     # @return true - заблокировать прочие VGA для данной виртуальной машины; false - можно использовать множественные VGA, в том числе виртуальные
     def is_other_vga_disable(self):
         for pci in self.__pci_list:
@@ -2774,10 +3035,60 @@ class Vfio:
         return result
 
 
-# fixme utopia Будет ли работать проброс VGA на хост машине с bios а вирт машину с uefi?
+class QemuPlatform:
+    QEMU_PLATFORM_I440FX_BIOS = "i440fx+bios"
+    QEMU_PLATFORM_Q35_BIOS = "q35+bios"
+    QEMU_PLATFORM_Q35_UEFI = "q35+uefi"
+    QEMU_PLATFORM_Q35_UEFI_SECURE = "q35+uefi-secure"
+
+    QEMU_PLATFORM_LIST = [QEMU_PLATFORM_I440FX_BIOS, QEMU_PLATFORM_Q35_BIOS, QEMU_PLATFORM_Q35_UEFI,
+                          QEMU_PLATFORM_Q35_UEFI_SECURE]
+
+    def __init__(self, vm_platform=QEMU_PLATFORM_I440FX_BIOS):
+        self.__vm_platform = vm_platform
+
+    def get_qemu_parameters(self, vm_meta_data):
+        qemu_bios = QemuBios()
+        tpm = None
+        if self.__vm_platform == QemuPlatform.QEMU_PLATFORM_Q35_BIOS:
+            qemu_bios = QemuBios("q35")
+        elif self.__vm_platform == QemuPlatform.QEMU_PLATFORM_Q35_UEFI:
+            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=False)
+        elif self.__vm_platform == QemuPlatform.QEMU_PLATFORM_Q35_UEFI_SECURE:
+            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=True)
+            tpm = TpmEmulator(vm_meta_data)
+
+        result = qemu_bios.get_qemu_parameters()
+        if tpm is not None:
+            result.extend(tpm.get_qemu_parameters())
+        return result
+
+    def is_bios_boot(self):
+        return self.is_i440fx_bios_boot() or self.__vm_platform in self.get_bios_boot_platform_list()
+
+    def is_i440fx_bios_boot(self):
+        return self.__vm_platform is None or self.__vm_platform in self.get_i440fx_bios_boot_platform_list()
+
+    def is_uefi_boot(self):
+        return self.__vm_platform is not None and (self.__vm_platform in self.get_uefi_boot_platform_list())
+
+    def get_bios_boot_platform_list(self):
+        return [QEMU_PLATFORM_I440FX_BIOS, QEMU_PLATFORM_Q35_BIOS]
+
+    def get_i440fx_bios_boot_platform_list(self):
+        return [QEMU_PLATFORM_I440FX_BIOS]
+
+    def get_uefi_boot_platform_list(self):
+        return [QEMU_PLATFORM_Q35_UEFI, QEMU_PLATFORM_Q35_UEFI_SECURE]
+
+
 class VgaPciIntel(Pci):
+    __VGA_PASSTHROUGH_MODE_LEGACY = 0
+    __VGA_PASSTHROUGH_MODE_UPT = 1
+
     def __init__(self, pci):
         super().__init__()
+        __cpu = Cpu()
         self._init(pci)
 
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
@@ -2791,19 +3102,25 @@ class VgaPciIntel(Pci):
 
     # https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
     # https://www.reddit.com/r/VFIO/comments/i9dbyp/this_is_how_i_managed_to_passthrough_my_igd/
+    # fixme utopia Проброс с OVMF + __VGA_PASSTHROUGH_MODE_UPT
     def get_vfio_pci_options_table(self, vm_meta_data):
         result = super().get_vfio_pci_options_table(vm_meta_data)
-        result.update({"x-igd-gms": "9", "addr": "0x02", "rombar": 0, "x-vga": "on", "x-igd-opregion": "on"})
 
-        rom_file_path = self.get_rom(vm_meta_data.get_working_dir_path())
-        if rom_file_path is not None:
-            result["romfile"] = rom_file_path
+        if self.__check_passthrough_in_legacy_mode():
+            result.update({"x-igd-gms": "9", "addr": "0x02", "rombar": 0, "x-vga": "on", "x-igd-opregion": "on"})
+
+            rom_file_path = self.get_rom(vm_meta_data.get_working_dir_path())
+            if rom_file_path is not None:
+                result["romfile"] = rom_file_path
+
+        else:
+            result.update({"x-vga": "on", "x-igd-opregion": "on"})
 
         return result
 
     def get_qemu_parameters(self, vm_meta_data):
         result = super().get_qemu_parameters(vm_meta_data)
-        if len(result) > 0:
+        if len(result) > 0 and self.is_other_vga_disable():
             result.append({"-vga": "none"})
             # result.append({"-fw_cfg": {"name": "opt/igd-opregion", "file": "/home/utopia/HomeVpn/opregion.bin"}})
             # result.append({"-fw_cfg": {"name": "opt/igd-bdsm-size", "file": "/home/utopia/HomeVpn/bdsmSize.bin"}})
@@ -2811,18 +3128,50 @@ class VgaPciIntel(Pci):
             # result.append({"-device": { "vfio-pci-igd-lpc-bridge": { "addr": "0x1f" } }})
         return result
 
-    # fixme utopia Для cpu broadwell++ поддержка UPT режима проброса, до sandybridge включительно is_other_vga_disable = True
     def is_other_vga_disable(self):
-        return False
+        return self.__check_passthrough_in_legacy_mode()
 
-    # Из-за невозможности использования
-    def check_chipset(self, vm_platform):
-        # fixme utopia Для cpu не поддерживающих UPT используем только i440fx чипсет
-        return False
+    def check_chipset(self, qemu_platform):
+        if self.__check_passthrough_in_legacy_mode():
+            if CurrentOs.is_bios_boot() and qemu_platform.is_i440fx_bios_boot():
+                return
+
+            recommendation = list()
+            if not qemu_platform.is_i440fx_bios_boot():
+                recommendation.append(f"use {qemu_platform.QEMU_PLATFORM_I440FX_BIOS}")
+            if not CurrentOs.is_bios_boot():
+                recommendation.append("OS must be boot in BIOS mode")
+            raise Exception(
+                f"[VgaPciIntel] Current platform NOT SUPPORTED for igd passthrough: {', '.join(recommendation)}")
+        else:
+            if CurrentOs.is_bios_boot() and qemu_platform.is_bios_boot():
+                return
+            if CurrentOs.is_uefi_boot() and qemu_platform.is_uefi_boot():  # fixme utopia Проверить на Ноутбуке Галины
+                # https://lore.kernel.org/all/20250312102929.329ff4f5.alex.williamson@redhat.com/T/
+                # https://gitlab.com/qemu-project/qemu/-/issues/1538
+                # Так в UPT режиме работать будет?
+                return
+            # fixme utopia Перепроверить с OVMF отсюда. Будет ли работать комбинация BIOS Host / UEFI Guest
+            # https://github.com/x78x79x82x79/i915ovmfPkg
+            # https://github.com/patmagauran/i915ovmfPkg
+
+            if CurrentOs.is_bios_boot():
+                raise Exception(
+                    f"[VgaPciIntel] Current platform NOT SUPPORTED for igd passthrough: use {' or '.join(qemu_platform.get_bios_boot_platform_list())} platform")
+            if CurrentOs.is_uefi_boot():
+                raise Exception(
+                    f"[VgaPciIntel] Current platform NOT SUPPORTED for igd passthrough: use {' or '.join(qemu_platform.get_uefi_boot_platform_list())} platform")
 
     @staticmethod
     def is_my_instance(pci):
         return pci.class_code.is_vga() and pci.vendor_id.is_intel()
+
+    def __check_passthrough_in_legacy_mode(self):
+        if self.__cpu.is_intel_above_broadwell():
+            return False  # UPT passthrough
+        elif self.__cpu.is_intel_above_sandybridge():
+            return True  # Legacy passthrough
+        raise Exception(f"[VgaPciIntel] Passthrough NOT SUPPORTED: old CPU \"{self.__cpu.get_uarch_codename()}\"")
 
 
 class UsbUhciPci(Pci):
@@ -3174,48 +3523,6 @@ class UnitTest_EscapeLiteral(unittest.TestCase):
         encoded_string = escape_literal.encode(target_string)
         decoded_string = escape_literal.decode(encoded_string)
         self.assertEqual(target_string, decoded_string)
-
-
-class RegexConstants:
-    CAPTURE_ALL = fr"(.*)"
-    WHITESPACES = r"\s"
-    WHITESPACE_CHARACTER_SET = fr"[{WHITESPACES}]"
-    SPACE_SYMBOLS_ZERO_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}*"
-    SPACE_SYMBOLS_ONE_OR_MORE = fr"{WHITESPACE_CHARACTER_SET}+"
-    NEWLINE_CHARACTER_SET = r"[\n\r]"
-    ONE_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}+"
-    ZERO_OR_MORE_NEW_LINES = fr"{NEWLINE_CHARACTER_SET}*"
-    ONE_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}+"
-    ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
-
-    ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
-                                      (")", "\)"), ("$", "\$"), ("-", "\-"), (">", "\>"),
-                                      ("<", "\<"), ("|", "\|"), ("?", "\?"), ("^", "\^")]
-
-    @staticmethod
-    def atomic_group(value):
-        return f"(?>{value})"
-
-    @staticmethod
-    def to_character_set(character_set, is_remove_duplicate=True):
-        result = ""
-        if isinstance(character_set, list) or isinstance(character_set, set):
-            for item in character_set:
-                result += RegexConstants.to_character_set(item)
-            result = RegexConstants.to_character_set(result)
-        elif isinstance(character_set, str):
-            if is_remove_duplicate:
-                character_set_as_list = list(set(character_set))
-                character_set_as_list.sort()
-                result = "".join(character_set_as_list)
-            else:
-                result = character_set
-        return result
-
-    @staticmethod
-    def character_set_escape(character_set, is_remove_duplicate=True):
-        return EscapeLiteral(encode_table=RegexConstants.ENCODE_TABLE_FOR_CHARACTER_SET).encode(
-            RegexConstants.to_character_set(character_set, is_remove_duplicate))
 
 
 class NoneFromString:
@@ -5194,7 +5501,7 @@ def main():
     #  но как быть с SRIOV, например?
     parser_vm_run.add_argument("--QemuPciPassthrough", type=QemuPciPassthrough,
                                help="PCI VGA list for passthrough to virtual machine. Not for human use")
-    parser_vm_run.add_argument("--QemuUsbHostPciPassthrough", type=QemuUsbHostPciPassthrough,
+    parser_vm_run.add_argument("--QemuUsbHostPciPassthrough", type=QemuPciPassthrough,
                                help="PCI USB host for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
                                help="Grub config backup file path. Not for human use")
@@ -5282,8 +5589,10 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
         pci_list = Pci.get_list()
         print(pci_list)
+        return
 
         usb_host_controller_list = pci_list.get_usb_host_list()
         print(usb_host_controller_list)
