@@ -2602,7 +2602,7 @@ class BaseParser:
         if not isinstance(value_as_str, str):
             return False
 
-        match = re_object.match(str(value_as_str))
+        match = re_object.search(str(value_as_str))
         if match is None:
             return False
 
@@ -2667,16 +2667,16 @@ class PciAddress(BaseParser):
 
     def __init__(self, pci_address=None):
         super(PciAddress, self).__init__(PciAddress.__TABLE)
-        if pci_address is None: # Создать умолчательный объект
+        if pci_address is None:  # Создать умолчательный объект
             return
 
-        if self.copy_if(pci_address): # Копирующий конструктор (в том числе если pci_address - это словарь)
+        if self.copy_if(pci_address):  # Копирующий конструктор (в том числе если pci_address - это словарь)
             return
 
-        if isinstance(pci_address, str): # Создать объект из строки, например, из результата разбора выхлопа lspci
-            if self.init_fields(re.compile(PciAddress.get_regex(is_capture=True, is_start_end_of_line=True)),
-                                str(pci_address)):
-                return
+        # Создать объект из строки, например, из результата разбора выхлопа lspci
+        if self.init_fields(re.compile(PciAddress.get_regex(is_capture=True, is_start_end_of_line=False)),
+                            str(pci_address)):
+            return
 
         raise Exception(f"[PciAddress] Format FAIL: {pci_address} | {type(pci_address)}")
 
@@ -2685,6 +2685,11 @@ class PciAddress(BaseParser):
 
     def __repr__(self):
         return self.__str__()
+
+    def __eq__(self, other):
+        if id(self) == id(other):
+            return True
+        return self.__str__() == other.__str__()
 
     def get_address_without_domain(self):
         return f"{self.bus}:{self.slot}.{self.func}"
@@ -2817,11 +2822,20 @@ class Pci(BaseParser):
     def check_chipset(self, qemu_platform):
         pass
 
-    def get_supplier(self):
-        pass
+    def get_parent_address_list(self):
+        return self.__get_related_address_list("supplier")
 
-    def get_consumer(self):
-        pass
+    def get_child_address_list(self):
+        return self.__get_related_address_list("consumer")
+
+    def __get_related_address_list(self, name):
+        result = list()
+        for path in pathlib.Path(f"/sys/bus/pci/devices/{self.address}/").glob(f"{name}:pci:*"):
+            try:
+                result.append(PciAddress(str(path.name)))
+            except Exception as ex:
+                pass
+        return result
 
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
@@ -2892,6 +2906,8 @@ class Pci(BaseParser):
             for pci in self:
                 if pci.class_code.is_vga():
                     result.append(pci)
+                    if with_consumer:
+                        result.extend(self.get_by_address(pci.get_child_address_list()))
             return result
 
         def get_usb_host_list(self):
@@ -2906,6 +2922,14 @@ class Pci(BaseParser):
                 if len(self.get_pci_list_by_iommu_group(pci.iommu_group)) != 1:
                     return False
             return True
+
+        def get_by_address(self, pci_address_list):
+            result = Pci.PciList()
+            for pci in self:
+                if pci.address in pci_address_list:
+                    result.append(pci)
+            return result
+
 
         # fixme utopia Метод: в задействованных iommu группах имеются только целевые утсройства и больше никаких
 
@@ -3008,8 +3032,6 @@ class VfioPci:
         for pci in self.__pci_list:
             result.extend(pci.get_qemu_parameters(vm_meta_data))
         return result
-
-    # VGA должен быть единственным в системе
 
     ## Заблокировать ли прочие VGA для данной виртуальной машины
     # @details Требуется для обеспечения проброса Intel integrated GPU (IGD, Integrated Graphics Device) в так называемом legacy режиме, подробно https://gitlab.com/qemu-project/qemu/-/blob/master/docs/igd-assign.txt?ref_type=heads
@@ -5590,7 +5612,7 @@ def main():
 
     elif args.command == "test":
         print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-        pci_list = Pci.get_list()
+        pci_list = Pci.get_list().get_vga_list(with_consumer=True)
         print(pci_list)
         return
 
