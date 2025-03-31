@@ -2611,11 +2611,11 @@ class BaseParser:
                 self[field_name] = value
         return True
 
-    # fixme utopia Юнит тесты
     def copy_if(self, other):
-        if isinstance(self, type(other)) or isinstance(other, type(self)) or isinstance(other, dict):
+        if isinstance(other, type(self)) or isinstance(self, type(other)) or isinstance(other, dict):
+            other_dict = other if isinstance(other, dict) else other.get_fields_as_dict()
             for field_name, metadata in self.__table.items():
-                if field_name in other.__dict__:
+                if field_name in other_dict:
                     self[field_name] = other[field_name]
                 else:
                     setattr(self, field_name, self.__get_field_type(metadata)())
@@ -2675,7 +2675,7 @@ class PciAddress(BaseParser):
 
         # Создать объект из строки, например, из результата разбора выхлопа lspci
         if self.init_fields(re.compile(PciAddress.get_regex(is_capture=True, is_start_end_of_line=False)),
-                            str(pci_address)):
+                            pci_address):
             return
 
         raise Exception(f"[PciAddress] Format FAIL: {pci_address} | {type(pci_address)}")
@@ -2710,44 +2710,71 @@ class PciAddress(BaseParser):
 
 
 class UnitTest_PciAddress(unittest.TestCase):
+    class PciAddressTest(PciAddress):
+        pass
+
+    class UnknownClass:
+        pass
 
     def test(self):
-        ref_table = {
-            "":
-                {"is_exception": True},
-            "Hello world":
-                {"is_exception": True},
-            17:
-                {"is_exception": True},
-            "0000:00:00.0":
-                {"expected": "0000:00:00.0", "is_exception": False,
-                 "expected_dict": {"domain": 0, "bus": 0, "slot": 0, "func": 0}},
-            "0000:00:02.0":
-                {"expected": "0000:00:02.0", "is_exception": False,
-                 "expected_dict": {"domain": 0, "bus": 0, "slot": 2, "func": 0}},
-            "0000:00:1F.1":
-                {"expected": "0000:00:1f.1", "is_exception": False,
-                 "expected_dict": {"domain": 0, "bus": 0, "slot": 0x1F, "func": 1}},
-            "00:1F.1":
-                {"expected": "0000:00:1f.1", "is_exception": False,
-                 "expected_dict": {"domain": 0, "bus": 0, "slot": 0x1F, "func": 1}}
-        }
+        ref_table = [
+            (PciAddress, "",
+             {"is_exception": True}),
+            (PciAddress, "Hello world",
+             {"is_exception": True}),
+            (PciAddress, 17,
+             {"is_exception": True}),
+            (PciAddress, UnitTest_PciAddress.UnknownClass,
+             {"is_exception": True}),
+            (PciAddress, "0000:00:00.0",
+             {"expected": "0000:00:00.0", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0, "func": 0}}),
+            (PciAddress, "0000:00:02.0",
+             {"expected": "0000:00:02.0", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 2, "func": 0}}),
+            (PciAddress, "0000:00:1F.1",
+             {"expected": "0000:00:1f.1", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0x1F, "func": 1}}),
+            (PciAddress, "00:1F.1",
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:00:1f.1", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0x1F, "func": 1}}),
+            (PciAddress, None,
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:00:00.0", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0, "func": 0}}),
+            (PciAddress, {"bus": 1, "slot": 2, "func": 3},
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:01:02.3", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 1, "slot": 2, "func": 3}}),
+            (PciAddress, {"bus0": 1, "slot": 0xFF, "func_": 3},
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:00:ff.0", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0xFF, "func": 0}}),
+            (PciAddress, {},
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:00:00.0", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0, "func": 0}}),
+            (PciAddress, PciAddress(),
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:00:00.0", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0, "slot": 0, "func": 0}}),
+            (PciAddress, PciAddress("AA:BB.255"),
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:aa:bb.255", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0xAA, "slot": 0xBB, "func": 255}}),
+            (PciAddress, UnitTest_PciAddress.PciAddressTest("AA:BB.255"),
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:aa:bb.255", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0xAA, "slot": 0xBB, "func": 255}}),
+            (UnitTest_PciAddress.PciAddressTest, PciAddress("AA:BB.255"),
+             {"expected": f"{PciAddress.DOMAIN_DEFAULT}:aa:bb.255", "is_exception": False,
+              "expected_dict": {"domain": 0, "bus": 0xAA, "slot": 0xBB, "func": 255}}),
+        ]
 
-        for key, test_data in ref_table.items():
+        for pci_address_type, initiate, test_data in ref_table:
             pci_address = None
             try:
-                pci_address = PciAddress(key)
-                self.assertFalse(test_data["is_exception"], f"No exception for \"{key}\"")
+                pci_address = pci_address_type(initiate)
+                self.assertFalse(test_data["is_exception"], f"No exception for \"{initiate}\"")
             except Exception as ex:
-                self.assertTrue(test_data["is_exception"], f"Exception for \"{key}\": {ex}")
+                self.assertTrue(test_data["is_exception"], f"Exception for \"{initiate}\": {ex}")
 
             if pci_address is not None:
                 self.assertEqual(pci_address.get_fields_as_dict(), test_data["expected_dict"])
-                self.assertEqual(str(PciAddress(key)), test_data["expected"])
-
-    def test_is_str(self):
-        pci_address = PciAddress("0000:00:1f.1")
-        self.assertTrue(isinstance(pci_address, str), f"PciAddress is not inherit from str")
+                self.assertEqual(str(pci_address_type(initiate)), test_data["expected"])
 
 
 # https://en.wikipedia.org/wiki/PCI_configuration_space
@@ -2830,7 +2857,7 @@ class Pci(BaseParser):
 
     def __get_related_address_list(self, name):
         result = list()
-        for path in pathlib.Path(f"/sys/bus/pci/devices/{self.address}/").glob(f"{name}:pci:*"):
+        for path in pathlib.Path(self.__get_sysfs_pci_device_path()).glob(f"{name}:pci:*"):
             try:
                 result.append(PciAddress(str(path.name)))
             except Exception as ex:
@@ -2840,9 +2867,9 @@ class Pci(BaseParser):
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
     def get_rom(self, dir_path_for_save_rom_file):
-        rom_file_path = Path(f"/sys/bus/pci/devices/{self.address}/rom")
+        rom_file_path = Path(self.__get_sysfs_pci_device_path()).join("rom")
         if not rom_file_path.file_exists():
-            Logger.instance().warning(f"[PCI:{self.address}] ROM NOT FOUND: {rom_file_path}")
+            Logger.instance().warning(f"[PCI/{self.address}] ROM NOT FOUND: {rom_file_path}")
             return None
 
         with open(rom_file_path.get(), "at") as f:
@@ -2859,6 +2886,9 @@ class Pci(BaseParser):
 
     def get_rom_file_name(self):
         return f"{self.get_id()}_{self.address}_rom.bin"
+
+    def __get_sysfs_pci_device_path(self):
+        return f"/sys/bus/pci/devices/{self.address}"
 
     class PciList(list):
 
@@ -2918,10 +2948,13 @@ class Pci(BaseParser):
             return result
 
         def is_each_device_in_its_own_iommu_group(self, pci_list_for_checking):
-            for pci in pci_list_for_checking:
-                if len(self.get_pci_list_by_iommu_group(pci.iommu_group)) != 1:
-                    return False
-            return True
+            pci_table_by_iommu_group = self.get_pci_table_by_iommu_group()
+
+            for iommu_group, pci_list in pci_list_for_checking.get_pci_table_by_iommu_group().items():
+                if iommu_group in pci_table_by_iommu_group:
+                    if len(pci_table_by_iommu_group[iommu_group]) != len(pci_list):
+                        return False
+                return True
 
         def get_by_address(self, pci_address_list):
             result = Pci.PciList()
@@ -2929,9 +2962,6 @@ class Pci(BaseParser):
                 if pci.address in pci_address_list:
                     result.append(pci)
             return result
-
-
-        # fixme utopia Метод: в задействованных iommu группах имеются только целевые утсройства и больше никаких
 
     @staticmethod
     def get_list():
