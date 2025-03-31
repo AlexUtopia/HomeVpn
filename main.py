@@ -5151,22 +5151,22 @@ class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
                  initiate_vga_pci_passthrough=False,
                  initiate_usb_host_passthrough=False,
-                 qemu_vga_pci_passthrough=None, grub_config_backup_path=None,
+                 qemu_pci_passthrough=None, grub_config_backup_path=None,
                  vm_platform=VirtualMachine.QEMU_PLATFORM_I440FX_BIOS):
         self.__vm_name = vm_name
         self.__project_config = project_config
         self.__startup = startup
         self.__block_internet_access = bool(block_internet_access)
         self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
-        self.__initiate_usb_host_passthrough = initiate_usb_host_passthrough
-        self.__qemu_vga_pci_passthrough = qemu_vga_pci_passthrough
+        self.__initiate_usb_host_passthrough = bool(initiate_usb_host_passthrough)
+        self.__qemu_pci_passthrough = qemu_pci_passthrough
         self.__vm_platform = vm_platform
         self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
         self.__serializer = ShellSerializer()
 
     def run(self):
-        if self.__initiate_vga_pci_passthrough:
-            if self.__qemu_vga_pci_passthrough:
+        if self.__initiate_vga_pci_passthrough or self.__initiate_usb_host_passthrough:
+            if self.__qemu_pci_passthrough:
                 self.after_reboot()
             else:
                 self.before_reboot()
@@ -5175,32 +5175,19 @@ class VmRunner:
 
     def before_reboot(self):
         pci_list = Pci.get_list()
+        pci_list_for_passthrough = Pci.PciList()
+        pci_list_for_passthrough.extend(self.__get_pci_vga_list_for_passthrough(pci_list))
+        pci_list_for_passthrough.extend(self.__get_usb_host_list_for_passthrough(pci_list))
 
-        pci_vga_list = pci_list.get_vga_list()
-        if len(pci_vga_list) == 0:
-            Logger.instance().error("[Vm] PCI VGA NOT FOUND")
+        if len(pci_list_for_passthrough) == 0:
+            Logger.instance().warning("[Vm] PCI passthrough devices NOT FOUND")
             return
 
-        if len(pci_vga_list) > 1:
-            Logger.instance().error("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
+        if not pci_list.is_each_device_in_its_own_iommu_group(pci_list_for_passthrough):
+            Logger.instance().error("[Vm] For PCI passthrough require ASC override patched kernel")
             return
 
-        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
-        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
-        iommu_group = pci_vga_list[0].iommu_group
-        if iommu_group is None:
-            Logger.instance().error("[Vm] VGA does not include to iommu group")
-            return
-
-        pci_list_by_vga_iommu_group = pci_list.get_pci_list_by_iommu_group(iommu_group)
-
-        usb_host_controller_list = pci_list.get_usb_host_list()
-        if not pci_list.is_each_device_in_its_own_iommu_group(usb_host_controller_list):
-            Logger.instance().error("[Vm] USB host controller NO PASSTHROUGH")
-        else:
-            pci_list_by_vga_iommu_group.extend(usb_host_controller_list)
-
-        vfio_pci = VfioPci(pci_list_by_vga_iommu_group)
+        vfio_pci = VfioPci(pci_list_for_passthrough)
         vfio = Vfio(vfio_pci)
 
         grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
@@ -5209,7 +5196,7 @@ class VmRunner:
             return
         self.__grub.update()
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuPciPassthrough": str(QemuPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--vga-passthrough" if self.__initiate_vga_pci_passthrough else ""]])}'
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuPciPassthrough": str(QemuPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--vga-passthrough" if self.__initiate_vga_pci_passthrough else "", "--usb-host-passthrough" if self.__initiate_usb_host_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
         # Power.reboot()
@@ -5232,6 +5219,48 @@ class VmRunner:
         self.__grub.restore_from_backup()
         self.__grub.update()
         # Power.reboot()
+
+    def __get_pci_vga_list_for_passthrough(self, pci_list):
+        if not self.__initiate_vga_pci_passthrough:
+            return Pci.PciList()
+
+        # VGA + Audio controller
+        result = pci_list.get_vga_list(with_consumer=True)
+        if len(result) == 0:
+            Logger.instance().error("[Vm] PCI VGA NOT FOUND")
+            return Pci.PciList()
+
+        if len(result.get_vga_list()) > 1:
+            Logger.instance().warning("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
+            return Pci.PciList()
+
+        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
+        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
+        iommu_group = result[0].iommu_group
+        if iommu_group is None:
+            Logger.instance().error("[Vm] VGA does not include to iommu group")
+            return Pci.PciList()
+
+        return result
+
+    def __get_usb_host_list_for_passthrough(self, pci_list):
+        if not self.__initiate_usb_host_passthrough:
+            return Pci.PciList()
+
+        result = pci_list.get_usb_host_list()
+        if len(result) == 0:
+            Logger.instance().error("[Vm] USB Host NOT FOUND")
+            return Pci.PciList()
+
+        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
+        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
+        iommu_group = result[0].iommu_group
+        if iommu_group is None:
+            Logger.instance().error("[Vm] USB host does not include to iommu group")
+            return Pci.PciList()
+
+        return result
+
 
     def __run(self):
         network_bridge = NetworkBridge(self.__project_config.get_server_name(),
@@ -5256,18 +5285,11 @@ class VmRunner:
 
         virtio = Virtio(self.__project_config)
 
-        qemu_bios = QemuBios()
-        tpm = None
-        if self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_BIOS:
-            qemu_bios = QemuBios("q35")
-        elif self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI:
-            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=False)
-        elif self.__vm_platform == VirtualMachine.QEMU_PLATFORM_Q35_UEFI_SECURE:
-            qemu_bios = QemuUefi(vm_meta_data, is_secure_boot=True)
-            tpm = TpmEmulator(vm_meta_data)
 
-        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=self.__qemu_vga_pci_passthrough,
-                            qemu_bios=qemu_bios, tpm=tpm)
+        qemu_platform = QemuPlatform(self.__vm_platform)
+
+        vm = VirtualMachine(network_bridge, vm_meta_data, virtio=virtio, qemu_vga=self.__qemu_pci_passthrough,
+                            qemu_platform=qemu_platform)
         vm.run()
         tcp_forwarding_thread.join()
 
@@ -5553,8 +5575,6 @@ def main():
     #  но как быть с SRIOV, например?
     parser_vm_run.add_argument("--QemuPciPassthrough", type=QemuPciPassthrough,
                                help="PCI VGA list for passthrough to virtual machine. Not for human use")
-    parser_vm_run.add_argument("--QemuUsbHostPciPassthrough", type=QemuPciPassthrough,
-                               help="PCI USB host for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
                                help="Grub config backup file path. Not for human use")
 
@@ -5629,7 +5649,7 @@ def main():
         VmRunner(args.vm_name, project_config=project_config, block_internet_access=args.bi,
                  initiate_vga_pci_passthrough=args.vga_passthrough,
                  initiate_usb_host_passthrough=args.usb_host_passthrough,
-                 qemu_vga_pci_passthrough=args.QemuPciPassthrough,
+                 qemu_pci_passthrough=args.QemuPciPassthrough,
                  grub_config_backup_path=args.grub_config_backup_path, vm_platform=args.vm_platform).run()
 
     elif args.command == "vm_ssh_fwd":
