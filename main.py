@@ -57,9 +57,13 @@ class Logger:
             file_handler.setLevel(logging.DEBUG)
             file_handler.setFormatter(
                 logging.Formatter(
-                    fmt='{asctime} {levelname: <8} [{process}][{thread}] <{funcName}:{lineno}>\t\t{message}',
+                    fmt='{asctime} {levelname: <8} {message} [{process}][{thread}] <{funcName}:{lineno}>',
                     style='{'))
             self.__logger.addHandler(file_handler)
+
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(logging.Formatter(fmt='{asctime} {levelname: <8} {message}', style='{'))
+            self.__logger.addHandler(console_handler)
 
         def get_logger(self):
             return self.__logger
@@ -533,7 +537,7 @@ class CurrentOs:
     @staticmethod
     def is_bios_boot():
         if CurrentOs.is_linux():
-            return not Path("sys/firmware/efi").exist()
+            return not Path("sys/firmware/efi").exists()
         elif CurrentOs.is_windows():
             return False
         return False
@@ -541,7 +545,7 @@ class CurrentOs:
     @staticmethod
     def is_uefi_boot():
         if CurrentOs.is_linux():
-            return Path("sys/firmware/efi").exist()
+            return Path("sys/firmware/efi").exists()
         elif CurrentOs.is_windows():
             return False
         return False
@@ -2856,6 +2860,9 @@ class Pci(BaseParser):
         return self.__get_related_address_list("consumer")
 
     def __get_related_address_list(self, name):
+        if not CurrentOs.is_linux():
+            return []
+
         result = list()
         for path in pathlib.Path(self.__get_sysfs_pci_device_path()).glob(f"{name}:pci:*"):
             try:
@@ -5192,19 +5199,16 @@ class VmRunner:
             self.__run()
 
     def before_reboot(self):
-        iommu = Iommu()
-        if not iommu.check():
-            # задать в конфиг граба intel/amd_iommu=on iommu=pt и предложить настроить биос,
-            # если пользователь отказывается то откатывать граб, если соглашается то идем на перезагрузку
-            # если после перезагрузки iommu группы не появились то откатываем конфиг граба в зад,
-            # если всё ок то также откатываем конфиг граба чтобы накатить финальную конфигурацию со всеми свистоперделками
-            Logger.instance().warning("[Vm] Enable iommu (VT-d/AMD-Vi) in host BIOS/UEFI")
-            return
-
         pci_list = Pci.get_list()
         if not pci_list.is_iommu_enabled():
-            # fixme utopia Включаем iommu через опции ядра и перезагружаемся. Важно не напороться на рекурсию
-            Logger.instance().warning("[Vm] Auto enable iommu in kernel parameters")
+            Logger.instance().warning("[Vm] Enable IOMMU (VT-d/AMD-Vi) in host BIOS/UEFI.\n     See guide https://us.informatiweb.net/tutorials/it/bios/enable-iommu-or-vt-d-in-your-bios.html")
+
+            grub_config_backup_path = self.__grub.append_cmd_line_linux(Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
+            if grub_config_backup_path is None:
+                Logger.instance().error("[Vm] Make GRUB config backup FAIL")
+                return
+            self.__grub.update()
+            Logger.instance().info(f"[Vm] GRUB config for IOMMU applied, backup \"{grub_config_backup_path}\"")
             return
 
         pci_list_for_passthrough = Pci.PciList()
@@ -5217,14 +5221,17 @@ class VmRunner:
 
         if not pci_list.is_each_device_in_its_own_iommu_group(pci_list_for_passthrough):
             Logger.instance().error("[Vm] For PCI passthrough require ASC override patched kernel")
+            # fixme utopia Предложить задать спец опцию командной строки
+            # https://askubuntu.com/questions/599208/how-to-list-grubs-menuentries-in-command-line
+            # https://liquorix.net/#install
             return
 
         vfio_pci = VfioPci(pci_list_for_passthrough)
-        vfio = Vfio(vfio_pci, iommu)
+        vfio = Vfio(vfio_pci)
 
         grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
         if grub_config_backup_path is None:
-            Logger.instance().error("[Vm] Make grub config backup FAIL")
+            Logger.instance().error("[Vm] Make GRUB config backup FAIL")
             return
         self.__grub.update()
 
