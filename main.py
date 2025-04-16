@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import json
 import ipaddress
+import tempfile
 import threading
 import time
 import sys
@@ -43,6 +44,7 @@ import platform
 import cpuinfo
 import logging
 import logging.handlers
+import regex
 
 
 class Logger:
@@ -452,7 +454,371 @@ class String(str):
 
     @staticmethod
     def get_regex():
-        return f".*"
+        return f".+"
+
+
+class BaseParser:
+    def __init__(self, table):
+        self.__table = table
+        self.init_fields_default()
+
+    def __setitem__(self, key, value):
+        metadata = self.__table.get(key)
+        if metadata is None:
+            return
+
+        field_type = self.__get_field_type(metadata)
+        if field_type is None:
+            return
+
+        setattr(self, key, field_type(value))
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __str__(self):
+        return json.dumps(self.get_fields_as_dict())
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_fields_as_dict(self):
+        result = dict()
+        for field_name, metadata in self.__table.items():
+            field_value = self[field_name]
+            if isinstance(field_value, BaseParser):
+                result[field_name] = field_value.get_fields_as_dict()
+            else:
+                result[field_name] = field_value
+        return result
+
+    def init_fields_default(self):
+        for field_name, metadata in self.__table.items():
+            if "default" in metadata:
+                self[field_name] = metadata.get("default")
+            else:
+                setattr(self, field_name, self.__get_field_type(metadata)())
+
+    def init_fields(self, re_object, value_as_str):
+        if not isinstance(value_as_str, str):
+            return False
+
+        match = re_object.search(str(value_as_str))
+        if match is None:
+            return False
+
+        for field_name, value in match.groupdict().items():
+            if value is not None:
+                self[field_name] = value
+        return True
+
+    def copy_if(self, other):
+        if isinstance(other, type(self)) or isinstance(self, type(other)) or isinstance(other, dict):
+            other_dict = other if isinstance(other, dict) else other.get_fields_as_dict()
+            for field_name, metadata in self.__table.items():
+                if field_name in other_dict:
+                    self[field_name] = other[field_name]
+                else:
+                    setattr(self, field_name, self.__get_field_type(metadata)())
+            return True
+        else:
+            return False
+
+    # @staticmethod
+    # def from_string(model):
+    #     Pci.from_json(json.loads(model))
+    #
+    # @staticmethod
+    # def from_json(model):
+    #     result = Pci()
+    #     for key, value in model.items():
+    #         result[key] = value
+    #     return Pci.__build(result)
+
+    def get_regex_for(self, field_name, is_capture=True):
+        metadata = self.__table.get(field_name)
+        if metadata is None:
+            return ""
+
+        field_type = self.__get_field_type(metadata)
+        if field_type is None:
+            return ""
+
+        if is_capture:
+            return f"(?P<{field_name}>{field_type.get_regex()})"
+        else:
+            return field_type.get_regex()
+
+    def __get_field_type(self, metadata):
+        return metadata.get("type")
+
+
+class LinuxKernelVersion(BaseParser):
+    class Number(int):
+        @staticmethod
+        def get_regex():
+            return "[0-9]{1,4}"
+
+    __MAJOR = "major"
+    __MINOR = "minor"
+    __REVISION = "revision"
+    __RELEASE_CANDIDATE = "release_candidate"
+    __PATCH = "patch"
+    __VARIANT = "variant"
+
+    __TABLE = {__MAJOR: {"type": Number, "default": 0},
+               __MINOR: {"type": Number, "default": 0},
+               __REVISION: {"type": Number, "default": 0},
+               __RELEASE_CANDIDATE: {"type": Number, "default": 0},
+               __PATCH: {"type": Number, "default": 0},
+               __VARIANT: {"type": String, "default": ""}
+               }
+
+    def __init__(self, linux_kernel_version=None):
+        super(LinuxKernelVersion, self).__init__(LinuxKernelVersion.__TABLE)
+        if linux_kernel_version is None:  # Создать умолчательный объект
+            return
+
+        if self.copy_if(linux_kernel_version):  # Копирующий конструктор (в том числе если pci_address - это словарь)
+            return
+
+        # Создать объект из строки, например, из результата разбора выхлопа lspci
+        if self.init_fields(re.compile(LinuxKernelVersion.get_regex()),
+                            linux_kernel_version):
+            return
+
+        raise Exception(f"[LinuxKernelVersion] Format FAIL: {linux_kernel_version} | {type(linux_kernel_version)}")
+
+    def __str__(self):
+        result = f"{self.major}.{self.minor}"
+        if self.revision > 0:
+            result += f".{self.revision}"
+
+        if self.release_candidate > 0:
+            result += f"-rc{self.release_candidate}"
+
+        if self.patch > 0:
+            result += f"-{self.patch}"
+
+        if len(self.variant) > 0:
+            result += f"-{self.variant}"
+
+        return result
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __eq__(self, other):
+        if not isinstance(other, LinuxKernelVersion):
+            other = LinuxKernelVersion(other)
+        return self.major == other.major and self.minor == other.minor and self.revision == other.revision and self.release_candidate == other.release_candidate and self.patch == other.patch and self.variant == other.variant
+
+    def __lt__(self, other):
+        if not isinstance(other, LinuxKernelVersion):
+            other = LinuxKernelVersion(other)
+        if self.major < other.major:
+            return True
+        elif self.major > other.major:
+            return False
+        elif self.minor < other.minor:
+            return True
+        elif self.minor > other.minor:
+            return False
+        elif self.revision < other.revision:
+            return True
+        elif self.revision > other.revision:
+            return False
+        elif self.release_candidate < other.release_candidate:
+            return True
+        elif self.release_candidate > other.release_candidate:
+            return False
+        elif self.patch < other.patch:
+            return True
+        elif self.patch > other.patch:
+            return False
+        elif self.variant < other.variant:
+            return True
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __le__(self, other):
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other):
+        return not self.__le__(other)
+
+    def __ge__(self, other):
+        return not self.__lt__(other)
+
+    def is_rc(self):
+        return self.release_candidate > 0
+
+    def is_liquorix(self):
+        return "liquorix" in self.variant.lower()
+
+    @staticmethod
+    def get_regex():
+        is_capture = True
+        tmp = LinuxKernelVersion()
+        result = ""
+        result += f"{tmp.get_regex_for(LinuxKernelVersion.__MAJOR, is_capture)}\."
+        result += f"{tmp.get_regex_for(LinuxKernelVersion.__MINOR, is_capture)}"
+        result += f"(?>\.{tmp.get_regex_for(LinuxKernelVersion.__REVISION, is_capture)})?"
+        result += f"(?>-rc{tmp.get_regex_for(LinuxKernelVersion.__RELEASE_CANDIDATE, is_capture)})?"
+        result += f"(?>-{tmp.get_regex_for(LinuxKernelVersion.__PATCH, is_capture)})?"
+        result += f"(?>[\.-]{tmp.get_regex_for(LinuxKernelVersion.__VARIANT, is_capture)})?"
+        result += f"$"
+        return result
+
+
+class UnitTest_LinuxKernelVersion(unittest.TestCase):
+    class LinuxKernelVersionTest(LinuxKernelVersion):
+        pass
+
+    class UnknownClass:
+        pass
+
+    def test(self):
+        ref_table = [
+            (LinuxKernelVersion, "",
+             {"is_exception": True}),
+            (LinuxKernelVersion, "Hello world",
+             {"is_exception": True}),
+            (LinuxKernelVersion, 17,
+             {"is_exception": True}),
+            (LinuxKernelVersion, UnitTest_LinuxKernelVersion.UnknownClass,
+             {"is_exception": True}),
+            (LinuxKernelVersion, "5",
+             {"is_exception": True}),
+            (LinuxKernelVersion, "5.",
+             {"is_exception": True}),
+            (LinuxKernelVersion, "5.0-",
+             {"is_exception": True}),
+            (LinuxKernelVersion, "6.14.0-1-liquorix-amd64",
+             {"expected": "6.14-1-liquorix-amd64", "is_exception": False, "is_liquorix": True, "is_rc": False,
+              "expected_dict": {"major": 6, "minor": 14, "revision": 0, "release_candidate": 0, "patch": 1,
+                                "variant": "liquorix-amd64"}}),
+            (LinuxKernelVersion, "/boot/vmlinuz-5.15.0-91-generic",
+             {"expected": "5.15-91-generic", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 5, "minor": 15, "revision": 0, "release_candidate": 0, "patch": 91,
+                                "variant": "generic"}}),
+            (LinuxKernelVersion, "6.14-rc15",
+             {"expected": "6.14-rc15", "is_exception": False, "is_liquorix": False, "is_rc": True,
+              "expected_dict": {"major": 6, "minor": 14, "revision": 0, "release_candidate": 15, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, "6.14.9999-rc15",
+             {"expected": "6.14.9999-rc15", "is_exception": False, "is_liquorix": False, "is_rc": True,
+              "expected_dict": {"major": 6, "minor": 14, "revision": 9999, "release_candidate": 15, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, "6.14.9999-rc15fff",
+             {"expected": "6.14.9999-rc15fff", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 6, "minor": 14, "revision": 9999, "release_candidate": 0, "patch": 0,
+                                "variant": "rc15fff"}}),
+            (LinuxKernelVersion, "6.14-012345ggg",
+             {"expected": "6.14-012345ggg", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 6, "minor": 14, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": "012345ggg"}}),
+            (LinuxKernelVersion, {"major": 1, "minor": 2},
+             {"expected": f"1.2", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 1, "minor": 2, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, {"major1": 1, "minor": 2},
+             {"expected": f"0.2", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 0, "minor": 2, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, None,
+             {"expected": f"0.0", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 0, "minor": 0, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, {},
+             {"expected": f"0.0", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 0, "minor": 0, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, LinuxKernelVersion(),
+             {"expected": f"0.0", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 0, "minor": 0, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, LinuxKernelVersion("1.2"),
+             {"expected": f"1.2", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 1, "minor": 2, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (LinuxKernelVersion, UnitTest_LinuxKernelVersion.LinuxKernelVersionTest("1.2"),
+             {"expected": f"1.2", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 1, "minor": 2, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}}),
+            (UnitTest_LinuxKernelVersion.LinuxKernelVersionTest, LinuxKernelVersion("1.2"),
+             {"expected": f"1.2", "is_exception": False, "is_liquorix": False, "is_rc": False,
+              "expected_dict": {"major": 1, "minor": 2, "revision": 0, "release_candidate": 0, "patch": 0,
+                                "variant": ""}})
+        ]
+
+        for class_type, initiate, test_data in ref_table:
+            target = None
+            try:
+                target = class_type(initiate)
+                self.assertFalse(test_data["is_exception"], f"No exception for \"{initiate}\"")
+            except Exception as ex:
+                self.assertTrue(test_data["is_exception"], f"Exception for \"{initiate}\": {ex}")
+
+            if target is not None:
+                self.assertEqual(target.get_fields_as_dict(), test_data["expected_dict"])
+                self.assertEqual(str(class_type(initiate)), test_data["expected"])
+                self.assertEqual(target.is_liquorix(), test_data["is_liquorix"])
+                self.assertEqual(target.is_rc(), test_data["is_rc"])
+
+    def test_compare(self):
+        ref_table = [
+            {"first": "6.12", "second": "6.12.0-0", "compare":
+                {"==": True, "!=": False, ">": False, ">=": True, "<": False, "<=": True}},
+            {"first": "6.15", "second": "6.12", "compare":
+                {"==": False, "!=": True, ">": True, ">=": True, "<": False, "<=": False}},
+            {"first": "6.15.1", "second": "6.15", "compare":
+                {"==": False, "!=": True, ">": True, ">=": True, "<": False, "<=": False}},
+            {"first": "6.15-rc1", "second": "6.15.1", "compare":
+                {"==": False, "!=": True, ">": False, ">=": False, "<": True, "<=": True}},
+            {"first": "6.15.1-rc1", "second": "6.15.1", "compare":
+                {"==": False, "!=": True, ">": True, ">=": True, "<": False, "<=": False}},
+            {"first": "6.15.1", "second": "6.15.1-1", "compare":
+                {"==": False, "!=": True, ">": False, ">=": False, "<": True, "<=": True}},
+            {"first": "6.15.1-generic", "second": "6.15.1-liquorix", "compare":
+                {"==": False, "!=": True, ">": False, ">=": False, "<": True, "<=": True}},
+            {"first": "5.15-133-generic", "second": "6.5-35-generic", "compare":
+                {"==": False, "!=": True, ">": False, ">=": False, "<": True, "<=": True}}
+        ]
+
+        for item in ref_table:
+            first = LinuxKernelVersion(item["first"])
+            second = LinuxKernelVersion(item["second"])
+            for operation, expected in item["compare"].items():
+                if operation == "==":
+                    self.assertEqual(first == second, expected, f"{first} {operation} {second}")
+                elif operation == "!=":
+                    self.assertEqual(first != second, expected, f"{first} {operation} {second}")
+                elif operation == ">":
+                    self.assertEqual(first > second, expected, f"{first} {operation} {second}")
+                elif operation == ">=":
+                    self.assertEqual(first >= second, expected, f"{first} {operation} {second}")
+                elif operation == "<":
+                    self.assertEqual(first < second, expected, f"{first} {operation} {second}")
+                elif operation == "<=":
+                    self.assertEqual(first <= second, expected, f"{first} {operation} {second}")
+
+    def test_sort(self):
+        test_data = [LinuxKernelVersion("6.14-1-liquorix-amd64"), LinuxKernelVersion("5.15-133-generic"),
+                     LinuxKernelVersion("5.15-134-generic"), LinuxKernelVersion("5.15-136-generic"),
+                     LinuxKernelVersion("6.5-35-generic"), LinuxKernelVersion("6.8-50-generic"),
+                     LinuxKernelVersion("6.8-52-generic"), LinuxKernelVersion("6.8-57-generic"),
+                     LinuxKernelVersion("5.15-91-generic")]
+        expected_data = [LinuxKernelVersion("5.15-91-generic"), LinuxKernelVersion("5.15-133-generic"),
+                         LinuxKernelVersion("5.15-134-generic"), LinuxKernelVersion("5.15-136-generic"),
+                         LinuxKernelVersion("6.5-35-generic"), LinuxKernelVersion("6.8-50-generic"),
+                         LinuxKernelVersion("6.8-52-generic"), LinuxKernelVersion("6.8-57-generic"),
+                         LinuxKernelVersion("6.14-1-liquorix-amd64")]
+        test_data.sort()
+        self.assertEqual(test_data, expected_data)
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -466,6 +832,7 @@ class CurrentOs:
         # https://docs.python.org/3/library/sys.html#sys.platform
         return sys.platform.lower().startswith('win')
 
+    # fixme utopia Что вернёт uname -r?
     @staticmethod
     def is_msys():
         # https://docs.python.org/3/library/sys.html#sys.platform
@@ -493,27 +860,60 @@ class CurrentOs:
 
     @staticmethod
     def get_linux_kernel_version():
+        if not CurrentOs.is_linux():
+            return None
         # https://docs.python.org/3/library/os.html#os.uname
-        return semantic_version.Version(platform.release())
+        return LinuxKernelVersion(platform.release())
 
     @staticmethod
     def get_windows_version():
+        if not CurrentOs.is_windows():
+            return None
         os_version_info_ex = sys.getwindowsversion()
         # fixme utopia Добавить информацию про wProductType
         return semantic_version.Version(major=os_version_info_ex.major, minor=os_version_info_ex.minor,
                                         build=os_version_info_ex.build)
 
     @staticmethod
+    def is_ubuntu_or_like():
+        return CurrentOs.__is_linux_distro_or_like("ubuntu")
+
+    @staticmethod
+    def is_debian_or_like():
+        return CurrentOs.__is_linux_distro_or_like("debian")
+
+    @staticmethod
+    def is_arch_or_like():
+        return CurrentOs.__is_linux_distro_or_like("arch")
+
+    @staticmethod
+    def __is_linux_distro_or_like(linux_distro_id):
+        try:
+            if not CurrentOs.is_linux():
+                return False
+
+            linux_distro_id = linux_distro_id.strip().lower()
+            current_linux_distro_info = os_release.current_release()
+            return (linux_distro_id == current_linux_distro_info.id) or (
+                    linux_distro_id in current_linux_distro_info.id_like)
+        except Exception as ex:
+            return False
+
+    @staticmethod
     def get_linux_distro_name():
+        if not CurrentOs.is_linux():
+            return None
         # https://pypi.org/project/os-release/
         # https://www.freedesktop.org/software/systemd/man/os-release.html
-        return os_release.id()
+        return os_release.current_release().id
 
     @staticmethod
     def get_linux_distro_version():
+        if not CurrentOs.is_linux():
+            return None
         # https://pypi.org/project/os-release/
         # https://www.freedesktop.org/software/systemd/man/os-release.html
-        return semantic_version.Version(version_string=os_release.version_id())
+        return semantic_version.Version(version_string=os_release.current_release().version_id)
 
     # fixme utopia Проверить на Ubuntu 32bit
     # https://askubuntu.com/questions/768415/where-can-i-find-32-bit-version-of-ubuntu
@@ -555,6 +955,34 @@ class CurrentOs:
     @staticmethod
     def is_uefi_secure_boot(self):
         return CurrentOs.is_uefi_boot() and False
+
+
+class LinuxKernel:
+    LIQUORIX_KERNEL_SETUP_SCRIPT_URL = "https://liquorix.net/install-liquorix.sh"
+
+    def __init__(self):
+        pass
+
+    # https://liquorix.net/
+    def download_and_install_liquorix_kernel(self):
+        if not CurrentOs.is_linux():
+            raise Exception(f"[LinuxKernel] Non Linux OS")
+
+        if CurrentOs.is_debian_or_like() or CurrentOs.is_ubuntu_or_like() or CurrentOs.is_arch_or_like():
+            response = requests.get(self.LIQUORIX_KERNEL_SETUP_SCRIPT_URL, stream=True)
+            fp = tempfile.NamedTemporaryFile(delete=False)
+            try:
+                for chunk in response.iter_content(chunk_size=2 ** 16):
+                    fp.write(chunk)
+                fp.close()
+                pathlib.Path(fp.name).chmod(0o777)
+                subprocess.check_call(fp.name, shell=True)
+            finally:
+                fp.close()
+                pathlib.Path(fp.name).unlink(missing_ok=True)
+        else:
+            raise Exception(
+                f"[LinuxKernel] Install liquorix kernel NOT SUPPORTED for {CurrentOs.get_linux_distro_name()}")
 
 
 # fixme utopia Проверить на многопроцессорных системах (у меня есть)
@@ -792,11 +1220,15 @@ class Path:
         shutil.copy2(str(Path(path)), str(self))
 
     # fixme utopia backup для файла и для директории
-    def create_backup(self, backup_prefix=f"unused_since_{datetime.datetime.now():%Y-%m-%dT%H_%M_%S_%f%z}_"):
+    def create_backup(self, backup_file_path=None,
+                      backup_prefix=f"unused_since_{datetime.datetime.now():%Y-%m-%dT%H_%M_%S_%f%z}_"):
         if not self.exists():
             return None
 
-        backup_file_path = self.get_dir_path().join(f"{backup_prefix}{self.get_filename()}")
+        if backup_file_path is None:
+            backup_file_path = self.get_dir_path().join(f"{backup_prefix}{self.get_filename()}")
+        else:
+            backup_file_path = Path(backup_file_path)
         backup_file_path.copy_from(self.get())
         return backup_file_path
 
@@ -873,9 +1305,10 @@ class TextConfigWriter:
             self.__config_file_path.add_executable()
         return self.__config_file_path
 
-    def set_with_backup(self, data, set_executable=False):
+    def set_with_backup(self, data, set_executable=False, is_rewrite_backup=False):
         if self.__config_file_path.exists():
-            self.__last_backup_file_path = self.__config_file_path.create_backup()
+            self.__last_backup_file_path = self.__config_file_path.create_backup(
+                backup_file_path=self.__last_backup_file_path if is_rewrite_backup else None)
         self.set(data, set_executable)
         return self.get_last_backup_file_path()
 
@@ -2560,102 +2993,6 @@ class UnitTest_get_all_subclasses(unittest.TestCase):
         self.assertEqual(subclass_name_list, ["Bing", "Baz", "Bar"])
 
 
-class BaseParser:
-    def __init__(self, table):
-        self.__table = table
-        self.init_fields_default()
-
-    def __setitem__(self, key, value):
-        metadata = self.__table.get(key)
-        if metadata is None:
-            return
-
-        field_type = self.__get_field_type(metadata)
-        if field_type is None:
-            return
-
-        setattr(self, key, field_type(value))
-
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-    def __str__(self):
-        return json.dumps(self.get_fields_as_dict())
-
-    def __repr__(self):
-        return self.__str__()
-
-    def get_fields_as_dict(self):
-        result = dict()
-        for field_name, metadata in self.__table.items():
-            field_value = self[field_name]
-            if isinstance(field_value, BaseParser):
-                result[field_name] = field_value.get_fields_as_dict()
-            else:
-                result[field_name] = field_value
-        return result
-
-    def init_fields_default(self):
-        for field_name, metadata in self.__table.items():
-            if "default" in metadata:
-                self[field_name] = metadata.get("default")
-            else:
-                setattr(self, field_name, self.__get_field_type(metadata)())
-
-    def init_fields(self, re_object, value_as_str):
-        if not isinstance(value_as_str, str):
-            return False
-
-        match = re_object.search(str(value_as_str))
-        if match is None:
-            return False
-
-        for field_name, value in match.groupdict().items():
-            if value is not None:
-                self[field_name] = value
-        return True
-
-    def copy_if(self, other):
-        if isinstance(other, type(self)) or isinstance(self, type(other)) or isinstance(other, dict):
-            other_dict = other if isinstance(other, dict) else other.get_fields_as_dict()
-            for field_name, metadata in self.__table.items():
-                if field_name in other_dict:
-                    self[field_name] = other[field_name]
-                else:
-                    setattr(self, field_name, self.__get_field_type(metadata)())
-            return True
-        else:
-            return False
-
-    # @staticmethod
-    # def from_string(model):
-    #     Pci.from_json(json.loads(model))
-    #
-    # @staticmethod
-    # def from_json(model):
-    #     result = Pci()
-    #     for key, value in model.items():
-    #         result[key] = value
-    #     return Pci.__build(result)
-
-    def get_regex_for(self, field_name, is_capture=True):
-        metadata = self.__table.get(field_name)
-        if metadata is None:
-            return ""
-
-        field_type = self.__get_field_type(metadata)
-        if field_type is None:
-            return ""
-
-        if is_capture:
-            return f"(?P<{field_name}>{field_type.get_regex()})"
-        else:
-            return field_type.get_regex()
-
-    def __get_field_type(self, metadata):
-        return metadata.get("type")
-
-
 class PciAddress(BaseParser):
     __DOMAIN = "domain"
     __BUS = "bus"
@@ -3107,14 +3444,17 @@ class VfioPci:
 # https://docs.kernel.org/driver-api/vfio-mediated-device.html
 # https://docs.kernel.org/driver-api/vfio.html
 class Vfio:
-    def __init__(self, vfio_pci, iommu=Iommu()):
+    def __init__(self, vfio_pci, iommu=Iommu(), is_asc_override=True):
         self.__vfio_pci = vfio_pci
         self.__iommu = iommu
+        self.__is_asc_override = bool(is_asc_override)
 
     def get_kernel_parameters(self):
         result = [{"modules_load": ["vfio", "vfio_pci", "vfio_iommu_type1", "vfio_virqfd"]}]
         result.extend(self.__vfio_pci.get_kernel_parameters())
         result.extend(self.__iommu.get_kernel_parameters())
+        if self.__is_asc_override:
+            result.append({"pcie_acs_override": ["downstream", "multifunction"]})
         return result
 
 
@@ -4240,7 +4580,7 @@ class ConfigParser:
     def remove_by_name(self, name, content):
         empty_line = ""
         regex = re.compile(self.get_regex_for_remove_by_name(name), re.MULTILINE)
-        content = regex.sub(empty_line, content)
+        return regex.sub(empty_line, content)
 
     def add_or_update(self, name, value, content, with_quotes=True):
         value = self.__escape_literal.encode(value)
@@ -4595,11 +4935,14 @@ class Power:
 
 class Grub:
     GRUB_CMDLINE_LINUX = "GRUB_CMDLINE_LINUX"
+    GRUB_TOP_LEVEL = "GRUB_TOP_LEVEL"
 
-    def __init__(self, grub_config_backup_path, grub_config_file_path=Path("/etc/default/grub")):
+    def __init__(self, grub_config_backup_path=None, grub_config_file_path=Path("/etc/default/grub"),
+                 boot_dir_path=Path("/boot")):
         self.__grub_config_reader = TextConfigReader(grub_config_file_path)
         self.__grub_config_writer = TextConfigWriter(grub_config_file_path,
                                                      last_backup_file_path=grub_config_backup_path)
+        self.__boot_dir_path = Path(boot_dir_path)
         self.__linux_kernel_params_serializer = LinuxKernelParamsSerializer()
         self.__config_parser = ConfigParser()
 
@@ -4629,12 +4972,43 @@ class Grub:
                                                                   grub_config)
 
         Logger.instance().debug(f"[Grub] Config before:\n{grub_config}\n\nConfig after:\n{grub_config_modified}\n")
-        return self.__grub_config_writer.set_with_backup(grub_config_modified)
+        return self.__grub_config_writer.set_with_backup(grub_config_modified, is_rewrite_backup=True)
+
+    def set_top_level(self, kernel_image_path):
+        grub_config = self.__grub_config_reader.get()
+
+        grub_config_modified = ""
+        if kernel_image_path is None:
+            grub_config_modified = self.__config_parser.remove_by_name(self.GRUB_TOP_LEVEL, grub_config)
+        else:
+            grub_config_modified = self.__config_parser.add_or_update(self.GRUB_TOP_LEVEL,
+                                                                      str(kernel_image_path),
+                                                                      grub_config)
+
+        Logger.instance().debug(f"[Grub] Config before:\n{grub_config}\n\nConfig after:\n{grub_config_modified}\n")
+        return self.__grub_config_writer.set_with_backup(grub_config_modified, is_rewrite_backup=True)
 
     def restore_from_backup(self):
         Logger.instance().debug(
             f"[Grub] Restore from backup \"{self.__grub_config_writer.get_last_backup_file_path()}\"")
         return self.__grub_config_writer.restore_from_backup(is_remove_backup=True)
+
+    def get_last_liquorix_kernel_path(self):
+        return self.__get_last_kernel_path(is_liquorix=True)
+
+    def get_last_normal_kernel_path(self):
+        return self.__get_last_kernel_path(is_liquorix=False)
+
+    def __get_last_kernel_path(self, is_liquorix):
+        for path in sorted(pathlib.Path(str(self.__boot_dir_path)).glob("vmlinuz-*"),
+                           key=lambda x: LinuxKernelVersion(str(x)), reverse=True):
+            if path.is_file():
+                current_kernel_is_liqourix = LinuxKernelVersion(str(path)).is_liquorix()
+                if is_liquorix and current_kernel_is_liqourix:
+                    return Path(str(path))
+                elif not is_liquorix and not current_kernel_is_liqourix:
+                    return Path(str(path))
+        return None
 
 
 class StartupCrontab:
@@ -5174,7 +5548,7 @@ class VirtualMachine:
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
                  initiate_vga_pci_passthrough=False,
-                 initiate_usb_host_passthrough=False,
+                 initiate_usb_host_passthrough=False, asc_override_patched_kernel=False,
                  qemu_pci_passthrough=None, grub_config_backup_path=None,
                  vm_platform=None, os_distr_path=None):
         self.__vm_name = vm_name
@@ -5183,6 +5557,7 @@ class VmRunner:
         self.__block_internet_access = bool(block_internet_access)
         self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
         self.__initiate_usb_host_passthrough = bool(initiate_usb_host_passthrough)
+        self.__asc_override_patched_kernel = bool(asc_override_patched_kernel)
         self.__qemu_pci_passthrough = qemu_pci_passthrough
         self.__vm_platform = vm_platform
         self.__os_distr_path = os_distr_path
@@ -5201,14 +5576,16 @@ class VmRunner:
     def before_reboot(self):
         pci_list = Pci.get_list()
         if not pci_list.is_iommu_enabled():
-            Logger.instance().warning("[Vm] Enable IOMMU (VT-d/AMD-Vi) in host BIOS/UEFI.\n     See guide https://us.informatiweb.net/tutorials/it/bios/enable-iommu-or-vt-d-in-your-bios.html")
+            Logger.instance().warning(
+                "[Vm] Enable IOMMU (VT-d/AMD-Vi) in host BIOS/UEFI.\n     See guide https://us.informatiweb.net/tutorials/it/bios/enable-iommu-or-vt-d-in-your-bios.html")
 
-            grub_config_backup_path = self.__grub.append_cmd_line_linux(Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
+            grub_config_backup_path = self.__grub.append_cmd_line_linux(
+                Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
             if grub_config_backup_path is None:
                 Logger.instance().error("[Vm] Make GRUB config backup FAIL")
                 return
             self.__grub.update()
-            Logger.instance().info(f"[Vm] GRUB config for IOMMU applied, backup \"{grub_config_backup_path}\"")
+            Logger.instance().info(f"[Vm] GRUB config for IOMMU applied\n     GRUB backup: \"{grub_config_backup_path}\"")
             return
 
         pci_list_for_passthrough = Pci.PciList()
@@ -5220,10 +5597,32 @@ class VmRunner:
             return
 
         if not pci_list.is_each_device_in_its_own_iommu_group(pci_list_for_passthrough):
-            Logger.instance().error("[Vm] For PCI passthrough require ASC override patched kernel")
-            # fixme utopia Предложить задать спец опцию командной строки
-            # https://askubuntu.com/questions/599208/how-to-list-grubs-menuentries-in-command-line
-            # https://liquorix.net/#install
+            if self.__asc_override_patched_kernel:
+                Logger.instance().warning("[Vm] Add ASC override patched kernel")
+                LinuxKernel().download_and_install_liquorix_kernel()
+                # Параметр GRUB_TOP_LEVEL доступен начиная с GRUB 2.12
+                # После завершения работы виртуальной машины ядро не откатываем.
+                # Пользователь может самостоятельно или удалить liquorix ядро (пакет) или воспользоваться grub-customizer
+                # Если бы откат на предыдущее ядро после выключения виртуальной машины был доступен, то пришлось бы решать следующие проблемы:
+                # 1. установка GRUB_TOP_LEVEL на предыдущее ядро блокирует использование обновленного умолчательного ядра
+                # 2. удаление liquorix ядра (а соответственно и правильный автоматический откат на умолчательное ядро) приводит постоянному скачиванию и установке liquorix ядра
+                #    - это лишний интернет трафик
+                # 3. если GRUB не чувствителен к GRUB_TOP_LEVEL, то liquorix ядро может не примениться из-за того что это ядро по версии меньше последнего умолчательного
+                # 4. при использовании GRUB_TOP_LEVEL на liquorix ядро GRUB будет не чувствителен к обновлениям этого ядра
+                # 5. установка GRUB_DEFAULT и/или GRUB_TOP_LEVEL мешает обновлению ядер, например, параметры указывают на удалённое ядро
+                # 6. может быть единственно правильный вариант: скачивать liquorix ядро в виде deb пакета (apt download), устанавливать перед запуском виртуальной машины и удалять после
+                #    (придётся решать проблему поиска последней версии liquorix ядра вручную)
+                # 6.1 или пересборка текущего умолчательного ядра с ASC override патчем
+                # self.__grub.set_top_level(self.__grub.get_last_liquorix_kernel_path())
+                grub_config_backup_path = self.__grub.append_cmd_line_linux(Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
+                if grub_config_backup_path is None:
+                    Logger.instance().error("[Vm] Make GRUB config backup FAIL")
+                    return
+                self.__grub.update()
+                Logger.instance().warning(f"[Vm] Reboot PC and retry\n     GRUB backup: {grub_config_backup_path}")
+            else:
+                Logger.instance().warning(
+                    "[Vm] For PCI passthrough require ASC override patched kernel.\n     Add --asc_override_patched_kernel parameter and retry")
             return
 
         vfio_pci = VfioPci(pci_list_for_passthrough)
@@ -5235,7 +5634,7 @@ class VmRunner:
             return
         self.__grub.update()
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--QemuPciPassthrough": str(QemuPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--vga_passthrough" if self.__initiate_vga_pci_passthrough else "", "--usb_host_passthrough" if self.__initiate_usb_host_passthrough else ""]])}'
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--vga_passthrough" if self.__initiate_vga_pci_passthrough else "", "--usb_host_passthrough" if self.__initiate_usb_host_passthrough else ""]])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
         # Power.reboot()
@@ -5600,8 +5999,11 @@ def main():
     parser_vm_run.add_argument("--usb_host_passthrough",
                                help="Initiate all USB host PCI passthrough to virtual machine",
                                action='store_true')
+    parser_vm_run.add_argument("--asc_override_patched_kernel",
+                               help="Download, install and configure ASC override patched Linux kernel. See https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF#Bypassing_the_IOMMU_groups_(ACS_override_patch)",
+                               action='store_true')
     parser_vm_run.add_argument("--os_distr_path", type=Path, help="OS distributive iso image path")
-    parser_vm_run.add_argument("--QemuPciPassthrough", type=QemuPciPassthrough,
+    parser_vm_run.add_argument("--qemu_pci_passthrough", type=QemuPciPassthrough,
                                help="PCI VGA list for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
                                help="Grub config backup file path. Not for human use")
@@ -5643,11 +6045,15 @@ def main():
         print(VmRegistry(project_config.get_vm_registry_path()).create(args.vm_name, args.image_size).get_image_path())
 
     elif args.command == "vm_run":
-        VmRunner(args.vm_name, project_config=project_config, block_internet_access=args.bi,
+        VmRunner(args.vm_name, project_config=project_config,
+                 block_internet_access=args.bi,
                  initiate_vga_pci_passthrough=args.vga_passthrough,
                  initiate_usb_host_passthrough=args.usb_host_passthrough,
+                 asc_override_patched_kernel=args.asc_override_patched_kernel,
                  qemu_pci_passthrough=args.QemuPciPassthrough,
-                 grub_config_backup_path=args.grub_config_backup_path, vm_platform=args.vm_platform, os_distr_path=args.os_distr_path).run()
+                 grub_config_backup_path=args.grub_config_backup_path,
+                 vm_platform=args.vm_platform,
+                 os_distr_path=args.os_distr_path).run()
 
     elif args.command == "vm_ssh_fwd":
         vm_registry = VmRegistry(project_config.get_vm_registry_path())
@@ -5658,8 +6064,35 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        LinuxKernel().download_and_install_liquorix_kernel()
+        # subprocess.check_call("/home/utopia/test.sh", shell=True)
+        print(f"FFF {CurrentOs.is_ubuntu_or_like()}")
+        print(Grub().get_last_liquorix_kernel_path())
+        print(Grub().get_last_normal_kernel_path())
+        return
+        sv = semantic_version.Version("6.14.0-91-fuck")
+        print(sv.major)
+        print(sv.minor)
+        print(sv.patch)
+        print(sv.prerelease)
+        print(sv.build)
+        sv2 = semantic_version.Version("6.14.0-1-generic")
+        print(sv > sv2)
+        return
+        # https://insights-core.readthedocs.io/en/latest/shared_parsers_catalog/grub_conf.html
+        # https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/system_administrators_guide/ch-working_with_the_grub_2_boot_loader#sec-Editing_a_Menu_Entry
+        grub_cfg = TextConfigReader("/boot/grub/grub.cfg").get()
+
+        _regex = regex.compile("[\n\r\t ]*(submenu|menuentry) [^{}]*{((?>(?R)|[^{}]*)+?)}")
+        tmp = _regex.findall(grub_cfg)
+
+        for bb in tmp:
+            print(bb)
+            print("\n")
+
+        return
         print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-        pci_list = Pci.get_list() #.get_vga_list(with_consumer=True)
+        pci_list = Pci.get_list()  # .get_vga_list(with_consumer=True)
         print(pci_list.is_iommu_enabled())
         return
 
