@@ -44,7 +44,6 @@ import platform
 import cpuinfo
 import logging
 import logging.handlers
-import regex
 
 
 class Logger:
@@ -983,6 +982,49 @@ class LinuxKernel:
         else:
             raise Exception(
                 f"[LinuxKernel] Install liquorix kernel NOT SUPPORTED for {CurrentOs.get_linux_distro_name()}")
+
+
+class Platform:
+    CHASSIS_TYPE_DESKTOP = 3
+    CHASSIS_TYPE_LOW_PROFILE_DESKTOP = 4
+    CHASSIS_TYPE_PIZZA_BOX = 5
+    CHASSIS_TYPE_MINI_TOWER = 6
+    CHASSIS_TYPE_TOWER = 7
+    CHASSIS_TYPE_PORTABLE = 8
+    CHASSIS_TYPE_LAPTOP = 9
+    CHASSIS_TYPE_NOTEBOOK = 10
+    CHASSIS_TYPE_HAND_HELD = 11
+    CHASSIS_TYPE_DOCKING_STATION = 12
+    CHASSIS_TYPE_ALL_IN_ONE = 13
+    CHASSIS_TYPE_SUB_NOTEBOOK = 14
+    CHASSIS_TYPE_SPACE_SAVING = 15
+    CHASSIS_TYPE_LUNCH_BOX = 16
+    CHASSIS_TYPE_MAIN_SYSTEM_CHASSIS = 17
+    CHASSIS_TYPE_EXPANSION_CHASSIS = 18
+    CHASSIS_TYPE_SUB_CHASSIS = 19
+    CHASSIS_TYPE_BUS_EXPANSION_CHASSIS = 20
+    CHASSIS_TYPE_PERIPHERAL_CHASSIS = 21
+    CHASSIS_TYPE_STORAGE_CHASSIS = 22
+    CHASSIS_TYPE_RACK_MOUNT_CHASSIS = 23
+    CHASSIS_TYPE_SEALED_CASE_PC = 24
+
+    def __init__(self):
+        pass
+
+    def is_laptop(self):
+        return self.get_chassis_type() in [self.CHASSIS_TYPE_PORTABLE,
+                                           self.CHASSIS_TYPE_LAPTOP,
+                                           self.CHASSIS_TYPE_NOTEBOOK,
+                                           self.CHASSIS_TYPE_SUB_NOTEBOOK]
+
+    def get_chassis_type(self):
+        if CurrentOs.is_linux():
+            return int(pathlib.Path("/sys/devices/virtual/dmi/id/chassis_type").read_text())
+        elif CurrentOs.is_windows():
+            # https://stackoverflow.com/questions/55184682/powershell-getting-chassis-types-info
+            return None
+        else:
+            return None
 
 
 # fixme utopia Проверить на многопроцессорных системах (у меня есть)
@@ -2906,6 +2948,19 @@ class PciClassCode(UInt16Hex):
     BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
     BASE_CLASS_VGA = 0x03
 
+    BASE_CLASS_BRIDGE_DEVICE = 0x06
+    BASE_CLASS_BRIDGE_DEVICE_HOST = 0x00
+    BASE_CLASS_BRIDGE_DEVICE_ISA = 0x01
+    BASE_CLASS_BRIDGE_DEVICE_EISA = 0x02
+    BASE_CLASS_BRIDGE_DEVICE_MCA = 0x03
+    BASE_CLASS_BRIDGE_DEVICE_PCI_TO_PCI = 0x04
+    BASE_CLASS_BRIDGE_DEVICE_PCMCIA = 0x05
+    BASE_CLASS_BRIDGE_DEVICE_NU_BUS = 0x06
+    BASE_CLASS_BRIDGE_DEVICE_CARD_BUS = 0x07
+    BASE_CLASS_BRIDGE_DEVICE_RACE_WAY = 0x08
+    BASE_CLASS_BRIDGE_DEVICE_SEMI_TRANSPARENT_PCI_TO_PCI = 0x09
+    BASE_CLASS_BRIDGE_DEVICE_INFINIBAND_TO_PCI = 0x0A
+
     BASE_CLASS_SERIAL_BUS_CONTROLLER = 0x0C
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB = 0x03
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI = 0x00
@@ -2953,6 +3008,9 @@ class PciClassCode(UInt16Hex):
 
     def is_usb(self):
         return self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER and self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB
+
+    def is_isa_bridge(self):
+        return self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
@@ -3301,6 +3359,13 @@ class Pci(BaseParser):
                     result.append(pci)
             return result
 
+        def get_isa_bridge_list(self):
+            result = Pci.PciList()
+            for pci in self:
+                if pci.class_code.is_isa_bridge():
+                    result.append(pci)
+            return result
+
         def is_each_device_in_its_own_iommu_group(self, pci_list_for_checking):
             pci_table_by_iommu_group = self.get_pci_table_by_iommu_group()
 
@@ -3450,12 +3515,76 @@ class Vfio:
         self.__is_asc_override = bool(is_asc_override)
 
     def get_kernel_parameters(self):
-        result = [{"modules_load": ["vfio", "vfio_pci", "vfio_iommu_type1", "vfio_virqfd"]}]
+        result = [{"modules_load": ["vfio", "vfio_pci", "vfio_iommu_type1", "vfio_virqfd"], "kvm.ignore_msrs": "1",
+                   "vfio_io_iommu_type1.allow_unsafe_interrupts": "1"}]
         result.extend(self.__vfio_pci.get_kernel_parameters())
         result.extend(self.__iommu.get_kernel_parameters())
         if self.__is_asc_override:
             result.append({"pcie_acs_override": ["downstream", "multifunction"]})
         return result
+
+
+class QemuCdRom:
+    OS_DISTR_INDEX = 0
+    VIRTIO_WIN_DRIVERS_INDEX = 1
+    HW_CDROM_INDEX = 2
+
+    def __init__(self, os_distr_path=None, virtio_win_drivers_path=None, hw_cdrom_path=Path("/dev/sr0")):
+        self.__table = {self.OS_DISTR_INDEX: os_distr_path,
+                        self.VIRTIO_WIN_DRIVERS_INDEX: virtio_win_drivers_path,
+                        self.HW_CDROM_INDEX: hw_cdrom_path}
+
+    def get_qemu_parameters(self):
+        result = []
+        for index, path in self.__table.items():
+            qemu_parameters_item = self.__get_qemu_parameters_template(index, path)
+            if qemu_parameters_item is not None:
+                result.append(qemu_parameters_item)
+        return result
+
+    def __get_qemu_parameters_template(self, index, path):
+        if path is None:
+            return None
+
+        if not Path(path).exists():
+            return None
+
+        return {"-drive": {"file": str(path), "media": "cdrom", "if": "ide", "index": index}}
+
+
+# https://forum.proxmox.com/threads/laptop-keyboard-touchpad-passthough-to-a-vm.135399/
+# qemu-system-$(uname -m) -object input-linux,help
+class QemuBuiltinKeyboardAndMousePassthrough:
+    INPUT_DEV_PATH = "/dev/input/by-path"
+
+    def __init__(self):
+        self.__table = {"mouse": {}, "kbd": {"grab_all": "on", "repeat": "on"}}
+
+    def get_qemu_parameters(self):
+        result = []
+        for target, additional_args in self.__table.items():
+            result.extend(self.__get_qemu_parameters(target, additional_args))
+        return result
+
+    def __get_qemu_parameters(self, target, additional_args):
+        result = []
+        index = 0
+        for path in pathlib.Path(self.INPUT_DEV_PATH).glob(f"platform-*-event-{target}"):
+            args = {"id": f"{target}{index}", "evdev": path}
+            args.update(additional_args)
+            result.append({"-object": {"input-linux": args}})
+            index = index + 1
+        return result
+
+
+# Пока не доступно
+# https://gitlab.com/qemu-project/qemu/-/issues/242
+# https://github.com/utmapp/UTM/issues/5455
+# https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF#%22Error_43:_Driver_failed_to_load%22_with_mobile_(Optimus/max-q)_nvidia_GPUs
+# https://www.wensley.org.uk/ioacpi
+# https://www.wensley.org.uk/c/ioacpi.c
+class QemuBattery:
+    pass
 
 
 class QemuPlatform:
@@ -3534,7 +3663,6 @@ class VgaPciIntel(Pci):
         result = super().get_kernel_parameters()
         result.extend([{"module_blacklist": ["snd_hda_intel", "snd_hda_codec_hdmi"]},
                        {"video": "efifb:off,vesafb:off,vesa:off,simplefb:off"}, {"l1tf": "full,force"},
-                       {"kvm.ignore_msrs": "1"}, {"vfio_io_iommu_type1.allow_unsafe_interrupts": "1"},
                        {"initcall_blacklist": "sysfb_init"}])
         return result
 
@@ -3662,6 +3790,16 @@ class UsbXhciPci(Pci):
     @staticmethod
     def is_my_instance(pci):
         return pci.class_code.is_usb_xhci_controller(pci.prog_if)
+
+
+class IsaBridgePci(Pci):
+    def __init__(self, pci):
+        super().__init__()
+        self._init(pci)
+
+    @staticmethod
+    def is_my_instance(pci):
+        return pci.class_code.is_isa_bridge()
 
 
 # fixme utopia Parser for command line
@@ -5410,18 +5548,19 @@ class QemuPciPassthrough:
 class VirtualMachine:
     def __init__(self, network_bridge,
                  vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
-                 os_distr_path=None, virtio=None, qemu_serial=None, qemu_logging=None,
-                 qemu_platform=None, qemu_vga=None, qemu_pci_passthrough=None):
+                 qemu_serial=None, qemu_logging=None,
+                 qemu_platform=None, qemu_vga=None, qemu_pci_passthrough=None, qemu_cdrom=QemuCdRom(),
+                 qemu_builtin_kbd_and_mouse_passthrough=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
-        self.__os_distr_path = os_distr_path
-        self.__virtio = virtio
         self.__qemu_serial = QemuSerial(vm_meta_data) if qemu_serial is None else qemu_serial
         self.__qemu_logging = QemuLogging(vm_meta_data) if qemu_logging is None else qemu_logging
         self.__qemu_platform = QemuPlatform(vm_meta_data) if qemu_platform is None else qemu_platform
         self.__qemu_vga = QemuVgaDefault() if qemu_vga is None else qemu_vga
         self.__qemu_pci_passthrough = qemu_pci_passthrough
+        self.__qemu_cdrom = QemuCdRom() if qemu_cdrom is None else qemu_cdrom
+        self.__qemu_builtin_kbd_and_mouse_passthrough = qemu_builtin_kbd_and_mouse_passthrough
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -5436,16 +5575,23 @@ class VirtualMachine:
         self.__qemu_platform.after_stop_vm()
 
     def __command_line(self):
-        command_parts_list = [self.__get_qemu_platform_command_line(), self.__qemu_command_line(), self.__kvm_enable(),
+        command_parts_list = [self.__qemu_command_line(),
+                              self.__get_qemu_platform_command_line(),
+                              self.__kvm_enable(),
                               self.__ram_size(),
                               self.__network(),
-                              self.__other(), self.__disk(), self.__iso_installer(), self.__virtio_win_drivers(),
-                              self.__cpu(), self.__get_qemu_vga_command_line(),
+                              self.__other(),
+                              self.__disk(),
+                              self.__cpu(),
+                              self.__get_qemu_vga_command_line(),
                               self.__qemu_pci_passthrough_command_line(),
                               self.__usb(),
                               self.__monitor(),
                               self.__get_qemu_serial_command_line(),
-                              self.__get_qemu_logging_command_line()]
+                              self.__get_qemu_logging_command_line(),
+                              self.__get_qemu_cdrom_command_line(),
+                              self.__get_qemu_builtin_kbd_and_mouse_passthrough_command_line()
+                              ]
         return " ".join(command_parts_list)
 
     @staticmethod
@@ -5464,7 +5610,7 @@ class VirtualMachine:
 
     @staticmethod
     def __ram_size():  # fixme utopia Использовать psutil
-        return "-m 12000"
+        return "-m 8000"
 
     def __network(self):
         self.__tap.create()
@@ -5481,11 +5627,6 @@ class VirtualMachine:
 
     def __disk(self):
         return "-drive file=\"{}\",media=disk,if=virtio".format(self.__vm_meta_data.get_image_path())
-
-    def __iso_installer(self):
-        if self.__os_distr_path is None:
-            return ""
-        return "-cdrom \"{}\"".format(self.__os_distr_path)
 
     def __other(self):
         # -bt hci,host:hci0
@@ -5519,16 +5660,13 @@ class VirtualMachine:
 
         return " ".join(result)
 
-    def __virtio_win_drivers(self):
-        if self.__virtio is None:
-            return ""
-        return "-drive file=\"{}\",media=cdrom,if=ide".format(self.__virtio.get_win_drivers())
-
     def __get_qemu_platform_command_line(self):
+        if self.__qemu_platform is None:
+            return ""
         return self.__serializer.serialize(self.__qemu_platform.get_qemu_parameters())
 
     def __get_qemu_vga_command_line(self):
-        if self.__qemu_pci_passthrough.is_other_vga_disable():
+        if self.__qemu_pci_passthrough is not None and self.__qemu_pci_passthrough.is_other_vga_disable():
             return ""
         return self.__serializer.serialize(self.__qemu_vga.get_qemu_parameters())
 
@@ -5544,11 +5682,24 @@ class VirtualMachine:
     def __get_qemu_logging_command_line(self):
         return ""  # self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
 
+    def __get_qemu_cdrom_command_line(self):
+        if self.__qemu_cdrom is None:
+            return ""
+        return self.__serializer.serialize(self.__qemu_cdrom.get_qemu_parameters())
+
+    def __get_qemu_builtin_kbd_and_mouse_passthrough_command_line(self):
+        if self.__qemu_builtin_kbd_and_mouse_passthrough is None:
+            return ""
+        return self.__serializer.serialize(self.__qemu_builtin_kbd_and_mouse_passthrough.get_qemu_parameters())
+
 
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
                  initiate_vga_pci_passthrough=False,
-                 initiate_usb_host_passthrough=False, asc_override_patched_kernel=False,
+                 initiate_usb_host_passthrough=False,
+                 initiate_isa_bridge_passthrough=False,
+                 initiate_builtin_kbd_and_mouse_passthrough=False,
+                 asc_override_patched_kernel=False,
                  qemu_pci_passthrough=None, grub_config_backup_path=None,
                  vm_platform=None, os_distr_path=None):
         self.__vm_name = vm_name
@@ -5557,6 +5708,8 @@ class VmRunner:
         self.__block_internet_access = bool(block_internet_access)
         self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
         self.__initiate_usb_host_passthrough = bool(initiate_usb_host_passthrough)
+        self.__initiate_isa_bridge_passthrough = bool(initiate_isa_bridge_passthrough)
+        self.__initiate_builtin_kbd_and_mouse_passthrough = bool(initiate_builtin_kbd_and_mouse_passthrough)
         self.__asc_override_patched_kernel = bool(asc_override_patched_kernel)
         self.__qemu_pci_passthrough = qemu_pci_passthrough
         self.__vm_platform = vm_platform
@@ -5565,7 +5718,7 @@ class VmRunner:
         self.__serializer = ShellSerializer()
 
     def run(self):
-        if self.__initiate_vga_pci_passthrough or self.__initiate_usb_host_passthrough:
+        if self.__initiate_vga_pci_passthrough or self.__initiate_usb_host_passthrough or self.__initiate_isa_bridge_passthrough:
             if self.__qemu_pci_passthrough:
                 self.after_reboot()
             else:
@@ -5585,12 +5738,14 @@ class VmRunner:
                 Logger.instance().error("[Vm] Make GRUB config backup FAIL")
                 return
             self.__grub.update()
-            Logger.instance().info(f"[Vm] GRUB config for IOMMU applied\n     GRUB backup: \"{grub_config_backup_path}\"")
+            Logger.instance().info(
+                f"[Vm] GRUB config for IOMMU applied\n     GRUB backup: \"{grub_config_backup_path}\"")
             return
 
         pci_list_for_passthrough = Pci.PciList()
         pci_list_for_passthrough.extend(self.__get_pci_vga_list_for_passthrough(pci_list))
         pci_list_for_passthrough.extend(self.__get_usb_host_list_for_passthrough(pci_list))
+        pci_list_for_passthrough.extend(self.__get_isa_bridge_list_for_passthrough(pci_list))
 
         if len(pci_list_for_passthrough) == 0:
             Logger.instance().warning("[Vm] PCI passthrough devices NOT FOUND")
@@ -5614,7 +5769,8 @@ class VmRunner:
                 #    (придётся решать проблему поиска последней версии liquorix ядра вручную)
                 # 6.1 или пересборка текущего умолчательного ядра с ASC override патчем
                 # self.__grub.set_top_level(self.__grub.get_last_liquorix_kernel_path())
-                grub_config_backup_path = self.__grub.append_cmd_line_linux(Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
+                grub_config_backup_path = self.__grub.append_cmd_line_linux(
+                    Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
                 if grub_config_backup_path is None:
                     Logger.instance().error("[Vm] Make GRUB config backup FAIL")
                     return
@@ -5634,7 +5790,15 @@ class VmRunner:
             return
         self.__grub.update()
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", [self.__vm_name, "--bi" if self.__block_internet_access else "", {"--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)), "--grub_config_backup_path": str(grub_config_backup_path)}, "--vga_passthrough" if self.__initiate_vga_pci_passthrough else "", "--usb_host_passthrough" if self.__initiate_usb_host_passthrough else ""]])}'
+        args = [self.__vm_name, "--bi" if self.__block_internet_access else "",
+                {"--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)),
+                 "--grub_config_backup_path": str(grub_config_backup_path)},
+                "--vga_passthrough" if self.__initiate_vga_pci_passthrough else "",
+                "--usb_host_passthrough" if self.__initiate_usb_host_passthrough else "",
+                "--isa_bridge_passthrough" if self.__initiate_isa_bridge_passthrough else "",
+                "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else ""]
+
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
         # Power.reboot()
@@ -5672,8 +5836,6 @@ class VmRunner:
             Logger.instance().warning("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
             return Pci.PciList()
 
-        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
-        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
         iommu_group = result[0].iommu_group
         if iommu_group is None:
             Logger.instance().error("[Vm] VGA does not include to iommu group")
@@ -5690,11 +5852,25 @@ class VmRunner:
             Logger.instance().error("[Vm] USB Host NOT FOUND")
             return Pci.PciList()
 
-        # fixme utopia Тут iommu групп ещё может не быть, т.к. мы пока не сконфигурировали ядро
-        #  после перезагрузки необходимо получить целевое устройство ещё раз и проверить iommu группу
         iommu_group = result[0].iommu_group
         if iommu_group is None:
             Logger.instance().error("[Vm] USB host does not include to iommu group")
+            return Pci.PciList()
+
+        return result
+
+    def __get_isa_bridge_list_for_passthrough(self, pci_list):
+        if not self.__initiate_isa_bridge_passthrough:
+            return Pci.PciList()
+
+        result = pci_list.get_isa_bridge_list()
+        if len(result) == 0:
+            Logger.instance().error("[Vm] ISA bridge NOT FOUND")
+            return Pci.PciList()
+
+        iommu_group = result[0].iommu_group
+        if iommu_group is None:
+            Logger.instance().error("[Vm] ISA bridge does not include to iommu group")
             return Pci.PciList()
 
         return result
@@ -5720,13 +5896,20 @@ class VmRunner:
                                                                  vm_rdp_forwarding.add_with_retry()))
         tcp_forwarding_thread.start()
 
-        virtio = Virtio(self.__project_config)
+        if self.__initiate_isa_bridge_passthrough and self.__initiate_builtin_kbd_and_mouse_passthrough:
+            self.__initiate_builtin_kbd_and_mouse_passthrough = False
+            Logger.instance().warning(
+                "[Vm] ignore --builtin_kbd_and_mouse_passthrough parameter because of --initiate_isa_bridge_passthrough parameter enabled")
 
-        qemu_platform = QemuPlatform(vm_meta_data, self.__vm_platform)
+        qemu_builtin_kbd_and_mouse_passthrough = None
+        if self.__initiate_builtin_kbd_and_mouse_passthrough:
+            qemu_builtin_kbd_and_mouse_passthrough = QemuBuiltinKeyboardAndMousePassthrough()
 
-        vm = VirtualMachine(network_bridge, vm_meta_data, os_distr_path=self.__os_distr_path, virtio=virtio,
+        vm = VirtualMachine(network_bridge, vm_meta_data,
                             qemu_pci_passthrough=self.__qemu_pci_passthrough,
-                            qemu_platform=qemu_platform)
+                            qemu_platform=QemuPlatform(vm_meta_data, self.__vm_platform),
+                            qemu_cdrom=QemuCdRom(self.__os_distr_path, Virtio(self.__project_config).get_win_drivers()),
+                            qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough)
         vm.run()
         tcp_forwarding_thread.join()
 
@@ -5999,6 +6182,12 @@ def main():
     parser_vm_run.add_argument("--usb_host_passthrough",
                                help="Initiate all USB host PCI passthrough to virtual machine",
                                action='store_true')
+    parser_vm_run.add_argument("--isa_bridge_passthrough",
+                               help="Initiate ISA bridge (laptop keyboard, touchpad and others) PCI passthrough to virtual machine",
+                               action='store_true')
+    parser_vm_run.add_argument("--builtin_kbd_and_mouse_passthrough",
+                               help="Builtin keyboard and mouse passthrough. Relevant for laptops. If use --isa_bridge_passthrough parameter --builtin_kbd_and_mouse_passthrough parameter disabled because PCI ISA bridge usually contains connection to builtin keyboard and mouse. Recommended use this parameter with --vga_passthrough",
+                               action='store_true')
     parser_vm_run.add_argument("--asc_override_patched_kernel",
                                help="Download, install and configure ASC override patched Linux kernel. See https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF#Bypassing_the_IOMMU_groups_(ACS_override_patch)",
                                action='store_true')
@@ -6049,8 +6238,10 @@ def main():
                  block_internet_access=args.bi,
                  initiate_vga_pci_passthrough=args.vga_passthrough,
                  initiate_usb_host_passthrough=args.usb_host_passthrough,
+                 initiate_isa_bridge_passthrough=args.isa_bridge_passthrough,
+                 initiate_builtin_kbd_and_mouse_passthrough=args.builtin_kbd_and_mouse_passthrough,
                  asc_override_patched_kernel=args.asc_override_patched_kernel,
-                 qemu_pci_passthrough=args.QemuPciPassthrough,
+                 qemu_pci_passthrough=args.qemu_pci_passthrough,
                  grub_config_backup_path=args.grub_config_backup_path,
                  vm_platform=args.vm_platform,
                  os_distr_path=args.os_distr_path).run()
@@ -6064,6 +6255,9 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        print(QemuBuiltinKeyboardAndMousePassthrough().get_qemu_parameters())
+        return
+
         LinuxKernel().download_and_install_liquorix_kernel()
         # subprocess.check_call("/home/utopia/test.sh", shell=True)
         print(f"FFF {CurrentOs.is_ubuntu_or_like()}")

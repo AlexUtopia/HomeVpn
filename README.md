@@ -117,7 +117,7 @@ fixme utopia Описать wine
 | Действие                      | apt / dpkg                        | pacman                            |
 |-------------------------------|-----------------------------------|-----------------------------------|
 | Получить список файлов пакета | `dpkg -L <package-name>`          | `pacman -Ql <package-name>`       |
-| Получить список файлов пакета | `apt search <package-for-search>` | `pacman -Ss <package-for-search>` |
+| Искать пакет в репозитории    | `apt search <package-for-search>` | `pacman -Ss <package-for-search>` |
 
 
 ### 2.2.1  Ubuntu / Linux Mint / Debian (дистрибутивы Linux с пакетным менеджером apt)

@@ -194,14 +194,7 @@ elif is_msys; then
     QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
 fi
 
-CPUID_PACKAGE="cpuid"
-if is_termux; then
-    CPUID_PACKAGE=""
-elif is_msys; then
-    CPUID_PACKAGE=""
-fi
-
-MINIMAL_PACKAGES="${CURL_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE} ${CPUID_PACKAGE}"
+MINIMAL_PACKAGES="${CURL_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
 if is_termux; then
     MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
 fi
@@ -777,6 +770,12 @@ function apt_is_package_installed() {
     return $?
 }
 
+function apt_is_package_available_from_repository() {
+    local PACKAGE="${1}"
+    apt-cache show "${PACKAGE}" 2> "/dev/null" || 1
+    return 0
+}
+
 
 
 ## @fn apt_create_sources()
@@ -912,6 +911,12 @@ function pacman_is_package_installed() {
     return $?
 }
 
+function pacman_is_package_available_from_repository() {
+    # fixme utopia команду уточнить https://stackoverflow.com/a/67907522
+    pacman -Ss "${1}" 2> "/dev/null" || 1
+    return 0
+}
+
 function package_manager_update_and_upgrade() {
     if package_manager_is_apt; then
         apt_update_and_upgrade || return $?
@@ -964,6 +969,31 @@ function package_manager_is_package_installed() {
         return $?
     elif package_manager_is_pacman; then
         pacman_is_package_installed "${PACKAGE}"
+        return $?
+    elif package_manager_is_yum; then
+        # fixme utopia Дописать
+        return 1
+    elif package_manager_is_dnf; then
+        # fixme utopia Дописать
+        return 1
+    elif package_manager_is_zypper; then
+        # fixme utopia Дописать
+        return 1
+    else
+        echo "FATAL: unknown package manager"
+        return 1
+    fi
+    return 0
+}
+
+function package_manager_is_package_available_from_repository() {
+    local PACKAGE="${1}"
+
+    if package_manager_is_apt; then
+        apt_is_package_available_from_repository "${PACKAGE}"
+        return $?
+    elif package_manager_is_pacman; then
+        pacman_is_package_available_from_repository "${PACKAGE}"
         return $?
     elif package_manager_is_yum; then
         # fixme utopia Дописать
@@ -1975,6 +2005,24 @@ function waydroid_setup() {
     return 1
 }
 
+# https://www.etallen.com/cpuid.html
+function cpuid_setup() {
+    local CPUID_PACKAGE="cpuid"
+    local CPUID_SOURCES_URL="https://www.etallen.com/cpuid/cpuid-20250316.src.tar.gz"
+    local MACHINE=""
+    MACHINE=$(uname -m) || return $?
+    if [[ "${MACHINE}" == "i386" || "${MACHINE}" == "i686" || "${MACHINE}" == "x86_64" || "${MACHINE}" == "ia64" ]]; then
+        local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/${CPUID_PACKAGE}"
+        rm -rf "${INSTALL_DIRECTORY}" || return $?
+        make_dirs "${INSTALL_DIRECTORY}" || return $?
+
+        download_file "${CPUID_SOURCES_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" --strip-components=1 || return $?
+        make -C "${INSTALL_DIRECTORY}" || return $?
+        make -C "${INSTALL_DIRECTORY}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
+        return 0
+    fi
+}
+
 function main_install_min_packages() {
     local PACKAGE_LIST="${1}"
 
@@ -1986,6 +2034,7 @@ function main_install_min_packages() {
     pip_install_packages "${PIP_PACKAGES}" || return $?
 
     openvpn_setup || return $?
+    cpuid_setup || return $?
     return 0
 }
 
