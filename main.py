@@ -100,7 +100,7 @@ class RegexConstants:
     ZERO_OR_MORE_WHITESPACES = fr"{WHITESPACE_CHARACTER_SET}*"
     ASCII_LETTER = "a-zA-Z"
     ASCII_LETTER_CHARACTER_SET = f"[{ASCII_LETTER}]"
-    ASCII_PRINTABLE = "\x20-\0x7E"
+    ASCII_PRINTABLE = "\\x20-\\x7E"
     ASCII_PRINTABLE_CHARACTER_SET = f"[{ASCII_PRINTABLE}]"
 
     ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
@@ -456,6 +456,27 @@ class String(str):
         return f".+"
 
 
+class StringAsciiLetter(str):
+
+    @staticmethod
+    def get_regex():
+        return f"{RegexConstants.ASCII_LETTER_CHARACTER_SET}+"
+
+
+class StringAsciiPrintable(str):
+
+    @staticmethod
+    def get_regex():
+        return f"{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+"
+
+
+class StringAsciiWords(str):
+
+    @staticmethod
+    def get_regex():
+        return f"[\w \-,.]+"
+
+
 class BaseParser:
     def __init__(self, table):
         self.__table = table
@@ -468,6 +489,10 @@ class BaseParser:
 
         field_type = self.__get_field_type(metadata)
         if field_type is None:
+            return
+
+        if value is None:
+            setattr(self, key, value)
             return
 
         setattr(self, key, field_type(value))
@@ -1028,7 +1053,7 @@ class Platform:
 
 
 # fixme utopia Проверить на многопроцессорных системах (у меня есть)
-class Cpu:
+class Cpu(BaseParser):
     # https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=gcc/common/config/i386/cpuinfo.h;h=a6ede14a3ccb9f5e5eaa8866e2f29c35d3234285;hb=HEAD
     # https://codeberg.org/smxi/inxi/src/branch/master/inxi#L12095
     # https://github.com/torvalds/linux/blob/master/arch/x86/events/intel/core.c#L6527
@@ -1036,12 +1061,15 @@ class Cpu:
     # https://en.wikipedia.org/wiki/CPUID
     # https://www.etallen.com/cpuid.html
 
-    __CPU_VENDOR = "cpu_vendor"
-    __CPU_UARCH_CODENAME = "cpu_uarch_codename"
-    __CPU_UARCH_FAMILY = "cpu_uarch_family"
-    __CPU_TECHNICAL_PROCESS = "cpu_technical_process"
+    __CPU_VENDOR = "vendor"
+    __CPU_UARCH = "uarch"
+    __CPU_UARCH_FAMILY = "uarch_family"
+    __CPU_TECHNICAL_PROCESS = "technical_process"
 
-    __REGEX = f"\(uarch synth\) = (?P<{__CPU_VENDOR}>{RegexConstants.ASCII_LETTER_CHARACTER_SET}+)(?> (?P<{__CPU_UARCH_CODENAME}>{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+))?(?> \\{{(?P<{__CPU_UARCH_FAMILY}>{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+)\\}})?(?>, (?P<{__CPU_TECHNICAL_PROCESS}>{RegexConstants.ASCII_PRINTABLE_CHARACTER_SET}+))?$"
+    __TABLE = {__CPU_VENDOR: {"type": StringAsciiLetter, "default": None},
+               __CPU_UARCH: {"type": StringAsciiWords, "default": None},
+               __CPU_UARCH_FAMILY: {"type": StringAsciiWords, "default": None},
+               __CPU_TECHNICAL_PROCESS: {"type": String, "default": None}}
 
     __CMD_LINE = "cpuid -1"
 
@@ -1123,6 +1151,20 @@ class Cpu:
                          {"family": 0x06, "uarch": "Darkmont", "core_name_list": ["Panther Lake"]}
                          ]
 
+    def __init__(self, cpuid_output=None):
+        super(Cpu, self).__init__(self.__TABLE)
+        if cpuid_output is None:  # Создать умолчательный объект
+            return
+
+        if self.copy_if(cpuid_output):  # Копирующий конструктор (в том числе если pci_address - это словарь)
+            return
+
+        # Создать объект из результата разбора выхлопа cpuid
+        if self.init_fields(re.compile(Cpu.__get_regex(), flags=re.MULTILINE), cpuid_output):
+            return
+
+        raise Exception(f"[Cpu] Format FAIL: {cpuid_output} | {type(cpuid_output)}")
+
     def is_intel_above_sandybridge(self):
         return self.is_intel_above_uarch_codename("Sandy Bridge")
 
@@ -1135,35 +1177,33 @@ class Cpu:
     def is_intel(self):
         return self.__is_cpu_vendor("intel")
 
-    def get_uarch_codename(self):
-        return self.__get_cpuid_vendor_and_uarch_info().get(self.__CPU_UARCH_CODENAME)
+    def is_amd(self):
+        return self.__is_cpu_vendor("amd")
 
-    def get_uarch_codename_and_family(self):
-        cpuid_vendor_and_uarch_info = self.__get_cpuid_vendor_and_uarch_info()
-        return cpuid_vendor_and_uarch_info.get(self.__CPU_UARCH_CODENAME), cpuid_vendor_and_uarch_info.get(
-            self.__CPU_UARCH_FAMILY)
+    def is_virtualization_support(self):
+        try:
+            if self.is_intel() or self.is_amd():
+                # fixme utopia Проверить на процессорах AMD
+                return "vmx" in cpuinfo.get_cpu_info()["flags"]
+            else:
+                return False
+        except Exception as ex:
+            return False
 
-    def get_cpu_vendor(self):
-        return Cpu.__trim_and_lower(cpuinfo.get_cpu_info().get("vendor_id_raw"))
+    @staticmethod
+    def get_cpu0():
+        if Cpu.__is_x86_compatible() or Cpu.__is_ia64_compatible():
+            return Cpu(Cpu.__run_cpuid())
+        else:
+            raise Exception("[Cpu] Not support")
 
     def __is_cpu_vendor(self, target_cpu_vendor):
         try:
-            cpu_vendor = self.get_cpu_vendor()
-            if cpu_vendor is None:
+            if self.vendor is None:
                 return False
-            return Cpu.__trim_and_lower(target_cpu_vendor) in cpu_vendor
+            return Cpu.__trim_and_lower(target_cpu_vendor) in Cpu.__trim_and_lower(self.vendor)
         except Exception:
             return False
-
-    def __get_cpuid_vendor_and_uarch_info(self):
-        cpuid_output = Cpu.__run_cpuid()
-
-        regex = re.compile(self.__REGEX)
-        match = regex.search(cpuid_output)
-        if match is None:
-            return {}
-
-        return match.groupdict().items()
 
     @staticmethod
     def __run_cpuid():
@@ -1172,30 +1212,48 @@ class Cpu:
             return ""
         return cmd_result.stdout
 
-    def is_intel_above_uarch_codename(self, target_uarch_codename, target_uarch_family=None):
-        if not is_intel():
+    @staticmethod
+    def __get_regex():
+        tmp = Cpu()
+        result = "\(uarch synth\) ="
+        result += f" {tmp.get_regex_for(Cpu.__CPU_VENDOR)}"
+        result += f"(?: {tmp.get_regex_for(Cpu.__CPU_UARCH)})?"
+        result += f"(?> \\{{{tmp.get_regex_for(Cpu.__CPU_UARCH_FAMILY)}\\}})?"
+        result += f"(?>, {tmp.get_regex_for(Cpu.__CPU_TECHNICAL_PROCESS)})?"
+        result += f"$"
+        return result
+
+    @staticmethod
+    def __is_x86_compatible():
+        return platform.machine().strip().lower() in ["i386", "i686", "x86_64"]
+
+    @staticmethod
+    def __is_ia64_compatible():
+        return platform.machine().strip().lower() in ["ia64"]
+
+    def is_intel_above_uarch_codename(self, target_uarch, target_uarch_family=None):
+        if not self.is_intel():
             return False
 
-        current_uarch_codename, current_uarch_family = self.get_uarch_codename_and_family()
-        return self.__get_uarch_index(self.INTEL_UARCH_TABLE, current_uarch_codename,
-                                      current_uarch_family) >= self.__get_uarch_index(self.INTEL_UARCH_TABLE,
-                                                                                      target_uarch_codename,
-                                                                                      target_uarch_family)
+        return self.__get_uarch_index(self.INTEL_UARCH_TABLE, self.uarch,
+                                      self.uarch_family) >= self.__get_uarch_index(self.INTEL_UARCH_TABLE,
+                                                                                   target_uarch,
+                                                                                   target_uarch_family)
 
-    def __get_uarch_index(self, uarch_table, target_uarch_codename, target_uarch_family=None):
+    def __get_uarch_index(self, uarch_table, target_uarch, target_uarch_family=None):
         result = 0
-        target_uarch_codename = Cpu.__trim_and_lower(target_uarch_codename)
+        target_uarch = Cpu.__trim_and_lower(target_uarch)
         target_uarch_family = Cpu.__trim_and_lower(target_uarch_family)
 
         for item in uarch_table:
-            if target_uarch_codename is None:
+            if target_uarch is None:
                 if target_uarch_family is not None:
-                    uarch_family = Cpu.__trim_and_lower(item.get("uarch_family"))
+                    uarch_family = Cpu.__trim_and_lower(item.get(self.__CPU_UARCH_FAMILY))
                     if uarch_family is not None and uarch_family in target_uarch_family:
                         break
             else:
-                uarch_codename = Cpu.__trim_and_lower(item.get("uarch"))
-                if uarch_codename is not None and uarch_codename in target_uarch_codename:
+                uarch = Cpu.__trim_and_lower(item.get(self.__CPU_UARCH))
+                if uarch is not None and uarch in target_uarch:
                     break
             result += 1
         return result
@@ -1205,6 +1263,79 @@ class Cpu:
         if value is None:
             return value
         return str(value).strip().lower()
+
+
+class UnitTest_Cpu(unittest.TestCase):
+
+    def test(self):
+        ref_table = [
+            (Cpu, "",
+             {"is_exception": True}),
+            (Cpu, "Hello world",
+             {"is_exception": True}),
+            (Cpu, 17,
+             {"is_exception": True}),
+            (Cpu,
+             "   (multi-processing synth) = multi-core (c=2), hyper-threaded (t=2)\n   (multi-processing method) = Intel leaf 0xb\n   (APIC widths synth): CORE_width=3 SMT_width=1\n   (APIC synth): PKG_ID=0 CORE_ID=0 SMT_ID=1\n   (uarch synth) = Intel Sandy Bridge {Sandy Bridge}, 32nm\n   (synth) = Intel Core i*-2000 (Sandy Bridge D2/J1/Q0) {Sandy Bridge}, 32nm",
+             {"expected": {"vendor": "Intel", "uarch": "Sandy Bridge", "uarch_family": "Sandy Bridge",
+                           "technical_process": "32nm"},
+              "is_exception": False,
+              "expected_dict": {"vendor": "Intel", "uarch": "Sandy Bridge", "uarch_family": "Sandy Bridge",
+                                "technical_process": "32nm"},
+              "is_intel_above_sandybridge": True,
+              "is_intel_above_broadwell": False,
+              "is_intel_integrated_vga_iris_xe": False}),
+            (Cpu,
+             "   (uarch synth) = Intel Cooper Lake {optim of Cascade Lake, optim of Skylake}, 14nm++",
+             {"expected": {"vendor": "Intel", "uarch": "Cooper Lake",
+                           "uarch_family": "optim of Cascade Lake, optim of Skylake",
+                           "technical_process": "14nm++"},
+              "is_exception": False,
+              "expected_dict": {"vendor": "Intel", "uarch": "Cooper Lake",
+                                "uarch_family": "optim of Cascade Lake, optim of Skylake",
+                                "technical_process": "14nm++"},
+              "is_intel_above_sandybridge": True,
+              "is_intel_above_broadwell": True,
+              "is_intel_integrated_vga_iris_xe": True}),
+            (Cpu,
+             "   (uarch synth) = Intel {P6 Pentium II}, .35um",
+             {"expected": {"vendor": "Intel", "uarch": None,
+                           "uarch_family": "P6 Pentium II",
+                           "technical_process": ".35um"},
+              "is_exception": False,
+              "expected_dict": {"vendor": "Intel", "uarch": None,
+                                "uarch_family": "P6 Pentium II",
+                                "technical_process": ".35um"},
+              "is_intel_above_sandybridge": False,
+              "is_intel_above_broadwell": False,
+              "is_intel_integrated_vga_iris_xe": False}),
+            (Cpu,
+             "   (uarch synth) = Intel {P6 Pentium II}",
+             {"expected": {"vendor": "Intel", "uarch": None,
+                           "uarch_family": "P6 Pentium II",
+                           "technical_process": None},
+              "is_exception": False,
+              "expected_dict": {"vendor": "Intel", "uarch": None,
+                                "uarch_family": "P6 Pentium II",
+                                "technical_process": None},
+              "is_intel_above_sandybridge": False,
+              "is_intel_above_broadwell": False,
+              "is_intel_integrated_vga_iris_xe": False}),
+        ]
+
+        for class_type, initiate, test_data in ref_table:
+            target = None
+            try:
+                target = class_type(initiate)
+                self.assertFalse(test_data["is_exception"], f"No exception for \"{initiate}\"")
+            except Exception as ex:
+                self.assertTrue(test_data["is_exception"], f"Exception for \"{initiate}\": {ex}")
+
+            if target is not None:
+                self.assertEqual(target.get_fields_as_dict(), test_data["expected_dict"])
+                self.assertEqual(target.is_intel_above_sandybridge(), test_data["is_intel_above_sandybridge"])
+                self.assertEqual(target.is_intel_above_broadwell(), test_data["is_intel_above_broadwell"])
+                self.assertEqual(target.is_intel_integrated_vga_iris_xe(), test_data["is_intel_integrated_vga_iris_xe"])
 
 
 class Path:
@@ -3656,7 +3787,7 @@ class VgaPciIntel(Pci):
     def __init__(self, pci):
         super().__init__()
         self._init(pci)
-        self.__cpu = Cpu()
+        self.__cpu = Cpu.get_cpu0()
 
     # https://pve.proxmox.com/wiki/PCI_Passthrough#%22BAR_3:_can't_reserve_[mem]%22_error
     def get_kernel_parameters(self):
@@ -6255,7 +6386,8 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        print(QemuBuiltinKeyboardAndMousePassthrough().get_qemu_parameters())
+        print(Cpu.get_cpu0().is_intel_above_sandybridge())
+        print(Cpu.get_cpu0().is_intel_above_broadwell())
         return
 
         LinuxKernel().download_and_install_liquorix_kernel()
