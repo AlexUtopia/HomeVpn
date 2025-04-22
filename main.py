@@ -3309,6 +3309,7 @@ class UnitTest_PciAddress(unittest.TestCase):
 
 # https://en.wikipedia.org/wiki/PCI_configuration_space
 class Pci(BaseParser):
+    # https://github.com/pciutils/pciutils/blob/master/ls-caps.c#L1457
     class PciExpressCapability(int):
         def __new__(cls, value=0):
             return super(Pci.PciExpressCapability, cls).__new__(cls, int(bool(value)))
@@ -3317,6 +3318,7 @@ class Pci(BaseParser):
         def get_regex():
             return "Capabilities: \[[0-9A-Fa-f]{2}\] Express"
 
+    # https://github.com/pciutils/pciutils/blob/master/ls-ecaps.c#L266
     class AcsCapability(int):
         def __new__(cls, value=0):
             return super(Pci.AcsCapability, cls).__new__(cls, int(bool(value)))
@@ -3325,6 +3327,7 @@ class Pci(BaseParser):
         def get_regex():
             return "Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Access Control Services"
 
+    # https://github.com/pciutils/pciutils/blob/master/ls-ecaps.c#L381
     class SriovCapability(int):
         def __new__(cls, value=0):
             return super(Pci.SriovCapability, cls).__new__(cls, int(bool(value)))
@@ -3562,20 +3565,20 @@ class Pci(BaseParser):
             result = True
             for iommu_group, pci_list in pci_list_for_checking.get_pci_table_by_iommu_group().items():
                 if iommu_group in pci_table_by_iommu_group:
-                    if (len(pci_table_by_iommu_group[iommu_group]) != len(pci_list)) and (
-                            len(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_acs=False)) != len(
-                        pci_list)):
-                        # Условия для применения ACS override patch: PCI Express устройство (is_pci_express=True) и отсутствие capability ACS (is_acs=False)
-                        # https://github.com/benbaker76/linux-acs-override/blob/main/6.3/acso.patch#L101
-                        result = None
-                        pci_list_problematic = "\n".join(
-                            [f"    [{pci.get_id()}|{pci.address}] ({pci.class_name}) {pci.device_name}" for pci in
-                             pci_list])
-                        Logger.instance().warning(
-                            f"ACS override patch not applicable for PCI devices in IOMMU group {iommu_group}:\n{pci_list_problematic}")
-                    else:
-                        if result is not None:
-                            result = False
+                    if len(pci_table_by_iommu_group[iommu_group]) != len(pci_list):
+                        if len(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_acs=False)) != len(
+                                pci_list):
+                            # Условия для применения ACS override patch: PCI Express устройство (is_pci_express=True) и отсутствие capability ACS (is_acs=False)
+                            # https://github.com/benbaker76/linux-acs-override/blob/main/6.3/acso.patch#L101
+                            result = None
+                            pci_list_problematic = "\n".join(
+                                [f"    [{pci.get_id()}|{pci.address}] ({pci.class_name}) {pci.device_name}" for pci in
+                                 pci_list])
+                            Logger.instance().warning(
+                                f"ACS override patch not applicable for PCI devices in IOMMU group {iommu_group}:\n{pci_list_problematic}")
+                        else:
+                            if result is not None:
+                                result = False
             return result
 
         def get_by_address(self, pci_address_list):
@@ -5154,7 +5157,13 @@ class LinuxKernelParamsSerializer(ShellSerializer):
             nested_serializer=ShellSerializer(quotes_for_string_value="",
                                               key_value_separator_table=[
                                                   {"prefix": "", "separator": ":"}],
-                                              pair_separator=","
+                                              pair_separator=",",
+                                              nested_serializer=ShellSerializer(quotes_for_string_value="",
+                                                                                key_value_separator_table=[
+                                                                                    {"prefix": "", "separator": "?"}],
+                                                                                pair_separator=","
+                                                                                ),
+                                              nested_key_value_separator = ":"
                                               ))
         self.__modify_key_policy = EscapeLiteral(encode_table=key_modify_table)
         self.__normalizer = Normalizer()
@@ -5183,7 +5192,7 @@ class UnitTest_LinuxKernelParamsSerializer(unittest.TestCase):
 
     def test_serialize(self):
         ref_table = {
-            'vfio vfio_pci="1,2,3" module_blacklist="i915,kernel_module,kernel_module2,kernel_module3,kernel_module4" i915.modeset="0" mdev iommu="pt" intel_iommu="on" pcie_acs_override="downstream,multifunction,id:8086:1c4b"': [
+            'vfio vfio_pci="1,2,3" module_blacklist="i915,kernel_module,kernel_module2,kernel_module3,kernel_module4" i915.modeset="0" mdev iommu="pt" intel_iommu="on" pcie_acs_override="downstream,multifunction,id:8086:1c4b,8086:0126,8086:0127" pcie_acs_override2="id:8086:1c4b"': [
                 "vfio",
                 {"vfio-pci": ["1", "2", "3"]},
                 {"module-blacklist": ["i915", "kernel_module"]},
@@ -5194,7 +5203,9 @@ class UnitTest_LinuxKernelParamsSerializer(unittest.TestCase):
                 {"i915.modeset": "0"},
                 "mdev",
                 {"iommu": "pt", "intel_iommu": "on"},
-                {"pcie_acs_override": ["downstream", "multifunction", {"id": ["8086:1c4b"]}]}
+                {"pcie_acs_override": ["downstream", "multifunction", {"id": ["8086:1c4b", "8086:0126"]}]},
+                {"pcie_acs_override": [{"id": ["8086:1c4b", "8086:0127"]}]},
+                {"pcie_acs_override2": [{"id": ["8086:1c4b"]}]}
             ]
         }
 
