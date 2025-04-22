@@ -1151,28 +1151,28 @@ class Cpu(BaseParser):
                          {"family": 0x06, "uarch": "Darkmont", "core_name_list": ["Panther Lake"]}
                          ]
 
-    def __init__(self, cpuid_output=None):
+    def __init__(self, cpuid_info=None):
         super(Cpu, self).__init__(self.__TABLE)
-        if cpuid_output is None:  # Создать умолчательный объект
+        if cpuid_info is None:  # Создать умолчательный объект
             return
 
-        if self.copy_if(cpuid_output):  # Копирующий конструктор (в том числе если pci_address - это словарь)
+        if self.copy_if(cpuid_info):  # Копирующий конструктор (в том числе если pci_address - это словарь)
             return
 
         # Создать объект из результата разбора выхлопа cpuid
-        if self.init_fields(re.compile(Cpu.__get_regex(), flags=re.MULTILINE), cpuid_output):
+        if self.init_fields(re.compile(Cpu.__get_regex(), flags=re.MULTILINE), cpuid_info):
             return
 
-        raise Exception(f"[Cpu] Format FAIL: {cpuid_output} | {type(cpuid_output)}")
+        raise Exception(f"[Cpu] Format FAIL: {cpuid_info} | {type(cpuid_info)}")
 
     def is_intel_above_sandybridge(self):
-        return self.is_intel_above_uarch_codename("Sandy Bridge")
+        return self.__is_intel_above_uarch_codename("Sandy Bridge")
 
     def is_intel_above_broadwell(self):
-        return self.is_intel_above_uarch_codename("Broadwell")
+        return self.__is_intel_above_uarch_codename("Broadwell")
 
     def is_intel_integrated_vga_iris_xe(self):
-        return self.is_intel_above_uarch_codename("Willow Cove")
+        return self.__is_intel_above_uarch_codename("Willow Cove")
 
     def is_intel(self):
         return self.__is_cpu_vendor("intel")
@@ -1231,7 +1231,7 @@ class Cpu(BaseParser):
     def __is_ia64_compatible():
         return platform.machine().strip().lower() in ["ia64"]
 
-    def is_intel_above_uarch_codename(self, target_uarch, target_uarch_family=None):
+    def __is_intel_above_uarch_codename(self, target_uarch, target_uarch_family=None):
         if not self.is_intel():
             return False
 
@@ -3141,7 +3141,7 @@ class PciClassCode(UInt16Hex):
         return self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER and self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB
 
     def is_isa_bridge(self):
-        return self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA
+        return self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE and self.get_sub_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
@@ -3308,9 +3308,31 @@ class UnitTest_PciAddress(unittest.TestCase):
 
 
 # https://en.wikipedia.org/wiki/PCI_configuration_space
-# fixme utopia SR-IOV capability
-# https://forums.servethehome.com/index.php?threads/quick-check-if-your-pcie-device-has-sr-iov-capability.39675/
 class Pci(BaseParser):
+    class PciExpressCapability(int):
+        def __new__(cls, value=0):
+            return super(Pci.PciExpressCapability, cls).__new__(cls, int(bool(value)))
+
+        @staticmethod
+        def get_regex():
+            return "Capabilities: \[[0-9A-Fa-f]{2}\] Express"
+
+    class AcsCapability(int):
+        def __new__(cls, value=0):
+            return super(Pci.AcsCapability, cls).__new__(cls, int(bool(value)))
+
+        @staticmethod
+        def get_regex():
+            return "Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Access Control Services"
+
+    class SriovCapability(int):
+        def __new__(cls, value=0):
+            return super(Pci.SriovCapability, cls).__new__(cls, int(bool(value)))
+
+        @staticmethod
+        def get_regex():
+            return "Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Single Root I/O Virtualization \(SR-IOV\)"
+
     __ADDRESS = "address"
     __CLASS_NAME = "class_name"
     __CLASS_CODE = "class_code"
@@ -3324,6 +3346,9 @@ class Pci(BaseParser):
     __SUBSYSTEM_ID = "subsystem_id"
     __IOMMU_GROUP = "iommu_group"
     __KERNEL_MODULE = "kernel_module"
+    __IS_PCI_EXPRESS = "is_pci_express"
+    __IS_ACS = "is_acs"
+    __IS_SRIOV = "is_sriov"
 
     __TABLE = {__ADDRESS: {"type": PciAddress},
                __CLASS_NAME: {"type": String},
@@ -3337,7 +3362,10 @@ class Pci(BaseParser):
                __SUBSYSTEM_VENDOR_ID: {"type": PciVendorId},
                __SUBSYSTEM_ID: {"type": UInt16Hex},
                __IOMMU_GROUP: {"type": UInt8},
-               __KERNEL_MODULE: {"type": String}
+               __KERNEL_MODULE: {"type": String},
+               __IS_PCI_EXPRESS: {"type": PciExpressCapability},
+               __IS_ACS: {"type": AcsCapability},
+               __IS_SRIOV: {"type": SriovCapability}
                }
 
     # https://pkgs.org/search/?q=pciutils
@@ -3423,6 +3451,18 @@ class Pci(BaseParser):
     def __get_sysfs_pci_device_path(self):
         return f"/sys/bus/pci/devices/{self.address}"
 
+    def is_pci_express(self):
+        return self.is_capabilities(is_pci_express=True)
+
+    def is_capabilities(self, is_pci_express=None, is_acs=None, is_sriov=None):
+        table = {self.__IS_PCI_EXPRESS: is_pci_express, self.__IS_ACS: is_acs, self.__IS_SRIOV: is_sriov}
+
+        for key, value in table.items():
+            if value is not None:
+                if bool(value) != bool(self[key]):
+                    return False
+        return True
+
     class PciList(list):
 
         def __str__(self):
@@ -3497,6 +3537,13 @@ class Pci(BaseParser):
                     result.append(pci)
             return result
 
+        def get_pci_list_by_capabilities(self, is_pci_express=None, is_acs=None, is_sriov=None):
+            result = Pci.PciList()
+            for pci in self:
+                if pci.is_capabilities(is_pci_express=is_pci_express, is_acs=is_acs, is_sriov=is_sriov):
+                    result.append(pci)
+            return result
+
         def is_each_device_in_its_own_iommu_group(self, pci_list_for_checking):
             pci_table_by_iommu_group = self.get_pci_table_by_iommu_group()
 
@@ -3504,7 +3551,32 @@ class Pci(BaseParser):
                 if iommu_group in pci_table_by_iommu_group:
                     if len(pci_table_by_iommu_group[iommu_group]) != len(pci_list):
                         return False
-                return True
+            return True
+
+        ## Проверить IOMMU группы пробрасываемых PCI устройств: 1) в IOMMU группе нет не пробрасывамых устройств, 2) если правило (1) нарушается то поможет ли ACS override patch
+        # @details Сравнение производится относительно self
+        # @param [in] pci_list_for_checking Список PCI устройств для проверки
+        # @return True - pci_list_for_checking можно пробросить без ограничений, False - pci_list_for_checking можно пробросить применив ACS override patch, None - pci_list_for_checking пробросить нельзя (в лог пишется информация о проблемных устройствах)
+        def check_iommu_group_for_passthrough(self, pci_list_for_checking):
+            pci_table_by_iommu_group = self.get_pci_table_by_iommu_group()
+            result = True
+            for iommu_group, pci_list in pci_list_for_checking.get_pci_table_by_iommu_group().items():
+                if iommu_group in pci_table_by_iommu_group:
+                    if (len(pci_table_by_iommu_group[iommu_group]) != len(pci_list)) and (
+                            len(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_acs=False)) != len(
+                        pci_list)):
+                        # Условия для применения ACS override patch: PCI Express устройство (is_pci_express=True) и отсутствие capability ACS (is_acs=False)
+                        # https://github.com/benbaker76/linux-acs-override/blob/main/6.3/acso.patch#L101
+                        result = None
+                        pci_list_problematic = "\n".join(
+                            [f"    [{pci.get_id()}|{pci.address}] ({pci.class_name}) {pci.device_name}" for pci in
+                             pci_list])
+                        Logger.instance().warning(
+                            f"ACS override patch not applicable for PCI devices in IOMMU group {iommu_group}:\n{pci_list_problematic}")
+                    else:
+                        if result is not None:
+                            result = False
+            return result
 
         def get_by_address(self, pci_address_list):
             result = Pci.PciList()
@@ -3512,6 +3584,9 @@ class Pci(BaseParser):
                 if pci.address in pci_address_list:
                     result.append(pci)
             return result
+
+        def get_pci_id_list(self):
+            return [pci.get_id() for pci in self]
 
         ## Заблокировать ли прочие VGA для данной виртуальной машины
         # @details Требуется для обеспечения проброса Intel integrated GPU (IGD, Integrated Graphics Device) в так называемом legacy режиме, подробно https://gitlab.com/qemu-project/qemu/-/blob/master/docs/igd-assign.txt?ref_type=heads
@@ -3567,6 +3642,12 @@ class Pci(BaseParser):
         result += f"IOMMU group: {tmp.get_regex_for(Pci.__IOMMU_GROUP)}"
         result += "|"
         result += f"Kernel driver in use: {tmp.get_regex_for(Pci.__KERNEL_MODULE)}"
+        result += "|"
+        result += f"{tmp.get_regex_for(Pci.__IS_PCI_EXPRESS)}"
+        result += "|"
+        result += f"{tmp.get_regex_for(Pci.__IS_ACS)}"
+        result += "|"
+        result += f"{tmp.get_regex_for(Pci.__IS_SRIOV)}"
         return result
 
     @staticmethod
@@ -3604,6 +3685,12 @@ class VfioPci:
     def from_json(model):
         return VfioPci(Pci.PciList.from_json(model))
 
+    def get_pci_list(self):
+        return self.__pci_list
+
+    def get_pci_id_list(self):
+        return self.__pci_list.get_pci_id_list()
+
     @staticmethod
     def get_device_for_passthrough(pci, vm_meta_data):
         # PCI устройство нельзя пробросить если оно не включено в iommu группу
@@ -3618,7 +3705,7 @@ class VfioPci:
         if len(self.__pci_list) == 0:
             return []
 
-        result = [{"vfio_pci.ids": [pci.get_id() for pci in self.__pci_list]}]
+        result = [{"vfio_pci.ids": self.get_pci_id_list()}]
 
         for pci in self.__pci_list:
             result.extend(pci.get_kernel_parameters())
@@ -3640,18 +3727,18 @@ class VfioPci:
 # https://docs.kernel.org/driver-api/vfio-mediated-device.html
 # https://docs.kernel.org/driver-api/vfio.html
 class Vfio:
-    def __init__(self, vfio_pci, iommu=Iommu(), is_asc_override=True):
+    def __init__(self, vfio_pci, iommu=Iommu(), is_acs_override=True):
         self.__vfio_pci = vfio_pci
         self.__iommu = iommu
-        self.__is_asc_override = bool(is_asc_override)
+        self.__is_acs_override = bool(is_acs_override)
 
     def get_kernel_parameters(self):
         result = [{"modules_load": ["vfio", "vfio_pci", "vfio_iommu_type1", "vfio_virqfd"], "kvm.ignore_msrs": "1",
                    "vfio_io_iommu_type1.allow_unsafe_interrupts": "1"}]
         result.extend(self.__vfio_pci.get_kernel_parameters())
         result.extend(self.__iommu.get_kernel_parameters())
-        if self.__is_asc_override:
-            result.append({"pcie_acs_override": ["downstream", "multifunction"]})
+        if self.__is_acs_override:
+            result.append({"pcie_acs_override": [{"id": self.__vfio_pci.get_pci_id_list()}]})
         return result
 
 
@@ -5066,7 +5153,7 @@ class LinuxKernelParamsSerializer(ShellSerializer):
             {"prefix": "", "separator": "="}], nested_key_value_separator="=",
             nested_serializer=ShellSerializer(quotes_for_string_value="",
                                               key_value_separator_table=[
-                                                  {"prefix": "", "separator": "?"}],
+                                                  {"prefix": "", "separator": ":"}],
                                               pair_separator=","
                                               ))
         self.__modify_key_policy = EscapeLiteral(encode_table=key_modify_table)
@@ -5096,7 +5183,7 @@ class UnitTest_LinuxKernelParamsSerializer(unittest.TestCase):
 
     def test_serialize(self):
         ref_table = {
-            'vfio vfio_pci="1,2,3" module_blacklist="i915,kernel_module,kernel_module2,kernel_module3,kernel_module4" i915.modeset="0" mdev iommu="pt" intel_iommu="on"': [
+            'vfio vfio_pci="1,2,3" module_blacklist="i915,kernel_module,kernel_module2,kernel_module3,kernel_module4" i915.modeset="0" mdev iommu="pt" intel_iommu="on" pcie_acs_override="downstream,multifunction,id:8086:1c4b"': [
                 "vfio",
                 {"vfio-pci": ["1", "2", "3"]},
                 {"module-blacklist": ["i915", "kernel_module"]},
@@ -5106,7 +5193,8 @@ class UnitTest_LinuxKernelParamsSerializer(unittest.TestCase):
                 {"module-blacklist": ["kernel_module3"]},
                 {"i915.modeset": "0"},
                 "mdev",
-                {"iommu": "pt", "intel_iommu": "on"}
+                {"iommu": "pt", "intel_iommu": "on"},
+                {"pcie_acs_override": ["downstream", "multifunction", {"id": ["8086:1c4b"]}]}
             ]
         }
 
@@ -5882,7 +5970,8 @@ class VmRunner:
             Logger.instance().warning("[Vm] PCI passthrough devices NOT FOUND")
             return
 
-        if not pci_list.is_each_device_in_its_own_iommu_group(pci_list_for_passthrough):
+        check_iommu_group_for_passthrough = pci_list.check_iommu_group_for_passthrough(pci_list_for_passthrough)
+        if check_iommu_group_for_passthrough is False:
             if self.__asc_override_patched_kernel:
                 Logger.instance().warning("[Vm] Add ASC override patched kernel")
                 LinuxKernel().download_and_install_liquorix_kernel()
@@ -5910,6 +5999,8 @@ class VmRunner:
             else:
                 Logger.instance().warning(
                     "[Vm] For PCI passthrough require ASC override patched kernel.\n     Add --asc_override_patched_kernel parameter and retry")
+            return
+        elif check_iommu_group_for_passthrough is None:
             return
 
         vfio_pci = VfioPci(pci_list_for_passthrough)
@@ -5960,7 +6051,7 @@ class VmRunner:
         # VGA + Audio controller
         result = pci_list.get_vga_list(with_consumer=True)
         if len(result) == 0:
-            Logger.instance().error("[Vm] PCI VGA NOT FOUND")
+            Logger.instance().warning("[Vm] PCI VGA NOT FOUND")
             return Pci.PciList()
 
         if len(result.get_vga_list()) > 1:
@@ -5969,7 +6060,7 @@ class VmRunner:
 
         iommu_group = result[0].iommu_group
         if iommu_group is None:
-            Logger.instance().error("[Vm] VGA does not include to iommu group")
+            Logger.instance().warning("[Vm] VGA does not include to iommu group")
             return Pci.PciList()
 
         return result
@@ -5980,12 +6071,12 @@ class VmRunner:
 
         result = pci_list.get_usb_host_list()
         if len(result) == 0:
-            Logger.instance().error("[Vm] USB Host NOT FOUND")
+            Logger.instance().warning("[Vm] PCI USB Host NOT FOUND")
             return Pci.PciList()
 
         iommu_group = result[0].iommu_group
         if iommu_group is None:
-            Logger.instance().error("[Vm] USB host does not include to iommu group")
+            Logger.instance().warning("[Vm] PCI USB host does not include to iommu group")
             return Pci.PciList()
 
         return result
@@ -5996,12 +6087,12 @@ class VmRunner:
 
         result = pci_list.get_isa_bridge_list()
         if len(result) == 0:
-            Logger.instance().error("[Vm] ISA bridge NOT FOUND")
+            Logger.instance().warning("[Vm] PCI ISA bridge NOT FOUND")
             return Pci.PciList()
 
         iommu_group = result[0].iommu_group
         if iommu_group is None:
-            Logger.instance().error("[Vm] ISA bridge does not include to iommu group")
+            Logger.instance().warning("[Vm] PCI ISA bridge does not include to iommu group")
             return Pci.PciList()
 
         return result
@@ -6386,6 +6477,8 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        pci_list = Pci.get_list()
+        print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
         print(Cpu.get_cpu0().is_intel_above_sandybridge())
         print(Cpu.get_cpu0().is_intel_above_broadwell())
         return
