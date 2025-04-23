@@ -3364,7 +3364,7 @@ class Pci(BaseParser):
                __SUBSYSTEM_NAME: {"type": String},
                __SUBSYSTEM_VENDOR_ID: {"type": PciVendorId},
                __SUBSYSTEM_ID: {"type": UInt16Hex},
-               __IOMMU_GROUP: {"type": UInt8},
+               __IOMMU_GROUP: {"type": UInt8, "default": None},
                __KERNEL_MODULE: {"type": String},
                __IS_PCI_EXPRESS: {"type": PciExpressCapability},
                __IS_ACS: {"type": AcsCapability},
@@ -3436,20 +3436,20 @@ class Pci(BaseParser):
             Logger.instance().warning(f"[PCI/{self.address}] ROM NOT FOUND: {rom_file_path}")
             return None
 
-        with open(rom_file_path.get(), "at") as f:
+        with open(rom_file_path.get(), "tw") as f:
             f.write("1")
 
         Path(dir_path_for_save_rom_file).makedirs()
         result = Path(dir_path_for_save_rom_file).join(self.get_rom_file_name())
         result.copy_from(rom_file_path)
 
-        with open(rom_file_path.get(), "at") as f:
+        with open(rom_file_path.get(), "tw") as f:
             f.write("0")
 
         return result
 
     def get_rom_file_name(self):
-        return f"{self.get_id()}_{self.address}_rom.bin"
+        return f"{self.address}_{self.get_id()}_rom.bin"
 
     def __get_sysfs_pci_device_path(self):
         return f"/sys/bus/pci/devices/{self.address}"
@@ -3740,8 +3740,9 @@ class Vfio:
                    "vfio_io_iommu_type1.allow_unsafe_interrupts": "1"}]
         result.extend(self.__vfio_pci.get_kernel_parameters())
         result.extend(self.__iommu.get_kernel_parameters())
-        if self.__is_acs_override:
-            result.append({"pcie_acs_override": [{"id": self.__vfio_pci.get_pci_id_list()}]})
+        pci_id_list = self.__vfio_pci.get_pci_id_list()
+        if self.__is_acs_override and len(pci_id_list) > 0:
+            result.append({"pcie_acs_override": [{"id": pci_id_list}]})
         return result
 
 
@@ -5903,7 +5904,7 @@ class VirtualMachine:
     def __qemu_pci_passthrough_command_line(self):
         if self.__qemu_pci_passthrough is None:
             return ""
-        self.__qemu_pci_passthrough.check_chipset(self.__qemu_platform)
+        self.__qemu_pci_passthrough.check_platform(self.__qemu_platform)
         return self.__serializer.serialize(self.__qemu_pci_passthrough.get_qemu_parameters(self.__vm_meta_data))
 
     def __get_qemu_serial_command_line(self):
@@ -6049,7 +6050,7 @@ class VmRunner:
             try:
                 self.__run()
             except Exception as ex:
-                Logger.instance().error(f"[Vm] {i} Run after reboot FAIL: {ex}")
+                Logger.instance().exception(f"[Vm] {i} Run after reboot FAIL")
 
         self.__grub.restore_from_backup()
         self.__grub.update()
@@ -6489,6 +6490,7 @@ def main():
 
     elif args.command == "test":
         pci_list = Pci.get_list()
+        print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))
         print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
         print(Cpu.get_cpu0().is_intel_above_sandybridge())
         print(Cpu.get_cpu0().is_intel_above_broadwell())
