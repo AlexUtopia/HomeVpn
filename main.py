@@ -16,6 +16,8 @@ import time
 import sys
 import urllib.request
 import urllib.parse
+import uuid
+
 import netaddr
 import os_release
 import randmac
@@ -2938,17 +2940,78 @@ class Virtio:
 
 class UdpWatchdog:
     __IPTABLES_RULE_MATCH = "string"
-    __CONTER_MISMATCH = 3
 
-    def __init__(self, open_vpn_config, my_external_ip_address_and_port):
+    class ClaimCounterMismatch:
+        __STATE_NORMAL = 0
+        __STATE_CLAIM_MISMATCH = 1
+        __NANOSECONDS_IN_SECOND = 10 ** 9
+
+        def __init__(self, counter_mismatch,
+                     counter_mismatch_claim_timeout_seconds):
+            self.__state = self.__STATE_NORMAL
+            self.__expected_counter = 0
+            self.__last_counter_mismatch_diff = 0
+            self.__last_counter_mismatch_timestamp = None
+            self.__counter_mismatch = counter_mismatch
+            self.__counter_mismatch_claim_timeout_seconds = counter_mismatch_claim_timeout_seconds
+
+        def check(self, current_counter):
+            result = False
+            last_counter_mismatch_diff = self.__expected_counter - current_counter
+            if self.__state == self.__STATE_NORMAL:
+                if last_counter_mismatch_diff == 0:
+                    result = True
+                elif (last_counter_mismatch_diff < 0) or (last_counter_mismatch_diff > self.__counter_mismatch):
+                    Logger.instance().warning(f"[Watchdog] Counter MISMATCH OVER: {last_counter_mismatch_diff}")
+                    result = False
+                else:
+                    Logger.instance().warning(
+                        f"[Watchdog] Claim procedure START: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
+                    self.__state = self.__STATE_CLAIM_MISMATCH
+                    self.__last_counter_mismatch_timestamp = time.monotonic_ns()
+                    result = True
+            elif self.__state == self.__STATE_CLAIM_MISMATCH:
+                if last_counter_mismatch_diff == self.__last_counter_mismatch_diff:
+                    if (
+                            self.__last_counter_mismatch_timestamp - time.monotonic_ns()) // self.__NANOSECONDS_IN_SECOND >= self.__counter_mismatch_claim_timeout_seconds:
+                        Logger.instance().warning(
+                            f"[Watchdog] Claim procedure SUCCESS: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
+                        self.__state = self.__STATE_NORMAL
+                        self.__last_counter_mismatch_timestamp = None
+                        self.__expected_counter = current_counter
+                    result = True
+                elif (last_counter_mismatch_diff < 0) or (last_counter_mismatch_diff > self.__counter_mismatch):
+                    Logger.instance().warning(
+                        f"[Watchdog] Claim procedure FAIL: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
+                    self.__state = self.__STATE_NORMAL
+                    self.__last_counter_mismatch_timestamp = None
+                    self.__expected_counter = current_counter
+                    result = False
+                else:
+                    Logger.instance().warning(
+                        f"[Watchdog] Claim procedure RESTART: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
+                    self.__last_counter_mismatch_timestamp = time.monotonic_ns()
+                    result = True
+
+            self.__last_counter_mismatch_diff = last_counter_mismatch_diff
+            return result
+
+        def increment_expected_counter(self):
+            self.__expected_counter += 1
+
+        def get_expected_counter(self):
+            return self.__expected_counter
+
+    def __init__(self, open_vpn_config, my_external_ip_address_and_port, counter_mismatch=3,
+                 counter_mismatch_claim_timeout_seconds=600):
         self.__is_init = False
-        self.__secret_message = "testtest"  # fixme utopia Сгенерировать uuid?
-        self.__counter = int(0)
+        self.__secret_message = str(uuid.uuid4())
+        self.__claim_counter_mismatch = UdpWatchdog.ClaimCounterMismatch(counter_mismatch=counter_mismatch,
+                                                                         counter_mismatch_claim_timeout_seconds=counter_mismatch_claim_timeout_seconds)
         self.__open_vpn_config = open_vpn_config
         self.__my_external_ip_address_and_port = my_external_ip_address_and_port
         atexit.register(self.clear_at_exit)
 
-    # fixme utopia Если три раза подряд метод __check_drop_packets_counter() возвращал False, то вернуть False
     def watch(self):
         if not self.__is_init:
             self.__setup_firewall()
@@ -2976,10 +3039,21 @@ class UdpWatchdog:
 
         sock_tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock_tx.sendto(self.__get_secret_message_for_send(), (str(ip_address), udp_port))
-        self.__counter = self.__counter + 1
+        self.__claim_counter_mismatch.increment_expected_counter()
 
     def __get_secret_message_for_send(self):
-        return bytes("{}/{}".format(self.__secret_message, self.__counter), "utf-8")
+        return bytes(f"{self.__secret_message}/{self.__claim_counter_mismatch.get_expected_counter()}", "utf-8")
+
+    def __check_drop_packets_counter(self):
+        drop_packets_counter = self.__get_drop_packets_counter()
+        if drop_packets_counter is None:
+            # fixme utopia По идее здесь надо заново настраивать файервол
+            Logger.instance().debug(
+                f"[Watchdog] drop_packets_counter is null: {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
+            self.__setup_firewall()
+            return False
+
+        return self.__claim_counter_mismatch.check(drop_packets_counter)
 
     def __setup_firewall(self, clear=False):
         # iptables -I INPUT -p udp -m string --string "testtest" --algo bm -j DROP
@@ -2989,11 +3063,12 @@ class UdpWatchdog:
         rule = iptc.Rule()
         rule.protocol = "udp"
 
-        # fixme utopia Задать параметр to
         # https://ipset.netfilter.org/iptables-extensions.man.html#lbCE
         match = iptc.Match(rule, self.__IPTABLES_RULE_MATCH)
         match.string = str(self.__secret_message)
         match.algo = "bm"
+        match.from = 0
+        match.to = len(match.string)
         rule.add_match(match)
 
         target = iptc.Target(rule, "DROP")
@@ -3006,25 +3081,6 @@ class UdpWatchdog:
         table.commit()
         Logger.instance().debug(
             f"[Watchdog] Table FILTER after setup {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
-
-    def __check_drop_packets_counter(self):
-        drop_packets_counter = self.__get_drop_packets_counter()
-        if drop_packets_counter is None:
-            # fixme utopia По идее здесь надо заново настраивать файервол
-            Logger.instance().debug(
-                f"[Watchdog] drop_packets_counter is null: {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
-            self.__setup_firewall()
-            return False
-
-        conters_match = self.__counter == drop_packets_counter
-        # fixme utopia Облогировать
-        result = conters_match if conters_match else self.__counter <= drop_packets_counter + self.__CONTER_MISMATCH
-
-        # fixme utopia Нужно выравнивать счётчики (т.е. self.__counter = drop_packets_counter) если разница между ними константна некоторое время
-
-        Logger.instance().debug(
-            f'[Watchdog] send_packets={self.__counter} | drop_packets={drop_packets_counter} | {"GOOD" if result else "BAD"}')
-        return result
 
     def __get_drop_packets_counter(self):
         table = iptc.Table(iptc.Table.FILTER)
@@ -3776,11 +3832,12 @@ class QemuCdRom:
 
 # https://forum.proxmox.com/threads/laptop-keyboard-touchpad-passthough-to-a-vm.135399/
 # qemu-system-$(uname -m) -object input-linux,help
+# Тачпад ведёт себя не адекватно поэтому не пробрасываем его
 class QemuBuiltinKeyboardAndMousePassthrough:
     INPUT_DEV_PATH = "/dev/input/by-path"
 
     def __init__(self):
-        self.__table = {"mouse": {}, "kbd": {"grab_all": "on", "repeat": "on"}}
+        self.__table = {"kbd": {"grab_all": "on", "repeat": "on"}}  # "mouse": {},
 
     def get_qemu_parameters(self):
         result = []
@@ -3884,7 +3941,8 @@ class VgaPciIntel(Pci):
     def get_kernel_parameters(self):
         result = super().get_kernel_parameters()
         result.extend([{"module_blacklist": ["snd_hda_intel", "snd_hda_codec_hdmi"]},
-                       {"video": "efifb:off,vesafb:off,vesa:off,simplefb:off"}, {"l1tf": "full,force"},
+                       {"video": {"efifb": "off", "vesafb": "off", "vesa": "off", "simplefb": "off"}},
+                       {"l1tf": ["full", "force"]},
                        {"initcall_blacklist": "sysfb_init"}])
         return result
 
@@ -4047,76 +4105,40 @@ class IsaBridgePci(Pci):
 #
 
 class Daemon:
-    SLEEP_BEFORE_RECONNECT_SEC = 30
+    WATCHDOG_TIMEOUT_SECONDS = 30
     SLEEP_AFTER_SERVER_START_SEC = 5
 
-    def __init__(self):
-        self.__open_vpn_config = OpenVpnConfig()
+    def __init__(self, open_vpn_config=OpenVpnConfig()):
+        self.__open_vpn_config = open_vpn_config
+        self.__my_ip_address_and_port = None
 
     def run(self):
-        open_vpn_server_port = self.__open_vpn_config.get_server_port()
+        self.__init_vpn_server()
 
-        my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
-
-        TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(
-            my_ip_address_and_port)
-
-        UDP_IP = my_ip_address_and_port.get_ip_address()
-        UDP_PORT = my_ip_address_and_port.get_port()
-        print("UDP target IP:", UDP_IP)
-        print("UDP target port:", UDP_PORT)
-
-        # sock_rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # sock_rx.bind((str("0.0.0.0"), open_vpn_server_port))
-
-        udp_watchdog = UdpWatchdog(self.__open_vpn_config, my_ip_address_and_port)
-
-        i = 0
         while True:
-            udp_watchdog.watch()
-            time.sleep(10)
-            continue
+            self.__refresh_external_ip_address_and_port()
+            self.__send_ovpn_after_reconfig()
+            self.__watchdog_loop()
 
-            MESSAGE = f"test flush {i}"
-
-            print("send message:", MESSAGE)
-
-            sock_tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-            sock_tx.sendto(bytes(MESSAGE, "utf-8"), (str(UDP_IP), UDP_PORT))
-
-            # Receive data from the socket
-            data, addr = sock_rx.recvfrom(1024)
-            print(f"Received packet from {addr}: {data.decode('utf-8')}")
-
-            i = i + 1
-            time.sleep(5)
-            continue
-
-            self.__init()
-
-            user_name = "utopia"
-            user_ovpn_file_path = OpenVpnClientConfigGenerator(my_ip_address_and_port, user_name).generate()
-            TelegramClient().send_file(user_ovpn_file_path)
-
-            # fixme utopia Сгенерировать новые ovpn для всех клиентов и разослать их всем клиентам telegram бота
-            #              список чатов видимо придётся копить в каком-то локальном конфиге, т.к. у телеграма нет такого метода в api
-
-            try:  # fixme utopia Перепроверить что мы можем засечь разрыв соединения, к примеру, выключить WiFi
-                # fixme utopia Нужно подкрутить какие-то настройки OpenVpn клиента
-                # OpenVpnClient(watchdog_user_config_path).run()
-                print("watchdog disable!")
-                time.sleep(99999)
-            except Exception as ex:
-                print("Try udp hole punching and RECONNECT: {}".format(ex))
-
-            # fixme utopia вырубить сервер
-
-            time.sleep(self.SLEEP_BEFORE_RECONNECT_SEC)
-
-    def __init(self):
+    def __init_vpn_server(self):
         server_config_path = OpenVpnServerConfigGenerator().generate()
         OpenVpnServer(server_config_path).run()
-        time.sleep(self.SLEEP_AFTER_SERVER_START_SEC)
+
+    def __refresh_external_ip_address_and_port(self):
+        open_vpn_server_port = self.__open_vpn_config.get_server_port()
+        self.__my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
+        TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(
+            self.__my_ip_address_and_port)
+
+    def __send_ovpn_after_reconfig(self):
+        user_name = "utopia"
+        user_ovpn_file_path = OpenVpnClientConfigGenerator(self.__my_ip_address_and_port, user_name).generate()
+        TelegramClient().send_file(user_ovpn_file_path)
+
+    def __watchdog_loop(self):
+        udp_watchdog = UdpWatchdog(self.__open_vpn_config, self.__my_ip_address_and_port)
+        while udp_watchdog.watch():
+            time.sleep(self.WATCHDOG_TIMEOUT_SECONDS)
 
 
 class TcpPort:
@@ -4302,143 +4324,162 @@ class UnitTest_EscapeLiteral(unittest.TestCase):
 class NoneFromString:
     __NONE_AS_STRING = {"null": None, "none": None}
 
-    def __init__(self, target_string):
-        self.__target_string = target_string.strip().lower()
+    def __init__(self):
+        pass
 
-    def get(self):
-        if self.__target_string in self.__NONE_AS_STRING:
+    def get(self, target_string):
+        if target_string.strip().lower() in self.__NONE_AS_STRING:
             return True, None
 
-        return False, self.__target_string
+        return False, target_string
 
 
 class BoolFromString:
     __BOOL_AS_STRING = {"yes": True, "true": True, "on": True, "no": False, "false": False, "off": False}
 
-    def __init__(self, target_string):
-        self.__target_string = target_string.strip().lower()
+    def __init__(self, is_bool_as_int=True):
+        self.__is_bool_as_int = bool(is_bool_as_int)
 
-    def get(self):
-        if self.__target_string in self.__BOOL_AS_STRING:
-            return True, self.__BOOL_AS_STRING[self.__target_string]
+    def get(self, target_string):
+        _target_string = target_string.strip().lower()
+        if _target_string in self.__BOOL_AS_STRING:
+            result = self.__BOOL_AS_STRING[_target_string]
+            if self.__is_bool_as_int:
+                result = int(result)
+            return True, result
 
-        return False, self.__target_string
+        return False, target_string
 
 
 class IntFromString:
-    def __init__(self, target_string):
-        self.__target_string = target_string.strip().lower()
+    def __init__(self):
+        pass
 
-    def get(self):
-        return self.as_int()
+    def get(self, target_string):
+        return self.as_int(target_string)
 
-    def as_int(self):
-        is_good, result = self.as_decimal_int()
+    def as_int(self, target_string):
+        is_good, result = self.as_decimal_int(target_string)
         if is_good:
             return is_good, result
 
-        is_good, result = self.as_hexadecimal_int()
+        is_good, result = self.as_hexadecimal_int(target_string)
         if is_good:
             return is_good, result
 
-        is_good, result = self.as_binary_int()
+        is_good, result = self.as_binary_int(target_string)
         if is_good:
             return is_good, result
 
-        return self.as_octal_int()
+        return self.as_octal_int(target_string)
 
-    def as_decimal_int(self):
-        if not BitUtils.is_decimal(self.__target_string):
-            return False, self.__target_string
-        return True, int(self.__target_string, BitUtils.DECIMAL_BASE)
+    def as_decimal_int(self, target_string):
+        if not BitUtils.is_decimal(target_string):
+            return False, target_string
+        return True, int(target_string.strip().lower(), BitUtils.DECIMAL_BASE)
 
-    def as_hexadecimal_int(self):
-        if not BitUtils.is_hexadecimal(self.__target_string):
-            return False, self.__target_string
-        return int(self.__target_string, BitUtils.HEXADECIMAL_BASE)
+    def as_hexadecimal_int(self, target_string):
+        if not BitUtils.is_hexadecimal(target_string):
+            return False, target_string
+        return True, int(target_string.strip().lower(), BitUtils.HEXADECIMAL_BASE)
 
-    def as_binary_int(self):
-        if not BitUtils.is_binary(self.__target_string):
-            return False, self.__target_string
-        return int(self.__target_string, BitUtils.BINARY_BASE)
+    def as_binary_int(self, target_string):
+        if not BitUtils.is_binary(target_string):
+            return False, target_string
+        return True, int(target_string.strip().lower(), BitUtils.BINARY_BASE)
 
-    def as_octal_int(self):
-        if not BitUtils.is_octal(self.__target_string):
-            return False, self.__target_string
-        return int(self.__target_string, BitUtils.OCTAL_BASE)
+    def as_octal_int(self, target_string):
+        if not BitUtils.is_octal(target_string):
+            return False, target_string
+        return True, int(target_string.strip().lower(), BitUtils.OCTAL_BASE)
 
 
 class FloatFromString:
-    def __init__(self, target_string):
-        self.__target_string = target_string.strip().lower()
+    def __init__(self):
+        pass
 
-    def get(self):
-        return self.as_float()
+    def get(self, target_string):
+        return self.as_float(target_string)
 
-    def as_float(self):
+    def as_float(self, target_string):
         try:
-            return True, float(self.__target_string)
-        except:
-            return False, self.__target_string
+            return True, float(target_string.strip().lower())
+        except Exception as ex:
+            return False, target_string
 
 
 class NumberFromString:
-    def __init__(self, target_string):
-        self.__int_from_string = IntFromString(target_string)
-        self.__float_from_string = FloatFromString(target_string)
+    def __init__(self, int_from_string=IntFromString(), float_from_string=FloatFromString()):
+        self.__int_from_string = int_from_string
+        self.__float_from_string = float_from_string
 
-    def get(self):
-        is_good, result = self.__int_from_string.get()
+    def get(self, target_string):
+        is_good, result = self.__int_from_string.get(target_string)
         if is_good:
             return is_good, result
 
-        return self.__float_from_string.get()
+        return self.__float_from_string.get(target_string)
 
 
 class StringFromString:
-    def __init__(self, target_string, escape_literal=EscapeLiteral()):
-        self.__target_string = target_string
+    def __init__(self, escape_literal=EscapeLiteral()):
         self.__escape_literal = escape_literal
 
-    def get(self):
-        if len(self.__target_string) == 0:
-            return True, self.__target_string
+    def get(self, target_string):
+        if len(target_string) == 0:
+            return True, target_string
 
-        if (self.__target_string[0] == '"' and self.__target_string[-1] == '"') or (
-                self.__target_string[0] == "'" and self.__target_string[-1] == "'"):
-            self.__target_string = self.__target_string[1:-1]
-            return True, self.__escape_literal.decode(self.__target_string)
+        if (target_string[0] == '"' and target_string[-1] == '"') or (
+                target_string[0] == "'" and target_string[-1] == "'"):
+            target_string = target_string[1:-1]
+            return True, self.__escape_literal.decode(target_string)
 
-        return False, self.__escape_literal.decode(self.__target_string)
+        return False, self.__escape_literal.decode(target_string)
 
 
 class FromString:
+    def __init__(self, is_try_parse_string=True,
+                 string_from_string=StringFromString(),
+                 number_from_string=NumberFromString(),
+                 bool_from_string=BoolFromString(),
+                 none_from_string=NoneFromString()):
+        self.__is_try_parse_string = is_try_parse_string
+        self.__string_from_string = string_from_string
+        self.__number_from_string = number_from_string
+        self.__bool_from_string = bool_from_string
+        self.__none_from_string = none_from_string
+
     def get(self, target_string):
         if not isinstance(target_string, str):
             Logger.instance().debug(f"[FromString] Parse NOT STRING: {target_string}")
             return target_string
 
-        is_good, result_as_string = StringFromString(target_string).get()
-        if is_good:
-            Logger.instance().debug(f"[FromString] Parse as string: {target_string} / {result_as_string}")
-            return result_as_string
+        result_as_string = target_string
 
-        is_good, result = NumberFromString(result_as_string).get()
-        if is_good:
-            Logger.instance().debug(f"[FromString] Parse as number: {result} / {result_as_string}")
-            return result
+        if self.__string_from_string is not None:
+            is_good, result_as_string = self.__string_from_string.get(target_string)
+            if is_good and not self.__is_try_parse_string:
+                Logger.instance().debug(f"[FromString] Parse as string: {target_string} / {result_as_string}")
+                return result_as_string
 
-        is_good, result = BoolFromString(result_as_string).get()
-        if is_good:
-            Logger.instance().debug(f"[FromString] Parse as bool: {result} / {result_as_string}")
-            return result
+        if self.__number_from_string is not None:
+            is_good, result = self.__number_from_string.get(result_as_string)
+            if is_good:
+                Logger.instance().debug(f"[FromString] Parse as number: {result} / {result_as_string}")
+                return result
 
-        is_good, result = NoneFromString(result_as_string).get()
-        if is_good:
-            Logger.instance().debug(f"[FromString] Parse as none: {result} / {result_as_string}")
-            return result
+        if self.__bool_from_string is not None:
+            is_good, result = self.__bool_from_string.get(result_as_string)
+            if is_good:
+                Logger.instance().debug(f"[FromString] Parse as bool: {result} / {result_as_string}")
+                return result
 
-        Logger.instance().debug(f"[FromString] Parse UNKNOWN: {result_as_string}")
+        if self.__none_from_string is not None:
+            is_good, result = self.__none_from_string.get(result_as_string)
+            if is_good:
+                Logger.instance().debug(f"[FromString] Parse as none: {result} / {result_as_string}")
+                return result
+
         return result_as_string
 
 
@@ -4899,6 +4940,15 @@ key1_3="None"'''
             self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
 
 
+# fixme utopia Что требуется
+# ++1) парсинг из строки
+# ++2) bool --> int
+# ++3) Нормализатор для мержинга словарей
+# 3.1) юнит тесты для нормализатора
+# 4) ShellSerializer умеет обрабатывать ast
+# 5) субпарсер для массивов значений параметров ядра
+# 6) субпарсер для вложенных словарей параметров ядра (video=vesafb:off,efifb:off и pcie_acs_override=downstream,id:8086:1234,8086:4321)
+# 7) мержератор для параметров ядра для класса Grub
 class ConfigParser:
     def __init__(self, name_parser=ConfigParameterNameParser(), delimiter_parser=ConfigNameValueDelimiterParser(),
                  value_parser=ConfigParameterValueParser(), from_string=FromString(), escape_literal=EscapeLiteral()):
@@ -4923,18 +4973,25 @@ class ConfigParser:
 
         return None
 
-    def find_all(self, content, value_as_is=True):
-        regex = re.compile(self.get_regex(), re.MULTILINE)
-        tmp = regex.findall(content)
+    def find_all(self, content, value_as_is=False, as_ast=False):
         result = dict()
-        for groups in tmp:
-            name = groups[0]
-            value = ""
-            for i in range(1 + self.__name_parser.get_subname_count_max(), len(groups)):
-                value = groups[i]
-                if len(value) > 0:
+        last_end = 0
+        index = 0
+        for match in re.finditer(self.get_regex(), content, flags=re.MULTILINE):
+            name = match.group(1)
+            value_start_index = 2  # match для всей регулярки (match.group(0)) + имя параметра (match.group(1))
+            for i in range(value_start_index + self.__name_parser.get_subname_count_max(), match.lastindex + 1):
+                if match.group(i) is not None:
+                    value = match.group(i)
+                    if bool(as_ast) and (last_end < match.start(0)):
+                        result[index] = content[last_end:match.start(0)]
+                        index += 1
+                    last_end = match.end(i)
+                    result[name] = value if value_as_is else self.__from_string.get(value)
                     break
-            result[name] = value if value_as_is else self.__from_string.get(value)
+        if bool(as_ast) and (last_end < len(content)):
+            result[index] = content[last_end:]
+
         return result
 
     def remove_by_name(self, name, content):
@@ -5050,6 +5107,12 @@ class LinuxKernelParamsParser(ConfigParser):
 
 
 class Normalizer:
+
+    ## Конструктор
+    # @param [in] merge_or_replace_lambda Что делать если значение данному ключу key уже присвоено: True - мержить, False - заменять
+    def __init__(self, merge_or_replace_lambda=lambda key: False):
+        self.__merge_or_replace_lambda = merge_or_replace_lambda
+
     class EmptyValue:
         pass
 
@@ -5060,16 +5123,19 @@ class Normalizer:
         self.__normalize_recursive2(result_normalize, result)
         return result
 
-    def __normalize_recursive(self, config, result_ref):
+    def __normalize_recursive(self, config, result_ref, key=None):
         if isinstance(config, dict):
             for key, value in config.items():
                 if not key in result_ref:
                     result_ref[key] = dict()
-                self.__normalize_recursive(value, result_ref[key])
+                self.__normalize_recursive(value, result_ref[key], key)
         elif isinstance(config, list):
             for item in config:
                 self.__normalize_recursive(item, result_ref)
         elif isinstance(config, str):  # Ключи без значений
+            # fixme utopia key необходимо формировать иерархично, иначе мержинг подпараметров может не состояться, например, pcie_acs_override.id
+            if key is not None and (self.__merge_or_replace_lambda is None or not self.__merge_or_replace_lambda(key)):
+                result_ref.clear()
             result_ref[config] = Normalizer.EmptyValue()
 
     def __normalize_recursive2(self, config, result_ref):
@@ -5093,6 +5159,7 @@ class Normalizer:
                 result_ref.extend(result)
 
 
+# fixme utopia Подать пустую строку в словаре
 class UnitTest_Normalizer(unittest.TestCase):
     def test_normalize(self):
         ref_table = [
@@ -5103,8 +5170,11 @@ class UnitTest_Normalizer(unittest.TestCase):
                     {"module-blacklist": ["i915", "kernel_module",
                                           "kernel_module2",
                                           "kernel_module3",
-                                          "kernel_module4"]}, {"i915.modeset": "0"},
-                    "mdev", {"iommu": "pt"}, {"intel_iommu": "on"}
+                                          "kernel_module4"]},
+                    {"i915.modeset": "0"},
+                    "mdev",
+                    {"iommu": "pt"},
+                    {"intel_iommu": "on"}
                 ],
 
                 [
@@ -5145,7 +5215,7 @@ class UnitTest_Normalizer(unittest.TestCase):
             )
         ]
 
-        normalizer = Normalizer()
+        normalizer = Normalizer(lambda key: key in ["vfio-pci", "module-blacklist"])
         for config_normalized, config in ref_table:
             result = normalizer.normalize(config)
             self.assertEqual(result, config_normalized, f"\n\nRESULT\n{result}\n\nREF\n{config_normalized}")
@@ -5164,7 +5234,7 @@ class LinuxKernelParamsSerializer(ShellSerializer):
                                                                                     {"prefix": "", "separator": "?"}],
                                                                                 pair_separator=","
                                                                                 ),
-                                              nested_key_value_separator = ":"
+                                              nested_key_value_separator=":"
                                               ))
         self.__modify_key_policy = EscapeLiteral(encode_table=key_modify_table)
         self.__normalizer = Normalizer()
@@ -5258,7 +5328,7 @@ class ShellConfig:
 
         result = dict()
         for name, value in tmp:
-            result.update({name: FromString(value).get()})
+            result.update({name: FromString().get(value)})
         return result
 
     def __load(self):
@@ -5926,7 +5996,7 @@ class VirtualMachine:
 
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
-                 initiate_vga_pci_passthrough=False,
+                 initiate_vga_passthrough=False,
                  initiate_usb_host_passthrough=False,
                  initiate_isa_bridge_passthrough=False,
                  initiate_builtin_kbd_and_mouse_passthrough=False,
@@ -5937,7 +6007,7 @@ class VmRunner:
         self.__project_config = project_config
         self.__startup = startup
         self.__block_internet_access = bool(block_internet_access)
-        self.__initiate_vga_pci_passthrough = bool(initiate_vga_pci_passthrough)
+        self.__initiate_vga_passthrough = bool(initiate_vga_passthrough)
         self.__initiate_usb_host_passthrough = bool(initiate_usb_host_passthrough)
         self.__initiate_isa_bridge_passthrough = bool(initiate_isa_bridge_passthrough)
         self.__initiate_builtin_kbd_and_mouse_passthrough = bool(initiate_builtin_kbd_and_mouse_passthrough)
@@ -5949,7 +6019,7 @@ class VmRunner:
         self.__serializer = ShellSerializer()
 
     def run(self):
-        if self.__initiate_vga_pci_passthrough or self.__initiate_usb_host_passthrough or self.__initiate_isa_bridge_passthrough:
+        if self.__initiate_vga_passthrough or self.__initiate_usb_host_passthrough or self.__initiate_isa_bridge_passthrough:
             if self.__qemu_pci_passthrough:
                 self.after_reboot()
             else:
@@ -6027,7 +6097,7 @@ class VmRunner:
         args = [self.__vm_name, "--bi" if self.__block_internet_access else "",
                 {"--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)),
                  "--grub_config_backup_path": str(grub_config_backup_path)},
-                "--vga_passthrough" if self.__initiate_vga_pci_passthrough else "",
+                "--vga_passthrough" if self.__initiate_vga_passthrough else "",
                 "--usb_host_passthrough" if self.__initiate_usb_host_passthrough else "",
                 "--isa_bridge_passthrough" if self.__initiate_isa_bridge_passthrough else "",
                 "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else ""]
@@ -6057,7 +6127,7 @@ class VmRunner:
         # Power.reboot()
 
     def __get_pci_vga_list_for_passthrough(self, pci_list):
-        if not self.__initiate_vga_pci_passthrough:
+        if not self.__initiate_vga_passthrough:
             return Pci.PciList()
 
         # VGA + Audio controller
@@ -6470,7 +6540,7 @@ def main():
     elif args.command == "vm_run":
         VmRunner(args.vm_name, project_config=project_config,
                  block_internet_access=args.bi,
-                 initiate_vga_pci_passthrough=args.vga_passthrough,
+                 initiate_vga_passthrough=args.vga_passthrough,
                  initiate_usb_host_passthrough=args.usb_host_passthrough,
                  initiate_isa_bridge_passthrough=args.isa_bridge_passthrough,
                  initiate_builtin_kbd_and_mouse_passthrough=args.builtin_kbd_and_mouse_passthrough,
@@ -6489,57 +6559,57 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        pci_list = Pci.get_list()
-        print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))
-        print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
-        print(Cpu.get_cpu0().is_intel_above_sandybridge())
-        print(Cpu.get_cpu0().is_intel_above_broadwell())
-        return
+        # pci_list = Pci.get_list()
+        # print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))
+        # print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
+        # print(Cpu.get_cpu0().is_intel_above_sandybridge())
+        # print(Cpu.get_cpu0().is_intel_above_broadwell())
+        # return
+        #
+        # LinuxKernel().download_and_install_liquorix_kernel()
+        # # subprocess.check_call("/home/utopia/test.sh", shell=True)
+        # print(f"FFF {CurrentOs.is_ubuntu_or_like()}")
+        # print(Grub().get_last_liquorix_kernel_path())
+        # print(Grub().get_last_normal_kernel_path())
+        # return
+        # sv = semantic_version.Version("6.14.0-91-fuck")
+        # print(sv.major)
+        # print(sv.minor)
+        # print(sv.patch)
+        # print(sv.prerelease)
+        # print(sv.build)
+        # sv2 = semantic_version.Version("6.14.0-1-generic")
+        # print(sv > sv2)
+        # return
+        # # https://insights-core.readthedocs.io/en/latest/shared_parsers_catalog/grub_conf.html
+        # # https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/system_administrators_guide/ch-working_with_the_grub_2_boot_loader#sec-Editing_a_Menu_Entry
+        # grub_cfg = TextConfigReader("/boot/grub/grub.cfg").get()
+        #
+        # _regex = regex.compile("[\n\r\t ]*(submenu|menuentry) [^{}]*{((?>(?R)|[^{}]*)+?)}")
+        # tmp = _regex.findall(grub_cfg)
+        #
+        # for bb in tmp:
+        #     print(bb)
+        #     print("\n")
+        #
+        # return
+        # print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+        # pci_list = Pci.get_list()  # .get_vga_list(with_consumer=True)
+        # print(pci_list.is_iommu_enabled())
+        # return
+        #
+        # usb_host_controller_list = pci_list.get_usb_host_list()
+        # print(usb_host_controller_list)
+        # if not pci_list.is_each_device_in_its_own_iommu_group(pci_list):
+        #     print("GGGGGG")
+        # else:
+        #     print("FFFFFFF")
+        #
+        # print([{"vfio_pci.ids": [pci.get_id() for pci in pci_list]}])
 
-        LinuxKernel().download_and_install_liquorix_kernel()
-        # subprocess.check_call("/home/utopia/test.sh", shell=True)
-        print(f"FFF {CurrentOs.is_ubuntu_or_like()}")
-        print(Grub().get_last_liquorix_kernel_path())
-        print(Grub().get_last_normal_kernel_path())
-        return
-        sv = semantic_version.Version("6.14.0-91-fuck")
-        print(sv.major)
-        print(sv.minor)
-        print(sv.patch)
-        print(sv.prerelease)
-        print(sv.build)
-        sv2 = semantic_version.Version("6.14.0-1-generic")
-        print(sv > sv2)
-        return
-        # https://insights-core.readthedocs.io/en/latest/shared_parsers_catalog/grub_conf.html
-        # https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/system_administrators_guide/ch-working_with_the_grub_2_boot_loader#sec-Editing_a_Menu_Entry
-        grub_cfg = TextConfigReader("/boot/grub/grub.cfg").get()
-
-        _regex = regex.compile("[\n\r\t ]*(submenu|menuentry) [^{}]*{((?>(?R)|[^{}]*)+?)}")
-        tmp = _regex.findall(grub_cfg)
-
-        for bb in tmp:
-            print(bb)
-            print("\n")
-
-        return
-        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-        pci_list = Pci.get_list()  # .get_vga_list(with_consumer=True)
-        print(pci_list.is_iommu_enabled())
-        return
-
-        usb_host_controller_list = pci_list.get_usb_host_list()
-        print(usb_host_controller_list)
-        if not pci_list.is_each_device_in_its_own_iommu_group(pci_list):
-            print("GGGGGG")
-        else:
-            print("FFFFFFF")
-
-        print([{"vfio_pci.ids": [pci.get_id() for pci in pci_list]}])
-
-        # ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get())
-        # print(ggg)
-        # print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"]))
+        ggg = ConfigParser().find_all(TextConfigReader("/etc/default/grub").get(), as_ast=True)
+        print(ggg)
+        print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"], as_ast=True))
 
 
     elif args.command == StartupCrontab.COMMAND:
