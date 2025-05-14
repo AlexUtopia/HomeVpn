@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import copy
 import hashlib
 import shutil
@@ -2939,51 +2940,59 @@ class Virtio:
 
 
 class UdpWatchdog:
+    __IPv4_PROTO_HEADER_LENGTH_MIN = 20
+    __IPv6_PROTO_HEADER_LENGTH = 40
+    __UDP_PROTO_HEADER_LENGTH = 8
+
     __IPTABLES_RULE_MATCH = "string"
+    __WAIT_TIMEOUT_AFTER_SEND_WATCHDOG_PACKET_IN_SECONDS = 2
 
     class ClaimCounterMismatch:
-        __STATE_NORMAL = 0
-        __STATE_CLAIM_MISMATCH = 1
+        STATE_NORMAL = 0
+        STATE_CLAIM_MISMATCH = 1
         __NANOSECONDS_IN_SECOND = 10 ** 9
 
-        def __init__(self, counter_mismatch,
-                     counter_mismatch_claim_timeout_seconds):
-            self.__state = self.__STATE_NORMAL
+        def __init__(self, counter_mismatch_max,
+                     counter_mismatch_claim_timeout_in_seconds):
+            self.__state = self.STATE_NORMAL
             self.__expected_counter = 0
             self.__last_counter_mismatch_diff = 0
             self.__last_counter_mismatch_timestamp = None
-            self.__counter_mismatch = counter_mismatch
-            self.__counter_mismatch_claim_timeout_seconds = counter_mismatch_claim_timeout_seconds
+            self.__counter_mismatch_max = counter_mismatch_max
+            self.__counter_mismatch_claim_timeout_in_seconds = counter_mismatch_claim_timeout_in_seconds
 
         def check(self, current_counter):
             result = False
             last_counter_mismatch_diff = self.__expected_counter - current_counter
-            if self.__state == self.__STATE_NORMAL:
+            if self.__state == self.STATE_NORMAL:
                 if last_counter_mismatch_diff == 0:
                     result = True
-                elif (last_counter_mismatch_diff < 0) or (last_counter_mismatch_diff > self.__counter_mismatch):
+                elif (last_counter_mismatch_diff < 0) or (last_counter_mismatch_diff > self.__counter_mismatch_max):
                     Logger.instance().warning(f"[Watchdog] Counter MISMATCH OVER: {last_counter_mismatch_diff}")
+                    self.__state = self.STATE_NORMAL
+                    self.__last_counter_mismatch_timestamp = None
+                    self.__expected_counter = current_counter
                     result = False
                 else:
                     Logger.instance().warning(
                         f"[Watchdog] Claim procedure START: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
-                    self.__state = self.__STATE_CLAIM_MISMATCH
+                    self.__state = self.STATE_CLAIM_MISMATCH
                     self.__last_counter_mismatch_timestamp = time.monotonic_ns()
                     result = True
-            elif self.__state == self.__STATE_CLAIM_MISMATCH:
+            elif self.__state == self.STATE_CLAIM_MISMATCH:
                 if last_counter_mismatch_diff == self.__last_counter_mismatch_diff:
                     if (
-                            self.__last_counter_mismatch_timestamp - time.monotonic_ns()) // self.__NANOSECONDS_IN_SECOND >= self.__counter_mismatch_claim_timeout_seconds:
+                            time.monotonic_ns() - self.__last_counter_mismatch_timestamp) // self.__NANOSECONDS_IN_SECOND >= self.__counter_mismatch_claim_timeout_in_seconds:
                         Logger.instance().warning(
                             f"[Watchdog] Claim procedure SUCCESS: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
-                        self.__state = self.__STATE_NORMAL
+                        self.__state = self.STATE_NORMAL
                         self.__last_counter_mismatch_timestamp = None
                         self.__expected_counter = current_counter
                     result = True
-                elif (last_counter_mismatch_diff < 0) or (last_counter_mismatch_diff > self.__counter_mismatch):
+                elif (last_counter_mismatch_diff < 0) or (last_counter_mismatch_diff > self.__counter_mismatch_max):
                     Logger.instance().warning(
                         f"[Watchdog] Claim procedure FAIL: current={current_counter}, expected={self.__expected_counter}, diff={last_counter_mismatch_diff}")
-                    self.__state = self.__STATE_NORMAL
+                    self.__state = self.STATE_NORMAL
                     self.__last_counter_mismatch_timestamp = None
                     self.__expected_counter = current_counter
                     result = False
@@ -3002,19 +3011,28 @@ class UdpWatchdog:
         def get_expected_counter(self):
             return self.__expected_counter
 
-    def __init__(self, open_vpn_config, my_external_ip_address_and_port, counter_mismatch=3,
-                 counter_mismatch_claim_timeout_seconds=600):
+        def set_expected_counter(self, expected_counter):
+            if isinstance(expected_counter, int):
+                self.__expected_counter = expected_counter
+            else:
+                Logger.instance().warning(f"[Watchdog] Try set expected counter FAIL: {expected_counter}")
+
+        def get_state(self):
+            return self.__state
+
+    def __init__(self, my_external_ip_address_and_port, counter_mismatch_max=3,
+                 counter_mismatch_claim_timeout_in_seconds=600):
         self.__is_init = False
         self.__secret_message = str(uuid.uuid4())
-        self.__claim_counter_mismatch = UdpWatchdog.ClaimCounterMismatch(counter_mismatch=counter_mismatch,
-                                                                         counter_mismatch_claim_timeout_seconds=counter_mismatch_claim_timeout_seconds)
-        self.__open_vpn_config = open_vpn_config
+        self.__claim_counter_mismatch = UdpWatchdog.ClaimCounterMismatch(counter_mismatch_max=counter_mismatch_max,
+                                                                         counter_mismatch_claim_timeout_in_seconds=counter_mismatch_claim_timeout_in_seconds)
         self.__my_external_ip_address_and_port = my_external_ip_address_and_port
         atexit.register(self.clear_at_exit)
 
     def watch(self):
         if not self.__is_init:
             self.__setup_firewall()
+            self.__claim_counter_mismatch.set_expected_counter(self.__get_drop_packets_counter())
             self.__is_init = True
 
         try:
@@ -3023,13 +3041,14 @@ class UdpWatchdog:
             Logger.instance().error(f"[Watchdog] Send UDP packet FAIL: {ex}")
             return False
 
-        time.sleep(1)
+        time.sleep(self.__WAIT_TIMEOUT_AFTER_SEND_WATCHDOG_PACKET_IN_SECONDS)
         return self.__check_drop_packets_counter()
 
     def clear_at_exit(self):
         try:
             if self.__is_init:
                 self.__setup_firewall(clear=True)
+                self.__is_init = False
         except Exception as ex:
             Logger.instance().error(f"[Watchdog] FAIL: {ex}")
 
@@ -3047,7 +3066,6 @@ class UdpWatchdog:
     def __check_drop_packets_counter(self):
         drop_packets_counter = self.__get_drop_packets_counter()
         if drop_packets_counter is None:
-            # fixme utopia По идее здесь надо заново настраивать файервол
             Logger.instance().debug(
                 f"[Watchdog] drop_packets_counter is null: {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
             self.__setup_firewall()
@@ -3065,10 +3083,10 @@ class UdpWatchdog:
 
         # https://ipset.netfilter.org/iptables-extensions.man.html#lbCE
         match = iptc.Match(rule, self.__IPTABLES_RULE_MATCH)
-        match.string = str(self.__secret_message)
+        match.string = self.__secret_message
         match.algo = "bm"
-        match.from = 0
-        match.to = len(match.string)
+        setattr(match, "from", str(self.__get_match_start_position()))
+        match.to = str(self.__get_match_end_position())
         rule.add_match(match)
 
         target = iptc.Target(rule, "DROP")
@@ -3082,15 +3100,112 @@ class UdpWatchdog:
         Logger.instance().debug(
             f"[Watchdog] Table FILTER after setup {iptc.easy.dump_table(iptc.Table.FILTER, ipv6=False)}")
 
+    def __get_match_start_position(self):
+        return self.__IPv4_PROTO_HEADER_LENGTH_MIN + self.__UDP_PROTO_HEADER_LENGTH
+
+    def __get_match_end_position(self):
+        return self.__get_match_start_position() + len(self.__secret_message) + (
+                self.__IPv6_PROTO_HEADER_LENGTH - self.__IPv4_PROTO_HEADER_LENGTH_MIN)
+
     def __get_drop_packets_counter(self):
         table = iptc.Table(iptc.Table.FILTER)
         table.refresh()
         chain = iptc.Chain(table, 'INPUT')
         for rule in chain.rules:
             for match in rule.matches:
-                if match.name == self.__IPTABLES_RULE_MATCH:
+                if (match.name == self.__IPTABLES_RULE_MATCH) and (match.string == self.__secret_message):
                     return rule.get_counters()[0]
         return None
+
+
+class UnitTest_ClaimCounterMismatch(unittest.TestCase):
+    def test(self):
+        claim_counter_mismatch = UdpWatchdog.ClaimCounterMismatch(counter_mismatch_max=3,
+                                                                  counter_mismatch_claim_timeout_in_seconds=1)
+
+        current_counter = 0
+
+        # Начальное состояние счётчиков
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
+
+        # Первый инкремент ожидаемого и текущего счётчика
+        current_counter += 1
+        claim_counter_mismatch.increment_expected_counter()
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
+
+        # Первое расхождение ожидаемого и текущего счётчика в плюс (т.е. разница между ожидаемым и текущим счётчиком положительная)
+        # При этом разница меньше лимита counter_mismatch_max. Переходим на фазу ожидания "успокоения" текущего счётчика
+        claim_counter_mismatch.increment_expected_counter()
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), 2)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_CLAIM_MISMATCH)
+
+        # Текущий счётчик "выровнялся" с ожидаемым. По истечении counter_mismatch_claim_timeout_in_seconds если разница между ожидаемым и текущим счётчиком осталась неизменной:
+        # приравниваем ожидаемый счётчик к текущему и возвращаемся к нормальной фазе
+        current_counter += 1
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_CLAIM_MISMATCH)
+        time.sleep(1)
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
+
+        # Второе расхождение ожидаемого и текущего счётчика в плюс (т.е. разница между ожидаемым и текущим счётчиком положительная)
+        # При этом разница меньше лимита counter_mismatch_max. Переходим на фазу ожидания "успокоения" текущего счётчика
+        claim_counter_mismatch.increment_expected_counter()
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), 3)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_CLAIM_MISMATCH)
+
+        # До истечения counter_mismatch_claim_timeout_in_seconds считаем что проверка прошла успешно,
+        # но при этом ожидаемый счётчик не приравниваем к текущему
+        time.sleep(0.5)
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), 3)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_CLAIM_MISMATCH)
+
+        # counter_mismatch_claim_timeout_in_seconds вышел и разница между ожидаемым и текущим счётчиком осталась неизменной:
+        # приравниваем ожидаемый счётчик к текущему и возвращаемся к нормальной фазе
+        time.sleep(1)
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
+
+        # Третье расхождение ожидаемого и текущего счётчика в плюс (т.е. разница между ожидаемым и текущим счётчиком положительная)
+        # При этом разница меньше лимита counter_mismatch_max. Переходим на фазу ожидания "успокоения" текущего счётчика
+        claim_counter_mismatch.increment_expected_counter()
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), 3)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_CLAIM_MISMATCH)
+
+        # До истечения counter_mismatch_claim_timeout_in_seconds считаем что проверка прошла успешно,
+        # но при этом ожидаемый счётчик не приравниваем к текущему
+        time.sleep(0.5)
+        self.assertTrue(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), 3)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_CLAIM_MISMATCH)
+
+        # Ожидаемый счётчик инкрементировался три раза. Мы вышли за лимит counter_mismatch_max.
+        # Поэтому ожидание "успокоения" провалилось, приравниваем ожидаемый счётчик к текущему и возвращаемся к нормальной фазе
+        claim_counter_mismatch.increment_expected_counter()
+        claim_counter_mismatch.increment_expected_counter()
+        claim_counter_mismatch.increment_expected_counter()
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), 6)
+        self.assertFalse(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
+
+        # Расхождение ожидаемого и текущего счётчика в минус (т.е. разница между ожидаемым и текущим счётчиком отрицательная)
+        # Это аномалия, приравниваем ожидаемый счётчик к текущему и возвращаемся к нормальной фазе
+        current_counter = 100
+        self.assertFalse(claim_counter_mismatch.check(current_counter))
+        self.assertEqual(claim_counter_mismatch.get_expected_counter(), current_counter)
+        self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
 
 
 # fixme utopia Необходимо проверять параметры загрузки linux kernel (см. /proc/cmdline)
@@ -3893,7 +4008,7 @@ class QemuPlatform:
         self.__tpm.close()
 
     def get_qemu_parameters(self):
-        qemu_bios = QemuBios()
+        qemu_bios = QemuBios(self.__vm_meta_data)
         if self.__vm_platform == self.QEMU_PLATFORM_Q35_BIOS:
             qemu_bios = QemuBios("q35")
         elif self.__vm_platform == self.QEMU_PLATFORM_Q35_UEFI:
@@ -4136,7 +4251,7 @@ class Daemon:
         TelegramClient().send_file(user_ovpn_file_path)
 
     def __watchdog_loop(self):
-        udp_watchdog = UdpWatchdog(self.__open_vpn_config, self.__my_ip_address_and_port)
+        udp_watchdog = UdpWatchdog(self.__my_ip_address_and_port)
         while udp_watchdog.watch():
             time.sleep(self.WATCHDOG_TIMEOUT_SECONDS)
 
@@ -5450,6 +5565,82 @@ class Grub:
         return None
 
 
+class AsyncScriptRunner:
+    def __init__(self):
+        self.__script_path_list_parallel = []
+        self.__script_path_list_sequential = []
+
+    def add(self, script_path, is_background_executing=False):
+        if bool(is_background_executing):
+            self.__script_path_list_parallel.append(script_path)
+        else:
+            self.__script_path_list_sequential.append(script_path)
+
+    async def run_all(self):
+        bbb = ( self.__run_sequential(*self.__script_path_list_sequential, handler=lambda x: asyncio.create_subprocess_shell(x, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)),
+                self.__run_parallel(*self.__script_path_list_parallel, handler=lambda x: asyncio.create_subprocess_shell(x, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)))
+
+        task_to_wait_list = await self.__run_parallel(*bbb)
+
+        ttt = self.__run_sequential(*task_to_wait_list, handler=lambda x: x.communicate())
+        print(f"TTTTT {ttt}")
+
+        result = await ttt
+
+        # result = await self.__run_parallel(
+        #     *(ggg,
+        #       ttt))
+        print(f"+++ {result}")
+        return result
+
+    async def __run_parallel(self, *task_list, handler=None):
+        print(f"par ent --- {task_list}")
+        result = await asyncio.gather(*self.__prepare_task_list(*task_list, handler=handler), return_exceptions=True)
+        print(f"par res --- {task_list}")
+        return result
+
+    async def __run_sequential(self, *task_list, handler=None):
+        print(f"seq ent --- {task_list}")
+        result = []
+        for task in self.__prepare_task_list(*task_list, handler=handler):
+            try:
+                result.append(await task)
+            except Exception as ex:
+                result.append(ex)
+        print(f"seq res --- {task_list}")
+        return result
+
+    def __prepare_task_list(self, *task_list, handler):
+        result = []
+        for task in task_list:
+            if isinstance(task, list):
+                result.extend(self.__prepare_task_list(*task, handler=handler))
+                continue
+
+            if handler is not None:
+                print(f"HHH {handler}")
+                task = handler(task)
+            if task is None or isinstance(task, Exception):
+                task = self.__pass_value(task)
+
+            result.append(task)
+        print(f"VVV {result}")
+        return result
+
+    async def __pass_value(self, val):
+        return val
+
+
+class UnitTest_AsyncScriptRunner(unittest.TestCase):
+
+    def test(self):
+        async_script_runner = AsyncScriptRunner()
+        script1 = TextConfigWriter("test_data/script1.sh")
+        script1.set(f'{sys.executable} -c "import datetime; print(datetime.datetime.now())"', set_executable=True)
+        async_script_runner.add(str(script1))
+        asyncio.run(async_script_runner.run_all())
+
+
 class StartupCrontab:
     COMMAND = "startup_run_all_scripts"
     SUPERVISOR_SCRIPT_ID = "073c0542-ab8f-4518-802b-4417a4519219"
@@ -5776,18 +5967,22 @@ class QemuUefi:
 
 
 class QemuBios:
-    def __init__(self, chipset=None):
+    def __init__(self, vm_meta_data, chipset=None):
+        self.__vm_meta_data = vm_meta_data
         self.__chipset = chipset
 
     # SeaBIOS используется по умолчанию, дополнительные аргументы не требуются
     def get_qemu_parameters(self):
         # https://www.seabios.org/Debugging
         # https://forums.gentoo.org/viewtopic-p-8812362.html?sid=f8b324e3711f9796b6a777e198212a6d
-        result = [{"-chardev": {"file": {"path": "/home/utopia/HomeVpn/vm/seabios.log", "id": "seabios"}}, "-device": {
+        result = [{"-chardev": {"file": {"path": self.__get_log_file_path(), "id": "seabios"}}, "-device": {
             "isa-debugcon": {"iobase": 0x402, "chardev": "seabios"}}}]
         if self.__chipset is not None:
             result.append({"-machine": self.__chipset})
         return result
+
+    def __get_log_file_path(self):
+        return self.__vm_meta_data.get_working_dir_path().join("seabios.log")
 
 
 # https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
@@ -6559,6 +6754,15 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+
+        try:
+            testfff = 15
+        except Exception as ex:
+            testfff = 156
+
+        if False:
+            print(testfff)
+        return
         # pci_list = Pci.get_list()
         # print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))
         # print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
