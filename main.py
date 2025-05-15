@@ -5577,40 +5577,33 @@ class AsyncScriptRunner:
             self.__script_path_list_sequential.append(script_path)
 
     async def run_all(self):
-        bbb = ( self.__run_sequential(*self.__script_path_list_sequential, handler=lambda x: asyncio.create_subprocess_shell(x, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)),
-                self.__run_parallel(*self.__script_path_list_parallel, handler=lambda x: asyncio.create_subprocess_shell(x, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)))
+        bbb = [self.__run_sequential(*self.__script_path_list_sequential, handler=lambda x: self.__run_shell_script(x)),
+               self.__run_parallel(*self.__script_path_list_parallel, handler=lambda x: self.__run_shell_script(x))]
 
-        task_to_wait_list = await self.__run_parallel(*bbb)
+        result = await self.__run_parallel(*bbb)
+        rrr = self.__prepare_task_list(*result) # fixme utopia Неправильное использование метода
+        return rrr
 
-        ttt = self.__run_sequential(*task_to_wait_list, handler=lambda x: x.communicate())
-        print(f"TTTTT {ttt}")
-
-        result = await ttt
-
-        # result = await self.__run_parallel(
-        #     *(ggg,
-        #       ttt))
-        print(f"+++ {result}")
-        return result
+    async def __run_shell_script(self, script_path):
+        process = await asyncio.create_subprocess_shell(script_path, stdout=asyncio.subprocess.PIPE,
+                                                        stderr=asyncio.subprocess.PIPE)
+        # fixme utopia Читать из stdout и stderr (параллельно) и писать в лог
+        #  Вернуть exitcode и PID
+        return await process.communicate()
 
     async def __run_parallel(self, *task_list, handler=None):
-        print(f"par ent --- {task_list}")
-        result = await asyncio.gather(*self.__prepare_task_list(*task_list, handler=handler), return_exceptions=True)
-        print(f"par res --- {task_list}")
-        return result
+        return await asyncio.gather(*self.__prepare_task_list(*task_list, handler=handler), return_exceptions=True)
 
     async def __run_sequential(self, *task_list, handler=None):
-        print(f"seq ent --- {task_list}")
         result = []
         for task in self.__prepare_task_list(*task_list, handler=handler):
             try:
                 result.append(await task)
             except Exception as ex:
                 result.append(ex)
-        print(f"seq res --- {task_list}")
         return result
 
-    def __prepare_task_list(self, *task_list, handler):
+    def __prepare_task_list(self, *task_list, handler=None):
         result = []
         for task in task_list:
             if isinstance(task, list):
@@ -5618,13 +5611,11 @@ class AsyncScriptRunner:
                 continue
 
             if handler is not None:
-                print(f"HHH {handler}")
                 task = handler(task)
             if task is None or isinstance(task, Exception):
                 task = self.__pass_value(task)
 
             result.append(task)
-        print(f"VVV {result}")
         return result
 
     async def __pass_value(self, val):
