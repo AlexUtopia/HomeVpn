@@ -18,6 +18,7 @@ import sys
 import urllib.request
 import urllib.parse
 import uuid
+from distutils.log import Log
 
 import netaddr
 import os_release
@@ -5566,6 +5567,9 @@ class Grub:
 
 
 class AsyncScriptRunner:
+    STDOUT_DECODE = "UTF8"
+    STDERR_DECODE = STDOUT_DECODE
+
     def __init__(self):
         self.__script_path_list_parallel = []
         self.__script_path_list_sequential = []
@@ -5577,19 +5581,23 @@ class AsyncScriptRunner:
             self.__script_path_list_sequential.append(script_path)
 
     async def run_all(self):
-        bbb = [self.__run_sequential(*self.__script_path_list_sequential, handler=lambda x: self.__run_shell_script(x)),
-               self.__run_parallel(*self.__script_path_list_parallel, handler=lambda x: self.__run_shell_script(x))]
+        runnable_list = [
+            self.__run_sequential(*self.__script_path_list_sequential, handler=lambda x: self.__run_shell_script(x)),
+            self.__run_parallel(*self.__script_path_list_parallel, handler=lambda x: self.__run_shell_script(x))]
 
-        result = await self.__run_parallel(*bbb)
-        rrr = self.__prepare_task_list(*result) # fixme utopia Неправильное использование метода
-        return rrr
+        result = await self.__run_parallel(*runnable_list)
+        return result[0] + result[1]
 
     async def __run_shell_script(self, script_path):
-        process = await asyncio.create_subprocess_shell(script_path, stdout=asyncio.subprocess.PIPE,
+        Logger.instance().debug(f"[ScriptRun] Start {script_path}")
+        process = await asyncio.create_subprocess_shell(str(script_path), stdout=asyncio.subprocess.PIPE,
                                                         stderr=asyncio.subprocess.PIPE)
-        # fixme utopia Читать из stdout и stderr (параллельно) и писать в лог
-        #  Вернуть exitcode и PID
-        return await process.communicate()
+        pid = process.pid
+        Logger.instance().debug(f"[ScriptRun] Started [pid={pid}] {script_path}")
+        await self.__run_parallel(self.__log_stdout(process.stdout), self.__log_stderr(process.stderr))
+        await process.wait()
+        Logger.instance().debug(f"[ScriptRun] End [pid={pid}, exit_code={process.returncode}] {script_path}")
+        return pid, process.returncode
 
     async def __run_parallel(self, *task_list, handler=None):
         return await asyncio.gather(*self.__prepare_task_list(*task_list, handler=handler), return_exceptions=True)
@@ -5621,15 +5629,55 @@ class AsyncScriptRunner:
     async def __pass_value(self, val):
         return val
 
+    async def __log_stdout(self, stdout_stream):
+        while True:
+            buffer = await stdout_stream.readline()
+            if buffer:
+                Logger.instance().debug(buffer.decode(self.STDOUT_DECODE))
+            else:
+                break
+
+    async def __log_stderr(self, stderr_stream):
+        while True:
+            buffer = await stderr_stream.readline()
+            if buffer:
+                Logger.instance().error(buffer.decode(self.STDERR_DECODE))
+            else:
+                break
+
 
 class UnitTest_AsyncScriptRunner(unittest.TestCase):
+    __EXIT_CODE = 55
 
     def test(self):
+        asyncio.run(self.__run_success())
+        asyncio.run(self.__run_non_existing_script())
+
+    async def __run_success(self):
         async_script_runner = AsyncScriptRunner()
         script1 = TextConfigWriter("test_data/script1.sh")
-        script1.set(f'{sys.executable} -c "import datetime; print(datetime.datetime.now())"', set_executable=True)
+
+        test_script = f"""echo "message 0"
+sleep 1
+
+echo "message 1"
+sleep 1
+
+echo "message 2"
+
+exit {self.__EXIT_CODE}   
+"""
+        script1.set(test_script)
         async_script_runner.add(str(script1))
-        asyncio.run(async_script_runner.run_all())
+        result = await async_script_runner.run_all()
+        pid, exit_code = result[0]
+        self.assertEqual(exit_code, self.__EXIT_CODE)
+
+    async def __run_non_existing_script(self):
+        async_script_runner = AsyncScriptRunner()
+        async_script_runner.add(Path("non_exist_script.sh"))
+        result = await async_script_runner.run_all()
+        self.assertIsInstance(result[0], ValueError)
 
 
 class StartupCrontab:
@@ -5637,6 +5685,7 @@ class StartupCrontab:
     SUPERVISOR_SCRIPT_ID = "073c0542-ab8f-4518-802b-4417a4519219"
 
     __STARTUP_SCRIPTS_DIR_NAME = ".crontab_startup_scripts"
+    __RUN_ONCE_SCRIPT_DIR_NAME = "run_once"
 
     class StartupScriptName:
         __ENCODE = "utf-8"
@@ -5705,12 +5754,25 @@ class StartupCrontab:
         return self.__create_startup_script_file(startup_script_name, startup_script_content)
 
     def run_all_scripts(self):
-        for path in sorted(pathlib.Path(self.__get_startup_script_dir().get()).glob("*"),
+        self.__remake_execute_once_script_dir()
+        script_runner = AsyncScriptRunner()
+        for path in sorted(pathlib.Path(self.__get_startup_script_dir_path().get()).glob("*"),
                            key=lambda x: x.stat().st_mtime_ns, reverse=True):
             if path.is_file():
                 startup_script_name = StartupCrontab.StartupScriptName.parse(path.name)
                 if startup_script_name is not None:
-                    self.__run_startup_script(startup_script_name, path)
+                    if startup_script_name.is_execute_once:
+                        path = path.replace(self.__get_execute_once_script_dir_path() / path.name)
+                    script_runner.add(path, startup_script_name.is_background_executing)
+        asyncio.run(script_runner.run_all())
+        self.__remove_execute_once_script_dir()
+
+    def __remake_execute_once_script_dir(self):
+        self.__remove_execute_once_script_dir()
+        self.__get_execute_once_script_dir_path().mkdir(parents=True, exist_ok=True)
+
+    def __remove_execute_once_script_dir(self):
+        shutil.rmtree(self.__get_execute_once_script_dir_path())
 
     def __register_supervisor_script(self):
         with CronTab(user=self.__user) as cron:
@@ -5732,35 +5794,22 @@ class StartupCrontab:
         TextConfigWriter(startup_script_file_path).set(startup_script_content, set_executable=True)
         return True
 
-    def __run_startup_script(self, startup_script_name, startup_script_file_path):
-        command = f'$("{startup_script_file_path}")'
-        if startup_script_name.is_execute_once:
-            command += f'; rm -f "{startup_script_file_path}"'  # fixme utopia Может не работать потому что тачка
-            #  отправиться в ребут раньше чем произойдёт удаление файла
-            #  Надо перемещать файл в специальный каталог перед исполнением (tempfile)
-        if startup_script_name.is_background_executing:
-            command += ' &'  # fixme utopia Не работает из-за ожидания на subprocess
-
-        Logger.instance().debug(f"[Startup] Run script \"{startup_script_file_path}\": {command}")
-        try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
-            Logger.instance().debug(f'[Startup] Run script result {"FAIL" if result.returncode else "OK"}: {result}')
-        except Exception as ex:
-            Logger.instance().debug(f"[Startup] Run script FAIL: {ex}")
-
     def __get_startup_script_file_path(self, startup_script_name):
-        return self.__get_startup_script_dir().join(startup_script_name.get())
+        return self.__get_startup_script_dir_path().join(startup_script_name.get())
 
     def __is_startup_script_file_exists(self, startup_script_name):
-        return self.__get_startup_script_dir().exists_by_wildcard(startup_script_name.get_wildcard())
+        return self.__get_startup_script_dir_path().exists_by_wildcard(startup_script_name.get_wildcard())
 
-    def __get_startup_script_dir(self):
+    def __get_execute_once_script_dir_path(self):
+        return pathlib.Path(str(self.__get_startup_script_dir_path())) / self.__RUN_ONCE_SCRIPT_DIR_NAME
+
+    def __get_startup_script_dir_path(self):
         return Path.get_home_directory(self.__user).join(self.__STARTUP_SCRIPTS_DIR_NAME)
 
 
 # Windows startup
 # https://superuser.com/a/1518663/2121020
-# fixme utopia Переопределить метод __register_supervisor_script() и __run_startup_script()
+# fixme utopia Переопределить метод __register_supervisor_script()
 class StartupWindows(StartupCrontab):
     pass
 
@@ -6745,7 +6794,12 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        for path in sorted(pathlib.Path(str(Path.get_home_directory("utopia"))).glob("*"),
+                           key=lambda x: x.stat().st_mtime_ns, reverse=True):
+            if path.is_file():
+                print(path)
 
+        return
         try:
             testfff = 15
         except Exception as ex:
