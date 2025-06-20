@@ -5223,11 +5223,8 @@ class LinuxKernelParamsParser(ConfigParser):
 
 
 class Normalizer:
-
-    ## Конструктор
-    # @param [in] merge_or_replace_lambda Что делать если значение данному ключу key уже присвоено: True - мержить, False - заменять
-    def __init__(self, merge_or_replace_lambda=lambda key: False):
-        self.__merge_or_replace_lambda = merge_or_replace_lambda
+    def __init__(self):
+        pass
 
     class EmptyValue:
         pass
@@ -5239,19 +5236,22 @@ class Normalizer:
         self.__normalize_recursive2(result_normalize, result)
         return result
 
-    def __normalize_recursive(self, config, result_ref, key=None):
+    def __normalize_recursive(self, config, result_ref, key_list=list()):
         if isinstance(config, dict):
             for key, value in config.items():
                 if not key in result_ref:
                     result_ref[key] = dict()
-                self.__normalize_recursive(value, result_ref[key], key)
+
+                _key_list = key_list.copy()
+                _key_list.append(key)
+                self.__normalize_recursive(value, result_ref[key], _key_list)
         elif isinstance(config, list):
             for item in config:
-                self.__normalize_recursive(item, result_ref)
+                self.__normalize_recursive(item, result_ref, key_list)
         elif isinstance(config, str):  # Ключи без значений
-            # fixme utopia key необходимо формировать иерархично, иначе мержинг подпараметров может не состояться, например, pcie_acs_override.id
-            if key is not None and (self.__merge_or_replace_lambda is None or not self.__merge_or_replace_lambda(key)):
-                result_ref.clear()
+            _key_list = key_list
+            if not _key_list:
+                _key_list = [config]
             result_ref[config] = Normalizer.EmptyValue()
 
     def __normalize_recursive2(self, config, result_ref):
@@ -5279,62 +5279,71 @@ class Normalizer:
 class UnitTest_Normalizer(unittest.TestCase):
     def test_normalize(self):
         ref_table = [
-            (
-                [
-                    "vfio",
-                    {"vfio-pci": ["1", "2", "3", "4"]},
-                    {"module-blacklist": ["i915", "kernel_module",
-                                          "kernel_module2",
-                                          "kernel_module3",
-                                          "kernel_module4"]},
-                    {"i915.modeset": "0"},
-                    "mdev",
-                    {"iommu": "pt"},
-                    {"intel_iommu": "on"}
-                ],
+            {
+                "expected":
+                    [
+                        "vfio",
+                        {"vfio-pci": ["1", "2", "3", "4"]},
+                        {"module-blacklist": ["i915", "kernel_module",
+                                              "kernel_module2",
+                                              "kernel_module3",
+                                              "kernel_module4"]},
+                        {"i915.modeset": "0"},
+                        "mdev",
+                        {"iommu": "pt"},
+                        {"intel_iommu": "on"}
+                    ],
 
-                [
-                    "vfio",
-                    {"vfio-pci": ["1", "2", "3"]},
-                    {"vfio-pci": ["1", "2", "3", ["4"]]},
-                    {"module-blacklist": [
-                        "i915",
-                        "kernel_module"]},
-                    {"module-blacklist": [
-                        "i915",
-                        "kernel_module2"]},
-                    {"module-blacklist": "kernel_module3"},
-                    {"module-blacklist": [
-                        "kernel_module4"]},
-                    {"module-blacklist": [
-                        "kernel_module3"]},
-                    {"i915.modeset": "0"},
-                    "mdev",
-                    {"iommu": "pt",
-                     "intel_iommu": "on"}
-                ]
-            ),
+                "input":
+                    [
+                        "vfio",
+                        {"vfio-pci": ["1", "2", "3"]},
+                        {"vfio-pci": ["1", "2", "3", ["4"]]},
+                        {"module-blacklist": [
+                            "i915",
+                            "kernel_module"]},
+                        {"module-blacklist": [
+                            "i915",
+                            "kernel_module2"]},
+                        {"module-blacklist": "kernel_module3"},
+                        {"module-blacklist": [
+                            "kernel_module4"]},
+                        {"module-blacklist": [
+                            "kernel_module3"]},
+                        {"i915.modeset": "0"},
+                        "mdev",
+                        {"iommu": "pt",
+                         "intel_iommu": "on"}
+                    ]
+            },
 
-            (
-                [
-                    {"key": {"subkey": ["value1", "value2"]}},
-                    {"key2": [{"subkey2": {}}, {"subkey3": {}}]}
-                ],
+            {
+                "expected":
+                    [
+                        {"key": {"subkey": ["value1", "value2"]}},
+                        {"key2": [{"subkey2": {}}, {"subkey3": {}}]}
+                    ],
 
-                {"key": [{"subkey": "value1"}, {"subkey": "value2"}, {"subkey": "value1"}],
-                 "key2": {"subkey2": {}, "subkey3": []}}
-            ),
+                "input":
+                    {"key": [{"subkey": "value1"}, {"subkey": "value2"}, {"subkey": "value1"}],
+                     "key2": {"subkey2": {}, "subkey3": []}}
+            },
 
-            (
-                ["key"],
-                "key"
-            )
+            {
+                "expected":
+                    ["key"],
+
+                "input":
+                    "key"
+            }
         ]
 
-        normalizer = Normalizer(lambda key: key in ["vfio-pci", "module-blacklist"])
-        for config_normalized, config in ref_table:
-            result = normalizer.normalize(config)
-            self.assertEqual(result, config_normalized, f"\n\nRESULT\n{result}\n\nREF\n{config_normalized}")
+        for test in ref_table:
+            _input = test["input"]
+            expected = test["expected"]
+            normalizer = Normalizer()
+            result = normalizer.normalize(_input)
+            self.assertEqual(result, expected, f"\n\nRESULT\n{result}\n\nEXPECTED\n{expected}")
 
 
 class LinuxKernelParamsSerializer(ShellSerializer):
@@ -5648,6 +5657,7 @@ class AsyncScriptRunner:
 
 class UnitTest_AsyncScriptRunner(unittest.TestCase):
     __EXIT_CODE = 55
+    __SHELL_EXIT_CODE_COMMAND_NOT_FOUND_IN_THE_SYSTEMS_PATH = 127
 
     def test(self):
         asyncio.run(self.__run_success())
@@ -5677,7 +5687,8 @@ exit {self.__EXIT_CODE}
         async_script_runner = AsyncScriptRunner()
         async_script_runner.add(Path("non_exist_script.sh"))
         result = await async_script_runner.run_all()
-        self.assertIsInstance(result[0], ValueError)
+        pid, exit_code = result[0]
+        self.assertEqual(exit_code, self.__SHELL_EXIT_CODE_COMMAND_NOT_FOUND_IN_THE_SYSTEMS_PATH)
 
 
 class StartupCrontab:
