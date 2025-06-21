@@ -18,7 +18,6 @@ import sys
 import urllib.request
 import urllib.parse
 import uuid
-from distutils.log import Log
 
 import netaddr
 import os_release
@@ -1648,22 +1647,13 @@ class MyExternalIpAddressAndPort:
 
 
 class OpenVpnServer:
-    OPEN_VPN = "openvpn"
-
     def __init__(self, config_file_path):
         self.__config_file_path = str(config_file_path)
+        self.__runner = AsyncRunner()
 
-    def run(self):
-        result = subprocess.run(
-            [self.OPEN_VPN, "--config", self.__config_file_path, "--daemon"],
-            text=True
-        )
-        Logger.instance().debug(f"[OpenVpnServer] Return: {result}")
-
-        if result.returncode:
-            raise Exception(f"[OpenVpnServer] Start FAIL: {result.stderr}")
-
-        Logger.instance().debug("[OpenVpnServer] Start OK")
+    async def run(self):
+        self.__runner.add(f"openvpn --config {self.__config_file_path}", shell=False)
+        await self.__runner.run_all()
 
 
 class OpenVpnClient:
@@ -4221,40 +4211,44 @@ class IsaBridgePci(Pci):
 #
 
 class Daemon:
-    WATCHDOG_TIMEOUT_SECONDS = 30
-    SLEEP_AFTER_SERVER_START_SEC = 5
+    WATCHDOG_TIMEOUT_IN_SECONDS = 30
+
+    class KillOpenVpnServer(asyncio.CancelledError):
+        pass
 
     def __init__(self, open_vpn_config=OpenVpnConfig()):
         self.__open_vpn_config = open_vpn_config
         self.__my_ip_address_and_port = None
 
-    def run(self):
-        self.__init_vpn_server()
-
+    async def run(self):
         while True:
-            self.__refresh_external_ip_address_and_port()
-            self.__send_ovpn_after_reconfig()
-            self.__watchdog_loop()
+            async with asyncio.TaskGroup() as group:
+                await self.__refresh_external_ip_address_and_port()
+                await self.__send_ovpn_after_reconfig()
+                open_vpn_server_task = group.create_task(self.__init_vpn_server())
+                group.create_task(self.__watchdog_loop(open_vpn_server_task))
 
-    def __init_vpn_server(self):
+    async def __init_vpn_server(self):
         server_config_path = OpenVpnServerConfigGenerator().generate()
-        OpenVpnServer(server_config_path).run()
+        await OpenVpnServer(server_config_path).run()
 
-    def __refresh_external_ip_address_and_port(self):
+    async def __refresh_external_ip_address_and_port(self):
         open_vpn_server_port = self.__open_vpn_config.get_server_port()
         self.__my_ip_address_and_port = MyExternalIpAddressAndPort(open_vpn_server_port).get()
         TextConfigWriter(self.__open_vpn_config.get_my_current_ip_address_and_port()).set(
             self.__my_ip_address_and_port)
 
-    def __send_ovpn_after_reconfig(self):
+    async def __send_ovpn_after_reconfig(self):
         user_name = "utopia"
         user_ovpn_file_path = OpenVpnClientConfigGenerator(self.__my_ip_address_and_port, user_name).generate()
         TelegramClient().send_file(user_ovpn_file_path)
 
-    def __watchdog_loop(self):
+    async def __watchdog_loop(self, open_vpn_server_task):
         udp_watchdog = UdpWatchdog(self.__my_ip_address_and_port)
         while udp_watchdog.watch():
-            time.sleep(self.WATCHDOG_TIMEOUT_SECONDS)
+            await asyncio.sleep(self.WATCHDOG_TIMEOUT_IN_SECONDS)
+        await asyncio.sleep(self.WATCHDOG_TIMEOUT_IN_SECONDS)
+        open_vpn_server_task.cancel()
 
 
 class TcpPort:
@@ -5575,38 +5569,61 @@ class Grub:
         return None
 
 
-class AsyncScriptRunner:
+class AsyncRunner:
     STDOUT_DECODE = "UTF8"
     STDERR_DECODE = STDOUT_DECODE
 
     def __init__(self):
-        self.__script_path_list_parallel = []
-        self.__script_path_list_sequential = []
+        self.__runnable_descriptor_list_parallel = []
+        self.__runnable_descriptor_list_sequential = []
 
-    def add(self, script_path, is_background_executing=False):
+    def add(self, script_path_or_command, is_background_executing=False, shell=True):
         if bool(is_background_executing):
-            self.__script_path_list_parallel.append(script_path)
+            self.__runnable_descriptor_list_parallel.append((script_path_or_command, shell))
         else:
-            self.__script_path_list_sequential.append(script_path)
+            self.__runnable_descriptor_list_sequential.append((script_path_or_command, shell))
 
     async def run_all(self):
         runnable_list = [
-            self.__run_sequential(*self.__script_path_list_sequential, handler=lambda x: self.__run_shell_script(x)),
-            self.__run_parallel(*self.__script_path_list_parallel, handler=lambda x: self.__run_shell_script(x))]
+            self.__run_sequential(*self.__runnable_descriptor_list_sequential,
+                                  handler=lambda x: self.__run(x)),
+            self.__run_parallel(*self.__runnable_descriptor_list_parallel,
+                                handler=lambda x: self.__run(x))]
 
         result = await self.__run_parallel(*runnable_list)
         return result[0] + result[1]
 
-    async def __run_shell_script(self, script_path):
-        Logger.instance().debug(f"[ScriptRun] Start {script_path}")
-        process = await asyncio.create_subprocess_shell(str(script_path), stdout=asyncio.subprocess.PIPE,
-                                                        stderr=asyncio.subprocess.PIPE)
+    async def __run(self, runnable_descriptor):
+        script_path_or_command, shell = runnable_descriptor
+
+        Logger.instance().debug(f'[ScriptRun] Start "{script_path_or_command}"')
+
+        if shell:
+            process = await asyncio.create_subprocess_shell(str(script_path_or_command), stdout=asyncio.subprocess.PIPE,
+                                                            stderr=asyncio.subprocess.PIPE)
+        else:
+            command_with_args = shlex.split(str(script_path_or_command))
+            if not command_with_args:
+                raise Exception(f'[ScriptRun] Command IS EMPTY: "{script_path_or_command}"')
+            command = command_with_args[0]
+            args = command_with_args[1:]
+            process = await asyncio.create_subprocess_exec(command, *args, stdout=asyncio.subprocess.PIPE,
+                                                           stderr=asyncio.subprocess.PIPE)
         pid = process.pid
-        Logger.instance().debug(f"[ScriptRun] Started [pid={pid}] {script_path}")
-        await self.__run_parallel(self.__log_stdout(process.stdout), self.__log_stderr(process.stderr))
+        try:
+            Logger.instance().debug(f'[ScriptRun] Started [pid={pid}] "{script_path_or_command}"')
+            await self.__run_parallel(self.__log_stdout(process.stdout), self.__log_stderr(process.stderr))
+            return await self.__wait(process, script_path_or_command)
+        except asyncio.CancelledError:
+            process.kill()
+            Logger.instance().debug(f'[ScriptRun] KILL [pid={pid}] "{script_path_or_command}"')
+            return await self.__wait(process, script_path_or_command)
+
+    async def __wait(self, process, script_path_or_command):
         await process.wait()
-        Logger.instance().debug(f"[ScriptRun] End [pid={pid}, exit_code={process.returncode}] {script_path}")
-        return pid, process.returncode
+        Logger.instance().debug(
+            f'[ScriptRun] End [pid={process.pid}, exit_code={process.returncode}] "{script_path_or_command}"')
+        return process.pid, process.returncode
 
     async def __run_parallel(self, *task_list, handler=None):
         return await asyncio.gather(*self.__prepare_task_list(*task_list, handler=handler), return_exceptions=True)
@@ -5655,7 +5672,7 @@ class AsyncScriptRunner:
                 break
 
 
-class UnitTest_AsyncScriptRunner(unittest.TestCase):
+class UnitTest_AsyncRunner(unittest.TestCase):
     __EXIT_CODE = 55
     __SHELL_EXIT_CODE_COMMAND_NOT_FOUND_IN_THE_SYSTEMS_PATH = 127
 
@@ -5664,7 +5681,7 @@ class UnitTest_AsyncScriptRunner(unittest.TestCase):
         asyncio.run(self.__run_non_existing_script())
 
     async def __run_success(self):
-        async_script_runner = AsyncScriptRunner()
+        async_script_runner = AsyncRunner()
         script1 = TextConfigWriter("test_data/script1.sh")
 
         test_script = f"""echo "message 0"
@@ -5684,7 +5701,7 @@ exit {self.__EXIT_CODE}
         self.assertEqual(exit_code, self.__EXIT_CODE)
 
     async def __run_non_existing_script(self):
-        async_script_runner = AsyncScriptRunner()
+        async_script_runner = AsyncRunner()
         async_script_runner.add(Path("non_exist_script.sh"))
         result = await async_script_runner.run_all()
         pid, exit_code = result[0]
@@ -5766,7 +5783,7 @@ class StartupCrontab:
 
     def run_all_scripts(self):
         self.__remake_execute_once_script_dir()
-        script_runner = AsyncScriptRunner()
+        script_runner = AsyncRunner()
         for path in sorted(pathlib.Path(self.__get_startup_script_dir_path().get()).glob("*"),
                            key=lambda x: x.stat().st_mtime_ns, reverse=True):
             if path.is_file():
@@ -6699,8 +6716,6 @@ class InstallCommandLine:
 
 
 def main():
-    Logger.instance().debug(f'My cmd: {" ".join(sys.orig_argv)}')
-
     project_config = OpenVpnConfig()
     parser = argparse.ArgumentParser(prog=project_config.get_server_name(), description="HomeVpn project executable")
 
@@ -6770,7 +6785,7 @@ def main():
         print(project_config.get_config_parameter_strong(args.config_parameter_name))
 
     elif args.command == "run":
-        Daemon().run()
+        asyncio.run(Daemon().run())
 
     elif args.command == "check":
         MyExternalIpAddressAndPort(project_config.get_server_port()).get()

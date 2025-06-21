@@ -92,24 +92,18 @@ mkdir -p "${EASY_RSA_CONFIG_DIR}"
 
 echo "[1] Download easy-rsa"
 
-download_easy_rsa "${EASY_RSA_CONFIG_DIR}" || return $?
+download_easy_rsa "${EASY_RSA_CONFIG_DIR}" || exit $?
 
 echo "[1] Download easy-rsa: OK"
 
 echo "[2] Setup CA"
 
-setup_ca || return $?
+setup_ca || exit $?
 
 echo "[2] Setup CA: OK"
 
 echo "[3] Build certificates for OpenVPN server"
 
-build_certificates_for_open_vpn_server || return $?
+build_certificates_for_open_vpn_server || exit $?
 
 echo "[3] Build certificates for OpenVPN server: OK"
-
-echo "[4] Build watchdog user \"${WATCHDOG_USER_NAME}\""
-
-"${MY_DIR}/build-client.sh" "${WATCHDOG_USER_NAME}" || return $?
-
-echo "[4] Build watchdog user: OK"

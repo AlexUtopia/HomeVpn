@@ -5,7 +5,7 @@
   "open_vpn_server_logs_dir": "/var/log/openvpn/HomeVpn/server",
   "open_vpn_client_keys_dir": "/home/utopia/openvpn/HomeVpn/client",
   "open_vpn_client_logs_dir": "/var/log/openvpn/HomeVpn/client",
-  "easy_rsa_version": "3.0.8",
+  "easy_rsa_version": "3.2.3",
   "easy_rsa_config_dir": "/home/utopia/openvpn/HomeVpn/easy-rsa",
   "easy_rsa_pki_dir": "/home/utopia/openvpn/HomeVpn/easy-rsa/pki",
   "easy_rsa_script_path": "/home/utopia/openvpn/HomeVpn/easy-rsa/easyrsa",
