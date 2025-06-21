@@ -3020,6 +3020,12 @@ class UdpWatchdog:
         self.__my_external_ip_address_and_port = my_external_ip_address_and_port
         atexit.register(self.clear_at_exit)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.clear_at_exit()
+
     def watch(self):
         if not self.__is_init:
             self.__setup_firewall()
@@ -4244,9 +4250,9 @@ class Daemon:
         TelegramClient().send_file(user_ovpn_file_path)
 
     async def __watchdog_loop(self, open_vpn_server_task):
-        udp_watchdog = UdpWatchdog(self.__my_ip_address_and_port)
-        while udp_watchdog.watch():
-            await asyncio.sleep(self.WATCHDOG_TIMEOUT_IN_SECONDS)
+        with UdpWatchdog(self.__my_ip_address_and_port) as udp_watchdog:
+            while udp_watchdog.watch():
+                await asyncio.sleep(self.WATCHDOG_TIMEOUT_IN_SECONDS)
         await asyncio.sleep(self.WATCHDOG_TIMEOUT_IN_SECONDS)
         open_vpn_server_task.cancel()
 
