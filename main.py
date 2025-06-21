@@ -1771,11 +1771,11 @@ class OpenVpnConfig:
     def get_vm_bridge_ip_address_and_mask(self):
         return ipaddress.ip_interface(self.get_config_parameter_strong("vm_bridge_ip_address_and_mask"))
 
-    def get_vm_registry_path(self):
-        return self.get_config_parameter_strong("vm_registry_path")
+    def get_vm_registry_dir_path(self):
+        return self.get_config_parameter_strong("vm_registry_dir_path")
 
     def get_vm_dir(self):
-        return os.path.dirname(self.get_vm_registry_path())
+        return os.path.dirname(self.get_vm_registry_dir_path())
 
     def get_internet_network_interface(self):
         result = self.get_config_parameter("internet_network_interface")
@@ -2364,14 +2364,59 @@ class VmName:
 
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
 class VmMetaData:
-    def __init__(self, name, image_path, mac_address, ssh_forward_port=None, rdp_forward_port=None):
-        self.__name = VmName(name)
-        self.__image_path = Path(image_path)
-        self.__mac_address = netaddr.EUI(str(mac_address))
-        self.__ssh_forward_port = None
-        self.set_ssh_forward_port(ssh_forward_port)
-        self.__rdp_forward_port = None
-        self.set_rdp_forward_port(rdp_forward_port)
+    class Parameter(pathlib.Path):
+        _flavour = type(pathlib.Path())._flavour
+
+        def __new__(cls, name, parameter_dir_path, value_default_handler=lambda: None,
+                    deserialize_handler=lambda x: str(x),
+                    serialize_handler=lambda x: x,
+                    encoding="UTF8", extension="txt"):
+            instance = super(VmMetaData.Parameter, cls).__new__(cls, pathlib.Path(str(parameter_dir_path)).resolve() / f"{name}.{extension}")
+            instance.__value_default_handler = value_default_handler
+            instance.__deserialize_handler = deserialize_handler
+            instance.__serialize_handler = serialize_handler
+            instance.__encoding = encoding
+            return instance
+
+        def exists(self):
+            return super(VmMetaData.Parameter, self).exists() and super(VmMetaData.Parameter, self).resolve().is_file()
+
+        def raise_exception_if_non_exists(self):
+            if not self.exists():
+                raise Exception(f'[Vm] Parameter "{self.name}" in "{self}" NOT FOUND')
+
+        def load(self):
+            result = self.__value_default_handler() if self.__value_default_handler else None
+            if self.exists():
+                result = self.read_text(encoding=self.__encoding)
+                if self.__deserialize_handler:
+                    result = self.__deserialize_handler(result)
+            elif result is not None:
+                self.store(result)
+
+            return result
+
+        def store(self, value):
+            self.parent.mkdir(parents=True, exist_ok=True)
+            if self.__serialize_handler:
+                value = self.__serialize_handler(value)
+            self.write_text(str(value), encoding=self.__encoding)
+
+    IMAGE_EXTENSION = "img"
+
+    def __init__(self, name, image_dir_path):
+        self.__image_path = VmMetaData.Parameter(VmName(name), image_dir_path, extension=self.IMAGE_EXTENSION)
+        self.__mac_address = VmMetaData.Parameter("mac_address", image_dir_path,
+                                                  value_default_handler=lambda: netaddr.EUI(str(randmac.RandMac())),
+                                                  deserialize_handler=lambda x: netaddr.EUI(x),
+                                                  serialize_handler=lambda x: netaddr.EUI(x))
+        self.__ssh_forward_port = VmMetaData.Parameter("ssh_forward_port", image_dir_path,
+                                                       deserialize_handler=lambda x: TcpPort(x),
+                                                       serialize_handler=lambda x: TcpPort(x))
+        self.__rdp_forward_port = VmMetaData.Parameter("rdp_forward_port", image_dir_path,
+                                                       deserialize_handler=lambda x: TcpPort(x),
+                                                       serialize_handler=lambda x: TcpPort(x))
+        self.make_dirs()
 
     def __str__(self):
         return str(self.to_dict())
@@ -2379,55 +2424,41 @@ class VmMetaData:
     def __repr__(self):
         return self.__str__()
 
-    @staticmethod
-    def from_dict(name, vm_registry_as_dict):
-        name_filtered_as_string = str(VmName(name))
-        meta_data_as_dict = vm_registry_as_dict.get(name_filtered_as_string)
-        if meta_data_as_dict is None:
-            return None
-        return VmMetaData(name_filtered_as_string, meta_data_as_dict.get("image_path"),
-                          meta_data_as_dict.get("mac_address"), meta_data_as_dict.get("ssh_forward_port"),
-                          meta_data_as_dict.get("rdp_forward_port"))
+    def __eq__(self, other):
+        if other is self:
+            return True
+        elif isinstance(other, VmMetaData):
+            return self.get_name() == other.get_name()
+        else:
+            return self.get_name() == str(other)
 
-    @staticmethod
-    def from_dict_strong(name, vm_registry_as_dict):
-        result = VmMetaData.from_dict(name, vm_registry_as_dict)
-        if result is None:
-            raise Exception("VM \"{}\" not found in registry".format(name))
-        return result
-
-    def append_to_dict_force(self, vm_registry_as_dict):
-        vm_registry_as_dict.update(self.to_dict())
+    def __hash__(self):
+        return self.get_name().__hash__()
 
     def to_dict(self):
-        name_as_string = str(self.get_name())
-        image_path_as_string = str(self.get_image_path())
-        mac_address_as_string = str(self.get_mac_address())
-        result = {name_as_string: {"image_path": image_path_as_string,
-                                   "mac_address": mac_address_as_string}}
+        return {"name": self.get_name(),
+                "image_path": self.get_image_path(),
+                "mac_address": self.get_mac_address(),
+                "ssh_forward_port": self.get_ssh_forward_port(),
+                "rdp_forward_port": self.get_rdp_forward_port()}
 
-        if self.__ssh_forward_port is not None:
-            result[name_as_string].update({"ssh_forward_port": int(self.__ssh_forward_port)})
-
-        if self.__rdp_forward_port is not None:
-            result[name_as_string].update({"rdp_forward_port": int(self.__rdp_forward_port)})
-
-        return result
+    def check_image_exists(self):
+        return self.__image_path.raise_exception_if_non_exists()
 
     def get_name(self):
-        return str(self.__name)
+        return self.__image_path.stem
 
     def get_image_path(self):
-        return str(self.__image_path)
+        return pathlib.Path(self.__image_path)
 
     def image_exists(self):
-        return self.__image_path.exists() and os.path.isfile(self.get_image_path())
+        return self.__image_path.exists()
 
     def get_mac_address(self):
-        return self.__mac_address
+        return self.__mac_address.load()
 
     def get_mac_address_as_string(self):
-        result = self.__mac_address
+        result = self.get_mac_address()
         result.dialect = netaddr.mac_unix_expanded
         return str(result)
 
@@ -2447,135 +2478,76 @@ class VmMetaData:
             return None
 
     def get_ssh_forward_port(self):
-        return self.__ssh_forward_port
+        return self.__ssh_forward_port.load()
 
     def set_ssh_forward_port(self, ssh_forward_port):
-        if ssh_forward_port is None:
-            self.__ssh_forward_port = None
-        else:
-            self.__ssh_forward_port = TcpPort(ssh_forward_port)
+        self.__ssh_forward_port.store(ssh_forward_port)
 
     def get_rdp_forward_port(self):
-        return self.__rdp_forward_port
+        return self.__rdp_forward_port.load()
 
     def set_rdp_forward_port(self, rdp_forward_port):
-        if rdp_forward_port is None:
-            self.__rdp_forward_port = None
-        else:
-            self.__rdp_forward_port = TcpPort(rdp_forward_port)
+        self.__ssh_forward_port.store(rdp_forward_port)
 
     def get_working_dir_path(self):
-        return self.__image_path.get_dir_path().join(f"{self.get_name()}-data")
+        return self.__image_path.parent / "data"
+
+    def make_dirs(self):
+        self.__image_path.parent.mkdir(parents=True, exist_ok=True)
+        self.get_working_dir_path().mkdir(parents=True, exist_ok=True)
 
 
 class VmRegistry:
-    # {
-    #   "vm1_name":
-    #   {
-    #     "image_path":  (String)
-    #     "mac_address": (String)
-    #   },
-    #   "vm2_name": { ... }
-    # }
-    #
-
     __IMAGE_FORMAT = "qcow2"
-    __IMAGE_EXTENSION = ".img"
 
-    def __init__(self, vm_registry_config_path):
-        self.__registry_reader = JsonConfigReader(vm_registry_config_path)
-        self.__registry_writer = JsonConfigWriter(vm_registry_config_path)
-        self.__registry_as_dict = dict()
-        self.__vm_dir_default = Path(os.path.dirname(vm_registry_config_path))
-
-    # Инсталлируем ОС через VirtualMachine( VmRegistry().create( vm_name, size_in_gib ), path_to_iso_installer = "/path/to/os_installer.iso" )
-    # Добавляем виртуалку в реестр при помощи
+    def __init__(self, vm_registry_dir_path):
+        self.__vm_registry_dir_path = pathlib.Path(str(vm_registry_dir_path))
 
     def create(self, name, image_size_in_gib=20):
-        self.__load_registry()
-        self.__check_non_exists(name)
-        result = self.__build_meta_data(name)
-        if result.image_exists():
-            # fixme utopia Если образ есть а метаданных нет, то нужно метаданные сохранить в реестр
-            #              тем самым можно восстановить реестр по имеющимся образам
-            raise Exception("VM image \"{}\" EXISTS. Please change VM name or rename/move/delete current image".format(
-                result.get_image_path()))
+        result = self.get(name)
+        if result:
+            raise Exception(f'[Vm] Image "{result.get_image_path}" EXISTS. Please change VM name or rename/move/delete current image')
+        else:
+            result = VmMetaData(name, self.__vm_registry_dir_path)
 
         command_line = self.__create_image_command_line(result, image_size_in_gib)
         Logger.instance().debug(f"[VmRegistry] Create image cmd: {command_line}")
         subprocess.check_call(command_line, shell=True)
-        self.__add_to_registry(result)
-        self.__save_registry()
         return result
 
     def list(self):
-        self.__load_registry()
-        result = []
-        for name in self.__registry_as_dict:
-            meta_data = self.__get_meta_data(name)
-            if meta_data is not None:
-                result.append(meta_data)
+        result = set()
+        for path in self.__vm_registry_dir_path.iterdir():
+            if path.is_dir() or path.resolve().is_dir():
+                vm_meta_data = VmMetaData(path.name, path)
+                if vm_meta_data.image_exists():
+                    result.add(vm_meta_data)
         return result
 
     def get_with_verifying(self, name):
-        self.__load_registry()
-        meta_data = self.__get_meta_data(name)
-        if not VmRegistry.__image_exists(meta_data):
-            raise Exception("VM image \"{}\" NOT FOUND".format(name))
-        return meta_data
+        result = self.get(name)
+        if not result:
+            raise Exception(f'VM image "{name}" NOT FOUND')
 
-    def get_path_to_image_with_verifying(self, name):
+    def get(self, name):
+        for vm_meta_data in self.list():
+            if vm_meta_data == name:
+                return vm_meta_data
+        return None
+
+    def get_image_path_with_verifying(self, name):
         return self.get_with_verifying(name).get_image_path()
 
     def set_ssh_forward_port(self, name, ssh_forward_port):
         meta_data = self.get_with_verifying(name)
         meta_data.set_ssh_forward_port(ssh_forward_port)
-        self.__add_to_registry(meta_data)
-        self.__save_registry()
 
     def set_rdp_forward_port(self, name, rdp_forward_port):
         meta_data = self.get_with_verifying(name)
         meta_data.set_rdp_forward_port(rdp_forward_port)
-        self.__add_to_registry(meta_data)
-        self.__save_registry()
 
-    def __create_image_command_line(self, meta_data, image_size_in_gib):
-        return "qemu-img create -f {} \"{}\" {}G".format(self.__IMAGE_FORMAT, meta_data.get_image_path(),
-                                                         image_size_in_gib)
-
-    def __build_meta_data(self, name):
-        return VmMetaData(name, self.__get_image_path(name), VmRegistry.__generate_random_mac_address())
-
-    def __get_image_path(self, name):
-        return os.path.join(str(self.__vm_dir_default), self.__get_image_filename(name))
-
-    def __get_image_filename(self, name):
-        return "{}{}".format(VmName(name), self.__IMAGE_EXTENSION)
-
-    @staticmethod
-    def __generate_random_mac_address():
-        return randmac.RandMac()
-
-    def __check_non_exists(self, name):
-        meta_data = self.__get_meta_data(name)
-        if VmRegistry.__image_exists(meta_data):
-            raise Exception("VM with name \"{}\" already exist ({})".format(name, meta_data))
-
-    @staticmethod
-    def __image_exists(meta_data):
-        return meta_data is not None and meta_data.image_exists()
-
-    def __add_to_registry(self, meta_data):
-        meta_data.append_to_dict_force(self.__registry_as_dict)
-
-    def __get_meta_data(self, name):
-        return VmMetaData.from_dict(name, self.__registry_as_dict)
-
-    def __save_registry(self):
-        self.__registry_writer.set(self.__registry_as_dict)
-
-    def __load_registry(self):
-        self.__registry_as_dict = self.__registry_reader.get_or_create_if_non_exists()
+    def __create_image_command_line(self, vm_meta_data, image_size_in_gib):
+        return f'qemu-img create -f {self.__IMAGE_FORMAT} "{vm_meta_data.get_image_path()}" {image_size_in_gib}G'
 
 
 # https://man7.org/linux/man-pages/man5/resolv.conf.5.html
@@ -6117,7 +6089,7 @@ class QemuPciPassthrough:
 # - CPU Icelake-Server-v5
 class VirtualMachine:
     def __init__(self, network_bridge,
-                 vm_meta_data=VmMetaData("disk1", "/opt/share/disk1.img", "00:12:35:56:78:9a"),
+                 vm_meta_data,
                  qemu_serial=None, qemu_logging=None,
                  qemu_platform=None, qemu_vga=None, qemu_pci_passthrough=None, qemu_cdrom=QemuCdRom(),
                  qemu_builtin_kbd_and_mouse_passthrough=None):
@@ -6455,7 +6427,7 @@ class VmRunner:
                                        self.__project_config.get_internet_network_interface(),
                                        block_internet_access=self.__block_internet_access)
 
-        vm_registry = VmRegistry(self.__project_config.get_vm_registry_path())
+        vm_registry = VmRegistry(self.__project_config.get_vm_registry_dir_path())
         vm_meta_data = vm_registry.get_with_verifying(self.__vm_name)
 
         local_network_interface = OpenVpnConfig.get_or_default_local_network_interface(
@@ -6802,7 +6774,7 @@ def main():
         print(OpenVpnClientConfigGenerator(my_ip_address_and_port, args.user_name).generate())
 
     elif args.command == "vm_create":
-        print(VmRegistry(project_config.get_vm_registry_path()).create(args.vm_name, args.image_size).get_image_path())
+        print(VmRegistry(project_config.get_vm_registry_dir_path()).create(args.vm_name, args.image_size).get_image_path())
 
     elif args.command == "vm_run":
         VmRunner(args.vm_name, project_config=project_config,
@@ -6818,27 +6790,15 @@ def main():
                  os_distr_path=args.os_distr_path).run()
 
     elif args.command == "vm_ssh_fwd":
-        vm_registry = VmRegistry(project_config.get_vm_registry_path())
+        vm_registry = VmRegistry(project_config.get_vm_registry_dir_path())
         vm_registry.set_ssh_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "vm_rdp_fwd":
-        vm_registry = VmRegistry(project_config.get_vm_registry_path())
+        vm_registry = VmRegistry(project_config.get_vm_registry_dir_path())
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        for path in sorted(pathlib.Path(str(Path.get_home_directory("utopia"))).glob("*"),
-                           key=lambda x: x.stat().st_mtime_ns, reverse=True):
-            if path.is_file():
-                print(path)
-
-        return
-        try:
-            testfff = 15
-        except Exception as ex:
-            testfff = 156
-
-        if False:
-            print(testfff)
+        print(VmRegistry(project_config.get_vm_registry_dir_path()).list())
         return
         # pci_list = Pci.get_list()
         # print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))

@@ -11,7 +11,7 @@
   "easy_rsa_script_path": "/home/utopia/openvpn/HomeVpn/easy-rsa/easyrsa",
   "my_current_ip_address_and_port": "./my_current_ip_address_and_port.txt",
   "vm_bridge_ip_address_and_mask": "172.20.0.5/16",
-  "vm_registry_path": "./vm/registry.json",
+  "vm_registry_dir_path": "./vm",
   "dns_config_dir": "/opt/dhcp-hostsdir",
   "internet_network_interface": null,
   "local_network_interface": null,
