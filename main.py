@@ -2560,16 +2560,13 @@ class UnitTest_VmMetaData(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir_path:
             vm_meta_data1 = VmMetaData("test", temp_dir_path)
             self.assertEqual(vm_meta_data1, vm_meta_data1)
-            vm_meta_data1.get_mac_address()
 
             vm_meta_data2 = VmMetaData("test", temp_dir_path)
             self.assertEqual(vm_meta_data1, vm_meta_data2)
-            vm_meta_data2.get_mac_address()
 
             vm_meta_data3 = VmMetaData("test3", temp_dir_path)
             self.assertNotEqual(vm_meta_data1, vm_meta_data3)
             self.assertNotEqual(vm_meta_data2, vm_meta_data3)
-            vm_meta_data3.get_mac_address()
 
             vm_meta_data_set = {vm_meta_data1, vm_meta_data2, vm_meta_data3}
             self.assertEqual(len(vm_meta_data_set), 2)
@@ -2589,12 +2586,12 @@ class VmRegistry:
         result = self.get(name)
         if result:
             raise Exception(
-                f'[Vm] Image "{result.get_image_path}" EXISTS. Please change VM name or rename/move/delete current image')
+                f'[Vm] Image "{result.get_image_path()}" EXISTS. Please change VM name')
         else:
             result = VmMetaData(name, self.__vm_registry_dir_path)
 
         command_line = self.__create_image_command_line(result, image_size_in_gib)
-        Logger.instance().debug(f"[VmRegistry] Create image cmd: {command_line}")
+        Logger.instance().debug(f"[Vm] Create image cmd: {command_line}")
         subprocess.check_call(command_line, shell=True)
         return result
 
@@ -2610,16 +2607,13 @@ class VmRegistry:
     def get_with_verifying(self, name):
         result = self.get(name)
         if not result:
-            raise Exception(f'VM image "{name}" NOT FOUND')
+            raise Exception(f'[Vm] Image "{name}" NOT FOUND')
 
     def get(self, name):
         for vm_meta_data in self.list():
             if vm_meta_data == name:
                 return vm_meta_data
         return None
-
-    def get_image_path_with_verifying(self, name):
-        return self.get_with_verifying(name).get_image_path()
 
     def set_ssh_forward_port(self, name, ssh_forward_port):
         meta_data = self.get_with_verifying(name)
@@ -6441,7 +6435,7 @@ class VmRunner:
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        # Power.reboot()
+        Power.reboot()
 
     def after_reboot(self):
         sleep_sec = 30
@@ -6460,7 +6454,7 @@ class VmRunner:
 
         self.__grub.restore_from_backup()
         self.__grub.update()
-        # Power.reboot()
+        Power.reboot()
 
     def __get_pci_vga_list_for_passthrough(self, pci_list):
         if not self.__initiate_vga_passthrough:
