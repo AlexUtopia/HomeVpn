@@ -2371,7 +2371,8 @@ class VmMetaData:
                     deserialize_handler=lambda x: str(x),
                     serialize_handler=lambda x: x,
                     encoding="UTF8", extension="txt"):
-            instance = super(VmMetaData.Parameter, cls).__new__(cls, pathlib.Path(str(parameter_dir_path)).resolve() / f"{name}.{extension}")
+            instance = super(VmMetaData.Parameter, cls).__new__(cls, pathlib.Path(
+                str(parameter_dir_path)).resolve() / f"{name}.{extension}")
             instance.__value_default_handler = value_default_handler
             instance.__deserialize_handler = deserialize_handler
             instance.__serialize_handler = serialize_handler
@@ -2455,7 +2456,10 @@ class VmMetaData:
         return self.__image_path.exists()
 
     def get_mac_address(self):
-        return self.__mac_address.load()
+        return self.get_mac_address_path().load()
+
+    def get_mac_address_path(self):
+        return self.__mac_address
 
     def get_mac_address_as_string(self):
         result = self.get_mac_address()
@@ -2478,23 +2482,101 @@ class VmMetaData:
             return None
 
     def get_ssh_forward_port(self):
-        return self.__ssh_forward_port.load()
+        return self.get_ssh_forward_port_path().load()
+
+    def get_ssh_forward_port_path(self):
+        return self.__ssh_forward_port
 
     def set_ssh_forward_port(self, ssh_forward_port):
-        self.__ssh_forward_port.store(ssh_forward_port)
+        self.get_ssh_forward_port_path().store(ssh_forward_port)
 
     def get_rdp_forward_port(self):
-        return self.__rdp_forward_port.load()
+        return self.get_rdp_forward_port_path().load()
+
+    def get_rdp_forward_port_path(self):
+        return self.__rdp_forward_port
 
     def set_rdp_forward_port(self, rdp_forward_port):
-        self.__ssh_forward_port.store(rdp_forward_port)
+        self.get_rdp_forward_port_path().store(rdp_forward_port)
 
     def get_working_dir_path(self):
-        return self.__image_path.parent / "data"
+        return self.get_image_path().parent / "data"
 
     def make_dirs(self):
         self.__image_path.parent.mkdir(parents=True, exist_ok=True)
         self.get_working_dir_path().mkdir(parents=True, exist_ok=True)
+
+
+class UnitTest_VmMetaData(unittest.TestCase):
+    def test_mac_address(self):
+        vm_name = "test"
+
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            vm_meta_data = VmMetaData(vm_name, temp_dir_path)
+
+            self.assertEqual(vm_meta_data.get_name(), vm_name)
+            self.assertIsInstance(vm_meta_data.get_name(), str)
+            self.assertEqual(vm_meta_data.get_hostname(), vm_name)
+            self.assertIsInstance(vm_meta_data.get_hostname(), str)
+
+            self.assertEqual(vm_meta_data.get_image_path(), pathlib.Path(temp_dir_path) / f"{vm_name}.{VmMetaData.IMAGE_EXTENSION}")
+            self.assertIsInstance(vm_meta_data.get_image_path(), pathlib.Path)
+            self.assertFalse(vm_meta_data.image_exists())
+            self.assertIsInstance(vm_meta_data.image_exists(), bool)
+
+            self.assertRaises(Exception, vm_meta_data.check_image_exists)
+
+            # MAC адрес генерируется и сохраняется на диске, поэтому повторный вызов get_mac_address()
+            # вернёт тот же результат что и первый вызов
+            mac_address1 = vm_meta_data.get_mac_address()
+            mac_address2 = vm_meta_data.get_mac_address()
+            self.assertEqual(mac_address1, mac_address2)
+            self.assertEqual(netaddr.EUI(vm_meta_data.get_mac_address_as_string()), mac_address1)
+            self.assertIsInstance(vm_meta_data.get_mac_address(), netaddr.EUI)
+            self.assertIsInstance(vm_meta_data.get_mac_address_as_string(), str)
+
+            self.assertEqual(vm_meta_data.get_ssh_forward_port(), None)
+            self.assertEqual(vm_meta_data.get_rdp_forward_port(), None)
+
+            self.assertTrue(vm_meta_data.get_working_dir_path().exists())
+            self.assertIsInstance(vm_meta_data.get_working_dir_path(), pathlib.Path)
+
+            mac_address_expected = "fd:63:8b:12:6f:5b"
+            vm_meta_data.get_mac_address_path().store(mac_address_expected)
+            self.assertEqual(vm_meta_data.get_mac_address(), netaddr.EUI(mac_address_expected))
+
+            ssh_forward_port_expected = 111
+            vm_meta_data.set_ssh_forward_port(ssh_forward_port_expected)
+            self.assertEqual(vm_meta_data.get_ssh_forward_port(), TcpPort(ssh_forward_port_expected))
+            self.assertIsInstance(vm_meta_data.get_ssh_forward_port(), TcpPort)
+
+            rdp_forward_port_expected = 222
+            vm_meta_data.set_rdp_forward_port(rdp_forward_port_expected)
+            self.assertEqual(vm_meta_data.get_rdp_forward_port(), TcpPort(rdp_forward_port_expected))
+            self.assertIsInstance(vm_meta_data.get_rdp_forward_port(), TcpPort)
+
+
+    def test_equal(self):
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            vm_meta_data1 = VmMetaData("test", temp_dir_path)
+            self.assertEqual(vm_meta_data1, vm_meta_data1)
+            vm_meta_data1.get_mac_address()
+
+            vm_meta_data2 = VmMetaData("test", temp_dir_path)
+            self.assertEqual(vm_meta_data1, vm_meta_data2)
+            vm_meta_data2.get_mac_address()
+
+            vm_meta_data3 = VmMetaData("test3", temp_dir_path)
+            self.assertNotEqual(vm_meta_data1, vm_meta_data3)
+            self.assertNotEqual(vm_meta_data2, vm_meta_data3)
+            vm_meta_data3.get_mac_address()
+
+            vm_meta_data_set = {vm_meta_data1, vm_meta_data2, vm_meta_data3}
+            self.assertEqual(len(vm_meta_data_set), 2)
+
+            self.assertTrue(vm_meta_data1 in vm_meta_data_set)
+            self.assertTrue(vm_meta_data2 in vm_meta_data_set)
+            self.assertTrue(vm_meta_data3 in vm_meta_data_set)
 
 
 class VmRegistry:
@@ -2506,7 +2588,8 @@ class VmRegistry:
     def create(self, name, image_size_in_gib=20):
         result = self.get(name)
         if result:
-            raise Exception(f'[Vm] Image "{result.get_image_path}" EXISTS. Please change VM name or rename/move/delete current image')
+            raise Exception(
+                f'[Vm] Image "{result.get_image_path}" EXISTS. Please change VM name or rename/move/delete current image')
         else:
             result = VmMetaData(name, self.__vm_registry_dir_path)
 
@@ -4239,7 +4322,7 @@ class TcpPort:
 
     def __init__(self, port):
         if not TcpPort.is_valid(port):
-            raise Exception("TCP port FAIL: {}".format(port))
+            raise Exception(f"TCP port FAIL: {port}")
         self.__port = int(port)
 
     def __str__(self):
@@ -4250,6 +4333,18 @@ class TcpPort:
 
     def __int__(self):
         return int(self.__port)
+
+    def __eq__(self, other):
+        _other = None
+        try:
+            _other = TcpPort(other)
+        except Exception:
+            pass
+
+        if not _other:
+            return False
+
+        return int(self) == int(_other)
 
     def is_ssh(self):
         return int(self) == TcpPort.SSH_PORT_DEFAULT
@@ -6774,7 +6869,8 @@ def main():
         print(OpenVpnClientConfigGenerator(my_ip_address_and_port, args.user_name).generate())
 
     elif args.command == "vm_create":
-        print(VmRegistry(project_config.get_vm_registry_dir_path()).create(args.vm_name, args.image_size).get_image_path())
+        print(VmRegistry(project_config.get_vm_registry_dir_path()).create(args.vm_name,
+                                                                           args.image_size).get_image_path())
 
     elif args.command == "vm_run":
         VmRunner(args.vm_name, project_config=project_config,
