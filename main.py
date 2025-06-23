@@ -6327,6 +6327,7 @@ class VirtualMachine:
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
                  initiate_vga_passthrough=False,
+                 initiate_vga_audio_passthrough=False,
                  initiate_usb_host_passthrough=False,
                  initiate_isa_bridge_passthrough=False,
                  initiate_builtin_kbd_and_mouse_passthrough=False,
@@ -6338,6 +6339,7 @@ class VmRunner:
         self.__startup = startup
         self.__block_internet_access = bool(block_internet_access)
         self.__initiate_vga_passthrough = bool(initiate_vga_passthrough)
+        self.__initiate_vga_audio_passthrough = bool(initiate_vga_audio_passthrough)
         self.__initiate_usb_host_passthrough = bool(initiate_usb_host_passthrough)
         self.__initiate_isa_bridge_passthrough = bool(initiate_isa_bridge_passthrough)
         self.__initiate_builtin_kbd_and_mouse_passthrough = bool(initiate_builtin_kbd_and_mouse_passthrough)
@@ -6461,7 +6463,7 @@ class VmRunner:
             return Pci.PciList()
 
         # VGA + Audio controller
-        result = pci_list.get_vga_list(with_consumer=True)
+        result = pci_list.get_vga_list(with_consumer=self.__initiate_vga_audio_passthrough)
         if len(result) == 0:
             Logger.instance().warning("[Vm] PCI VGA NOT FOUND")
             return Pci.PciList()
@@ -6808,6 +6810,8 @@ def main():
                                action='store_true')
     parser_vm_run.add_argument("--vga_passthrough", help="Initiate VGA PCI passthrough to virtual machine",
                                action='store_true')
+    parser_vm_run.add_argument("--vga_audio_passthrough", help="Initiate VGA PCI audio (HDMI audio, DisplayPort audio) passthrough to virtual machine",
+                               action='store_true')
     parser_vm_run.add_argument("--vm_platform", type=str,
                                help=f"QEMU platform: {', '.join(QemuPlatform.QEMU_PLATFORM_LIST)}",
                                default=QemuPlatform.QEMU_PLATFORM_I440FX_BIOS)
@@ -6870,6 +6874,7 @@ def main():
         VmRunner(args.vm_name, project_config=project_config,
                  block_internet_access=args.bi,
                  initiate_vga_passthrough=args.vga_passthrough,
+                 initiate_vga_audio_passthrough=args.vga_audio_passthrough,
                  initiate_usb_host_passthrough=args.usb_host_passthrough,
                  initiate_isa_bridge_passthrough=args.isa_bridge_passthrough,
                  initiate_builtin_kbd_and_mouse_passthrough=args.builtin_kbd_and_mouse_passthrough,
