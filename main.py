@@ -5969,7 +5969,7 @@ class TpmEmulator(DaemonManagerBase):
         self.__serializer = TpmEmulator.TpmSerializer()
 
     def get_qemu_parameters(self):
-        self.__get_tpm_state_dir_path().makedirs()
+        self.__get_tpm_state_dir_path().mkdir(parents=True, exist_ok=True)
         return [{"-chardev": {"socket": {"id": self.__get_tpm_chardev_id(),
                                          "path": self.__get_tpm_chardev_ctrl_unixsocket_path()}}},
                 {"-tpmdev": {
