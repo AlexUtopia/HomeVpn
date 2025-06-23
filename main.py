@@ -1774,9 +1774,6 @@ class OpenVpnConfig:
     def get_vm_registry_dir_path(self):
         return self.get_config_parameter_strong("vm_registry_dir_path")
 
-    def get_vm_dir(self):
-        return os.path.dirname(self.get_vm_registry_dir_path())
-
     def get_internet_network_interface(self):
         result = self.get_config_parameter("internet_network_interface")
         if result is None:
@@ -2580,7 +2577,7 @@ class VmRegistry:
     __IMAGE_FORMAT = "qcow2"
 
     def __init__(self, vm_registry_dir_path):
-        self.__vm_registry_dir_path = pathlib.Path(str(vm_registry_dir_path))
+        self.__vm_registry_dir_path = pathlib.Path(str(Path(vm_registry_dir_path))).resolve()
 
     def create(self, name, image_size_in_gib=20):
         result = self.get(name)
@@ -2597,6 +2594,9 @@ class VmRegistry:
 
     def list(self):
         result = set()
+        if not self.__vm_registry_dir_path.exists() or not self.__vm_registry_dir_path.is_dir():
+            return result
+
         for path in self.__vm_registry_dir_path.iterdir():
             if path.is_dir() or path.resolve().is_dir():
                 vm_meta_data = VmMetaData(path.name, path)
@@ -2608,6 +2608,7 @@ class VmRegistry:
         result = self.get(name)
         if not result:
             raise Exception(f'[Vm] Image "{name}" NOT FOUND')
+        return result
 
     def get(self, name):
         for vm_meta_data in self.list():
@@ -2966,7 +2967,7 @@ class Virtio:
         return Path(os.path.join(self.__get_and_make_vm_dir(), Virtio.__WIN_DRIVERS_FILENAME))
 
     def __get_and_make_vm_dir(self):
-        result = self.__project_config.get_vm_dir()
+        result = self.__project_config.get_vm_registry_dir_path()
         Path(result).makedirs()
         return result
 
@@ -3656,8 +3657,8 @@ class Pci(BaseParser):
         with open(rom_file_path.get(), "tw") as f:
             f.write("1")
 
-        Path(dir_path_for_save_rom_file).makedirs()
-        result = Path(dir_path_for_save_rom_file).join(self.get_rom_file_name())
+        dir_path_for_save_rom_file.mkdir(parents=True, exist_ok=True)
+        result = Path(dir_path_for_save_rom_file / self.get_rom_file_name())
         result.copy_from(rom_file_path)
 
         with open(rom_file_path.get(), "tw") as f:
@@ -5979,7 +5980,7 @@ class TpmEmulator(DaemonManagerBase):
                 ]
 
     def _start_impl(self):
-        self.__get_tpm_state_dir_path().makedirs()
+        self.__get_tpm_state_dir_path().mkdir(parents=True, exist_ok=True)
 
     def _close_impl(self):
         return
@@ -5998,13 +5999,13 @@ class TpmEmulator(DaemonManagerBase):
         return f"{self.PREFIX}-{self.__vm_meta_data.get_name()}-chardev-id"
 
     def __get_tpm_chardev_ctrl_unixsocket_path(self):
-        return self.__get_tpm_state_dir_path().join(self.__get_tpm_chardev_ctrl_unixsocket_name())
+        return self.__get_tpm_state_dir_path() / self.__get_tpm_chardev_ctrl_unixsocket_name()
 
     def __get_tpm_log_file_path(self):
-        return self.__get_tpm_state_dir_path().join(f"{self.PREFIX}.log")
+        return self.__get_tpm_state_dir_path() / f"{self.PREFIX}.log"
 
     def __get_tpm_state_dir_path(self):
-        return self.__vm_meta_data.get_working_dir_path().join(self.PREFIX)
+        return self.__vm_meta_data.get_working_dir_path() / self.PREFIX
 
     def __get_tpm_chardev_ctrl_unixsocket_name(self):
         return f"{self.PREFIX}-sock"
@@ -6028,7 +6029,7 @@ class QemuSerial:
         self.__vm_meta_data = vm_meta_data
 
     def get_qemu_parameters(self):
-        self.__get_serial_state_dir_path().makedirs()
+        self.__get_serial_state_dir_path().mkdir(parents=True, exist_ok=True)
         return [{"-chardev": {
             "file": {"id": self.__get_serial_chardev_id(), "mux": "on", "path": self.__get_serial_log_file_path(),
                      "signal": "off"}}}, {"-serial": f"chardev:{self.__get_serial_chardev_id()}"}]
@@ -6037,10 +6038,10 @@ class QemuSerial:
         return f"{self.PREFIX}-{self.__vm_meta_data.get_name()}-chardev-id{self.__index}"
 
     def __get_serial_log_file_path(self):
-        return self.__get_serial_state_dir_path().join(f"{self.PREFIX}.log")
+        return self.__get_serial_state_dir_path() / f"{self.PREFIX}.log"
 
     def __get_serial_state_dir_path(self):
-        return self.__vm_meta_data.get_working_dir_path().join(f"{self.PREFIX}{self.__index}")
+        return self.__vm_meta_data.get_working_dir_path() / f"{self.PREFIX}{self.__index}"
 
 
 class QemuLogging:
@@ -6050,14 +6051,14 @@ class QemuLogging:
         self.__vm_meta_data = vm_meta_data
 
     def get_qemu_parameters(self):
-        self.__get_qemu_state_dir_path().makedirs()
+        self.__get_qemu_state_dir_path().mkdir(parents=True, exist_ok=True)
         return [{"-D": self.__get_qemu_log_file_path()}]
 
     def __get_qemu_log_file_path(self):
-        return self.__get_qemu_state_dir_path().join(f"{self.PREFIX}.log")
+        return self.__get_qemu_state_dir_path() / f"{self.PREFIX}.log"
 
     def __get_qemu_state_dir_path(self):
-        return self.__vm_meta_data.get_working_dir_path().join(self.PREFIX)
+        return self.__vm_meta_data.get_working_dir_path() / self.PREFIX
 
 
 # https://github.com/tianocore/edk2/blob/master/OvmfPkg/README
@@ -6098,7 +6099,7 @@ class QemuUefi:
         return self.__get_uefi_state_dir_path().join(self.OVMF_VARS)
 
     def __get_uefi_state_dir_path(self):
-        return self.__vm_meta_data.get_working_dir_path().join(self.PREFIX)
+        return Path(self.__vm_meta_data.get_working_dir_path()).join(self.PREFIX)
 
 
 class QemuBios:
@@ -6117,7 +6118,7 @@ class QemuBios:
         return result
 
     def __get_log_file_path(self):
-        return self.__vm_meta_data.get_working_dir_path().join("seabios.log")
+        return self.__vm_meta_data.get_working_dir_path() / "seabios.log"
 
 
 # https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
@@ -6893,6 +6894,9 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        print(VmRegistry("./vm").list())
+        return
+
         label_file_path = Path("./test_label.txt")
         script = f'"{sys.executable}" -c "import datetime; import pathlib; pathlib.Path(\\"{label_file_path}\\").write_text(str(datetime.datetime.now()))"'
         Startup().register_script(script, is_execute_once=True)
