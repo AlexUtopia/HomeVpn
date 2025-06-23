@@ -5867,7 +5867,7 @@ class StartupCrontab:
         self.__get_execute_once_script_dir_path().mkdir(parents=True, exist_ok=True)
 
     def __remove_execute_once_script_dir(self):
-        shutil.rmtree(self.__get_execute_once_script_dir_path())
+        shutil.rmtree(self.__get_execute_once_script_dir_path(), ignore_errors=True)
 
     def __register_supervisor_script(self):
         with CronTab(user=self.__user) as cron:
@@ -6893,8 +6893,12 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        print(VmRegistry(project_config.get_vm_registry_dir_path()).list())
+        label_file_path = Path("./test_label.txt")
+        script = f'"{sys.executable}" -c "import datetime; import pathlib; pathlib.Path(\\"{label_file_path}\\").write_text(str(datetime.datetime.now()))"'
+        Startup().register_script(script, is_execute_once=True)
+        Power().reboot()
         return
+
         # pci_list = Pci.get_list()
         # print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))
         # print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
