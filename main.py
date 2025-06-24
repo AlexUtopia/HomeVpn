@@ -1805,8 +1805,14 @@ class OpenVpnConfig:
         Logger.instance().debug(f"[OpenVpnConfig] Local network interface SET MANUALLY: {local_network_interface}")
         return NetworkInterface(local_network_interface)
 
-    def get_dns_config_dir(self):
-        return self.get_config_parameter_strong("dns_config_dir")
+    def get_dns_config_dir_path(self):
+        return self.get_config_parameter_strong("dns_config_dir_path")
+
+    def get_dns_suffix(self):
+        return self.get_config_parameter_strong("dns_suffix")
+
+    def get_my_host(self):
+        return self.get_config_parameter_strong("my_host")
 
     def get_virtio_win_drivers_url(self):
         return self.get_config_parameter_strong("virtio_win_drivers_url")
@@ -2109,40 +2115,6 @@ class OpenVpnClientConfigGenerator:
         if not os.path.exists(d):
             os.makedirs(d)
 
-
-# Make network bridge
-# 1)
-# ip link add name br0 type bridge
-# ip addr add 172.20.0.1/16 dev br0
-# ip link set br0 up
-# [X] dnsmasq --interface=br0 --bind-interfaces --dhcp-range=172.20.0.2,172.20.255.254
-
-# 2)
-# sysctl net.ipv4.ip_forward=1
-
-# 3)
-# iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
-# iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-
-# Make tap device
-
-# 1)
-# https://docs.python.org/3/library/getpass.html#getpass.getuser
-# https://gist.github.com/arvati/546617042fcf2669f330b739075c1c5d
-# https://community.openvpn.net/openvpn/wiki/ManagingWindowsTAPDrivers
-# ip tuntap add dev tap0 mode tap user "YOUR_USER_NAME_HERE"
-# ip link set tap0 up promisc on
-# ip link set tap0 master br0 [нужно? - понять]
-
-# 2)
-# set ip address manually
-
-# 3) https://stackoverflow.com/questions/3837069/how-to-get-network-interface-card-names-in-python
-# iptables -A FORWARD -i tap0 -o wlan0 -j ACCEPT
-
-# https://scapy.readthedocs.io/en/latest/api/scapy.sendrecv.html?highlight=bridge_and_sniff#scapy.sendrecv.bridge_and_sniff
-# https://stackoverflow.com/questions/9337545/writing-an-ethernet-bridge-in-python-with-scapy
-# https://gist.github.com/mgalgs/1856631
 
 class NetworkInterface:
     # https://developers.google.com/speed/public-dns/docs/using#addresses
@@ -2516,7 +2488,8 @@ class UnitTest_VmMetaData(unittest.TestCase):
             self.assertEqual(vm_meta_data.get_hostname(), vm_name)
             self.assertIsInstance(vm_meta_data.get_hostname(), str)
 
-            self.assertEqual(vm_meta_data.get_image_path(), pathlib.Path(temp_dir_path) / f"{vm_name}.{VmMetaData.IMAGE_EXTENSION}")
+            self.assertEqual(vm_meta_data.get_image_path(),
+                             pathlib.Path(temp_dir_path) / f"{vm_name}.{VmMetaData.IMAGE_EXTENSION}")
             self.assertIsInstance(vm_meta_data.get_image_path(), pathlib.Path)
             self.assertFalse(vm_meta_data.image_exists())
             self.assertIsInstance(vm_meta_data.image_exists(), bool)
@@ -2551,7 +2524,6 @@ class UnitTest_VmMetaData(unittest.TestCase):
             vm_meta_data.set_rdp_forward_port(rdp_forward_port_expected)
             self.assertEqual(vm_meta_data.get_rdp_forward_port(), TcpPort(rdp_forward_port_expected))
             self.assertIsInstance(vm_meta_data.get_rdp_forward_port(), TcpPort)
-
 
     def test_equal(self):
         with tempfile.TemporaryDirectory() as temp_dir_path:
@@ -2736,13 +2708,18 @@ class DaemonManagerBase:
 # Генерируем рандомный mac адрес https://stackoverflow.com/questions/8484877/mac-address-generator-in-python
 class DnsDhcpProvider(DaemonManagerBase):
     __HOST_EXTENSION = ".host"
+    DNS_SUFFIX_DEFAULT = "homevpn.org"
+    MY_HOST_DEFAULT = f"myhost.{DNS_SUFFIX_DEFAULT}"
 
-    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf()):
+    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf(),
+                 dns_suffix=DNS_SUFFIX_DEFAULT, my_host=MY_HOST_DEFAULT):
         super().__init__(label="DnsDhcpProvider", action="Start")
         self.__interface = interface
         self.__dhcp_host_dir = Path(dhcp_host_dir)
         self.__resolv_conf = resolv_conf
         self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
+        self.__dns_suffix = dns_suffix
+        self.__my_host = my_host
 
     def _start_impl(self):
         self.__make_dhcp_host_dir()
@@ -2759,8 +2736,7 @@ class DnsDhcpProvider(DaemonManagerBase):
             self.__build_dhcp_host_file_content(vm_meta_data))
 
     def _build_command_line(self):
-        return "dnsmasq --interface={} --bind-interfaces --dhcp-hostsdir=\"{}\" {}".format(
-            self.__interface, self.__dhcp_host_dir, self.__get_dhcp_range_parameter())
+        return f'dnsmasq --interface={self.__interface} --bind-interfaces --dhcp-hostsdir="{self.__dhcp_host_dir}" {self.__get_dhcp_range_parameter()} --domain="{self.__dns_suffix}" --address=/{self.__my_host}/{self.__interface.get_ipv4_interface_if().ip}'
 
     def __make_dhcp_host_dir(self):
         self.__dhcp_host_dir.makedirs()
@@ -2802,7 +2778,8 @@ class DnsDhcpProvider(DaemonManagerBase):
 
 class NetworkBridge:
     def __init__(self, name, bridge_ip_address_and_mask,
-                 dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None, block_internet_access=False):
+                 dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None, block_internet_access=False,
+                 dns_suffix=DnsDhcpProvider.DNS_SUFFIX_DEFAULT, my_host=DnsDhcpProvider.MY_HOST_DEFAULT):
         self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__bridge_ip_address_and_mask = ipaddress.ip_interface(bridge_ip_address_and_mask)
 
@@ -2813,7 +2790,8 @@ class NetworkBridge:
         else:
             self.__internet_network_interface = None
 
-        self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir)
+        self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir, dns_suffix=dns_suffix,
+                                                   my_host=my_host)
         self.__block_internet_access = block_internet_access
         atexit.register(self.close)
 
@@ -6515,9 +6493,11 @@ class VmRunner:
     def __run(self):
         network_bridge = NetworkBridge(self.__project_config.get_server_name(),
                                        self.__project_config.get_vm_bridge_ip_address_and_mask(),
-                                       self.__project_config.get_dns_config_dir(),
+                                       self.__project_config.get_dns_config_dir_path(),
                                        self.__project_config.get_internet_network_interface(),
-                                       block_internet_access=self.__block_internet_access)
+                                       block_internet_access=self.__block_internet_access,
+                                       dns_suffix=self.__project_config.get_dns_suffix(),
+                                       my_host=self.__project_config.get_my_host())
 
         vm_registry = VmRegistry(self.__project_config.get_vm_registry_dir_path())
         vm_meta_data = vm_registry.get_with_verifying(self.__vm_name)
@@ -6811,7 +6791,8 @@ def main():
                                action='store_true')
     parser_vm_run.add_argument("--vga_passthrough", help="Initiate VGA PCI passthrough to virtual machine",
                                action='store_true')
-    parser_vm_run.add_argument("--vga_audio_passthrough", help="Initiate VGA PCI audio (HDMI audio, DisplayPort audio) passthrough to virtual machine",
+    parser_vm_run.add_argument("--vga_audio_passthrough",
+                               help="Initiate VGA PCI audio (HDMI audio, DisplayPort audio) passthrough to virtual machine",
                                action='store_true')
     parser_vm_run.add_argument("--vm_platform", type=str,
                                help=f"QEMU platform: {', '.join(QemuPlatform.QEMU_PLATFORM_LIST)}",
