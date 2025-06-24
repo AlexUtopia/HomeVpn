@@ -2557,7 +2557,7 @@ class VmRegistry:
             raise Exception(
                 f'[Vm] Image "{result.get_image_path()}" EXISTS. Please change VM name')
         else:
-            result = VmMetaData(name, self.__vm_registry_dir_path)
+            result = VmMetaData(name, self.__vm_registry_dir_path / name)
 
         command_line = self.__create_image_command_line(result, image_size_in_gib)
         Logger.instance().debug(f"[Vm] Create image cmd: {command_line}")
