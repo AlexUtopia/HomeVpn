@@ -1371,7 +1371,7 @@ function sshd_setup() {
 }
 
 function pycharm_install() {
-    local PYCHARM="pycharm-community-2024.2"
+    local PYCHARM="pycharm-community-2025.1.2"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
     local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
@@ -1431,7 +1431,7 @@ function rdp_client_install() {
 }
 
 function winetricks_install_default() {
-   local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20240105.tar.gz"
+   local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20250102.tar.gz"
    local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/winetricks"
 
    rm -rf "${INSTALL_DIRECTORY}" || return $?
@@ -2008,7 +2008,7 @@ function waydroid_setup() {
 # https://www.etallen.com/cpuid.html
 function cpuid_setup() {
     local CPUID_PACKAGE="cpuid"
-    local CPUID_SOURCES_URL="https://www.etallen.com/cpuid/cpuid-20250316.src.tar.gz"
+    local CPUID_SOURCES_URL="https://www.etallen.com/cpuid/cpuid-20250513.src.tar.gz"
     local MACHINE=""
     MACHINE=$(uname -m) || return $?
     if [[ "${MACHINE}" == "i386" || "${MACHINE}" == "i686" || "${MACHINE}" == "x86_64" || "${MACHINE}" == "ia64" ]]; then
@@ -2055,7 +2055,8 @@ function main_install_full_packages() {
 
     main_install_dev_packages "${PACKAGE_LIST}" || return $?
 
-    pycharm_install || return $?
+    # Может быть не скачано из-за политики JetBrains по России
+    pycharm_install
     wine_install || return $?
     openvpn3_setup || return $?
     waydroid_setup || return $?
