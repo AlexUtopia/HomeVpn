@@ -218,7 +218,7 @@ if is_termux; then
     XFCE4_PACKAGE="xfce4 xfce4-terminal" # https://wiki.termux.com/wiki/Graphical_Environment
 fi
 
-RDP_SERVER_PACKAGE="xrdp"
+RDP_SERVER_PACKAGE="" # "xrdp"
 if is_msys; then
     RDP_SERVER_PACKAGE=""
 fi
