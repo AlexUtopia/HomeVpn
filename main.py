@@ -964,7 +964,7 @@ class CurrentOs:
     @staticmethod
     def is_bios_boot():
         if CurrentOs.is_linux():
-            return not Path("sys/firmware/efi").exists()
+            return not Path("/sys/firmware/efi").exists()
         elif CurrentOs.is_windows():
             return False
         return False
@@ -972,7 +972,7 @@ class CurrentOs:
     @staticmethod
     def is_uefi_boot():
         if CurrentOs.is_linux():
-            return Path("sys/firmware/efi").exists()
+            return Path("/sys/firmware/efi").exists()
         elif CurrentOs.is_windows():
             return False
         return False
