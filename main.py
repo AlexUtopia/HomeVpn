@@ -6146,6 +6146,17 @@ class QemuPciPassthrough:
         return self.__vfio_pci.check_platform(qemu_platform)
 
 
+class QemuCpu:
+    def __init__(self):
+        pass
+
+    def get_qemu_parameters(self):
+        logical_cpu_count = psutil.cpu_count(logical=True)
+        if not logical_cpu_count:
+            logical_cpu_count = 1
+            Logger.instance().warning(f"[Cpu] logic cores count undefined, use {logical_cpu_count} core")
+        return {"-cpu": "host", "-smp": { "cpus": logical_cpu_count, "maxcpus": logical_cpu_count }}
+
 # fixme utopia Обеспечить возможность установки win11
 # https://serverfault.com/a/1096401/1120954
 # https://extralan.ru/?p=3060
@@ -6160,7 +6171,7 @@ class VirtualMachine:
                  vm_meta_data,
                  qemu_serial=None, qemu_logging=None,
                  qemu_platform=None, qemu_vga=None, qemu_pci_passthrough=None, qemu_cdrom=QemuCdRom(),
-                 qemu_builtin_kbd_and_mouse_passthrough=None):
+                 qemu_builtin_kbd_and_mouse_passthrough=None, qemu_cpu=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
@@ -6171,6 +6182,7 @@ class VirtualMachine:
         self.__qemu_pci_passthrough = qemu_pci_passthrough
         self.__qemu_cdrom = QemuCdRom() if qemu_cdrom is None else qemu_cdrom
         self.__qemu_builtin_kbd_and_mouse_passthrough = qemu_builtin_kbd_and_mouse_passthrough
+        self.__qemu_cpu = QemuCpu() if qemu_cpu is None else qemu_cpu
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -6192,7 +6204,6 @@ class VirtualMachine:
                               self.__network(),
                               self.__other(),
                               self.__disk(),
-                              self.__cpu(),
                               self.__get_qemu_vga_command_line(),
                               self.__qemu_pci_passthrough_command_line(),
                               self.__usb(),
@@ -6200,7 +6211,8 @@ class VirtualMachine:
                               self.__get_qemu_serial_command_line(),
                               self.__get_qemu_logging_command_line(),
                               self.__get_qemu_cdrom_command_line(),
-                              self.__get_qemu_builtin_kbd_and_mouse_passthrough_command_line()
+                              self.__get_qemu_builtin_kbd_and_mouse_passthrough_command_line(),
+                              self.__get_qemu_cpu_command_line()
                               ]
         return " ".join(command_parts_list)
 
@@ -6251,10 +6263,6 @@ class VirtualMachine:
         # https://unix.stackexchange.com/questions/426652/connect-to-running-qemu-instance-with-qemu-monitor
         return "-monitor telnet:127.0.0.1:55555,server,nowait"
 
-    def __cpu(self):
-        # CPU который поддерживается Windows 11 Icelake-Server-v5
-        return "-cpu host -smp 4,sockets=1,cores=2,threads=2,maxcpus=4"
-
     def __usb(self):
         usb_device_array = [
             (0x045e, 0x00db),  # Клавиатура Microsoft # Natural Ergonomic Keyboard 4000 v 1.0
@@ -6301,6 +6309,11 @@ class VirtualMachine:
         if self.__qemu_builtin_kbd_and_mouse_passthrough is None:
             return ""
         return self.__serializer.serialize(self.__qemu_builtin_kbd_and_mouse_passthrough.get_qemu_parameters())
+
+    def __get_qemu_cpu_command_line(self):
+        if self.__qemu_cpu is None:
+            return ""
+        return self.__serializer.serialize(self.__qemu_cpu.get_qemu_parameters())
 
 
 class VmRunner:
