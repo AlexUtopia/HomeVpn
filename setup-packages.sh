@@ -28,6 +28,8 @@
 
 # https://unix.stackexchange.com/a/306115
 
+MY_DIR="$(dirname "$(readlink -f "${0}")")"
+
 set -x # Раскомментировать для отладки
 
 
@@ -117,13 +119,6 @@ if is_termux; then
     GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
 fi
 
-GLOBAL_CONFIG_PYTHON_VERSION="python3.11"
-if is_termux; then
-    GLOBAL_CONFIG_SMBD_TCP_PORTS="python3"
-elif is_msys; then
-    GLOBAL_CONFIG_SMBD_TCP_PORTS="python3"
-fi
-
 ### Global config end
 
 
@@ -136,6 +131,7 @@ TERMUX_SPECIFIC_PACKAGES="termux-tools termux-api proot"
 
 ### Minimal packages begin
 
+GIT_PACKAGE="git"
 CURL_PACKAGE="curl"
 TAR_PACKAGE="tar"
 PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
@@ -166,13 +162,6 @@ elif is_msys; then
 fi
 MAKE_PACKAGE="make"
 
-PYTHON3_PACKAGE="${GLOBAL_CONFIG_PYTHON_VERSION} python3-pip ${GLOBAL_CONFIG_PYTHON_VERSION}-venv ${GLOBAL_CONFIG_PYTHON_VERSION}-dev"
-if is_termux; then
-    PYTHON3_PACKAGE="python python-pip"
-elif is_msys; then
-    PYTHON3_PACKAGE="python python-pip"
-fi
-
 SSH_CLIENT_PACKAGE="openssh-client"
 if is_termux; then
     SSH_CLIENT_PACKAGE="openssh"
@@ -187,14 +176,14 @@ elif is_msys; then
     DNSMASQ_PACKAGE=""
 fi
 
-QEMU_SYSTEM_PACKAGE="qemu qemu-system qemu-kvm swtpm ovmf"
+QEMU_SYSTEM_PACKAGE="qemu-system qemu-kvm swtpm ovmf"
 if is_termux; then
     QEMU_SYSTEM_PACKAGE="qemu-system-x86-64 swtpm ovmf"
 elif is_msys; then
     QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
 fi
 
-MINIMAL_PACKAGES="${CURL_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${PYTHON3_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
+MINIMAL_PACKAGES="${GIT_PACKAGE} ${CURL_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE}"
 if is_termux; then
     MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
 fi
@@ -293,13 +282,6 @@ if is_msys; then
     FIREFOX_PACKAGE="" # Скачаем и установим приложение вручную
 fi
 
-OPEN_JDK_PACKAGE="openjdk-19-jdk" # Для запуска pycharm IDE
-if is_termux; then
-    OPEN_JDK_PACKAGE="openjdk-17"
-elif is_msys; then
-    OPEN_JDK_PACKAGE="" # Скачаем и установим приложение вручную
-fi
-
 QT_CREATOR_PACKAGE="qtcreator"
 if is_termux; then
     QT_CREATOR_PACKAGE="qt-creator"
@@ -319,11 +301,9 @@ if is_msys; then
     TRANSMISSION_PACKAGE="${MINGW_PACKAGE_PREFIX}-transmission-qt"
 fi
 
-FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${OPEN_JDK_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE} ${TRANSMISSION_PACKAGE}"
+FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE} ${TRANSMISSION_PACKAGE}"
 ### Full packages end
 
-
-PIP_PACKAGES="pystun3==1.0.0 python-iptables==1.0.0 psutil==5.9.1 netaddr==0.8.0 randmac==0.1 transmission-rpc==4.2.0 semantic_version==2.10.0 os-release==1.0.1 requests==2.32.3 grequests==0.7.0 PySocks==1.7.1 py-cpuinfo==9.0.0 python-crontab==3.2.0"
 
 ### System API begin
 
@@ -1013,18 +993,19 @@ function package_manager_is_package_available_from_repository() {
 
 ### System package manager end
 
-function pip_update() {
-    if is_termux || is_msys; then
-        return 0
-    fi
-    ${GLOBAL_CONFIG_PYTHON_VERSION} -m pip install --upgrade pip || return $?
-    return 0
-}
-
 function pip_install_packages() {
-    for pip_package in ${1}; do
-        ${GLOBAL_CONFIG_PYTHON_VERSION} -m pip install "${pip_package}" --force-reinstall --ignore-installed || return $?
-    done
+    PYTHON_EXECUTABLE="${1}"
+
+    local CURRENT_USER=""
+    CURRENT_USER="$(logname)" || return $?
+    local VENV_DIR_PATH="${MY_DIR}/.venv"
+    local VENV_ACTIVATE_FILE_PATH="${VENV_DIR_PATH}/bin/activate"
+    local REQUIREMENTS_FILE_PATH="${MY_DIR}/requirements.txt"
+
+    sudo --user="${CURRENT_USER}" "${PYTHON_EXECUTABLE}" -m venv "${VENV_DIR_PATH}" && \
+        source "${VENV_ACTIVATE_FILE_PATH}" && \
+        pip install -r "${REQUIREMENTS_FILE_PATH}" --force-reinstall --ignore-installed && \
+        deactivate || return $?
     return 0
 }
 
@@ -1342,6 +1323,32 @@ function firewall_accept_udp_traffic_for_port() {
 ### System firewall end
 
 
+function python_install() {
+    local PYTHON_VERSION="3"
+
+    if package_manager_is_apt; then
+        if ! is_termux; then
+            PYTHON_VERSION="3.13"
+            # https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
+            add-apt-repository -y "ppa:deadsnakes/ppa" || return $?
+            apt update || return $?
+        fi
+    fi
+
+    local PYTHON_PACKAGE_LIST="python${PYTHON_VERSION} python3-pip python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev"
+    if is_termux; then
+        PYTHON_PACKAGE_LIST="python python-pip"
+    elif is_msys; then
+        PYTHON_PACKAGE_LIST="python python-pip"
+    fi
+
+    package_manager_install_packages "${PYTHON_PACKAGE_LIST}" || return $?
+
+    local PYTHON_EXECUTABLE="python${PYTHON_VERSION}"
+    pip_install_packages "${PYTHON_EXECUTABLE}" || return $?
+    return 0
+}
+
 
 # fixme utopia Добавим поддержку "X11Forwarding yes" в "$PREFIX/etc/ssh/sshd_config" (termux)
 # https://www.reddit.com/r/termux/comments/bd5kz4/x_windows_remote_display/
@@ -1370,6 +1377,22 @@ function sshd_setup() {
     return 0
 }
 
+function openjdk_install() {
+    if is_msys; then # Скачаем и установим приложение вручную
+        return 0
+    fi
+
+    local OPEN_JDK_PACKAGE_SUFFIX="-jdk"
+    if is_termux; then
+        OPEN_JDK_PACKAGE_SUFFIX=""
+    fi
+
+    package_manager_install_packages "openjdk-21${OPEN_JDK_PACKAGE_SUFFIX}" || \
+    package_manager_install_packages "openjdk-19${OPEN_JDK_PACKAGE_SUFFIX}" || \
+    package_manager_install_packages "openjdk-17${OPEN_JDK_PACKAGE_SUFFIX}" || return $?
+    return 0
+}
+
 function pycharm_install() {
     local PYCHARM="pycharm-community-2025.1.2"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
@@ -1380,6 +1403,8 @@ function pycharm_install() {
         echo "WARNING: Pycharm \"${PYCHARM}\" already installed"
         return 0
     fi
+
+    openjdk_install || return $?
 
     make_dirs "${INSTALL_DIRECTORY}" || return $?
 
@@ -2026,12 +2051,9 @@ function cpuid_setup() {
 function main_install_min_packages() {
     local PACKAGE_LIST="${1}"
 
-    package_manager_update_and_upgrade || return $?
-
     package_manager_install_packages "${PACKAGE_LIST}" || return $?
+    python_install || return $?
     service_init || return $?
-    pip_update || return $?
-    pip_install_packages "${PIP_PACKAGES}" || return $?
 
     openvpn_setup || return $?
     cpuid_setup || return $?

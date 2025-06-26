@@ -485,7 +485,7 @@ sudo ./build-client.sh <имя_пользователя>
 
 ```bash
 
-sudo python3.11 main.py run
+sudo run_cmd.sh run
 
 ```
 
@@ -493,7 +493,7 @@ sudo python3.11 main.py run
 
 ```bash
 
-python3.11 main.py user_ovpn <имя_пользователя>
+run_cmd.sh user_ovpn <имя_пользователя>
 
 ```
 
@@ -713,7 +713,7 @@ NAT удастся обойти если:
 
 ```bash
 
-$ python3.11 main.py check
+$ run_cmd.sh check
 STUN server: stun.l.google.com:19302
 NAT type: Full Cone
 UDP hole punching: True
