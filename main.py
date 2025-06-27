@@ -106,9 +106,9 @@ class RegexConstants:
     ASCII_PRINTABLE = "\\x20-\\x7E"
     ASCII_PRINTABLE_CHARACTER_SET = f"[{ASCII_PRINTABLE}]"
 
-    ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", "\."), ("[", "\["), ("]", "\]"), ("(", "\("),
-                                      (")", "\)"), ("$", "\$"), ("-", "\-"), (">", "\>"),
-                                      ("<", "\<"), ("|", "\|"), ("?", "\?"), ("^", "\^")]
+    ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", r"\."), ("[", r"\["), ("]", r"\]"), ("(", r"\("),
+                                      (")", r"\)"), ("$", r"\$"), ("-", r"\-"), (">", r"\>"),
+                                      ("<", r"\<"), ("|", r"\|"), ("?", r"\?"), ("^", r"\^")]
 
     @staticmethod
     def atomic_group(value):
@@ -193,7 +193,7 @@ class BitUtils:
     @staticmethod
     def __get_regex_for_check_int(base, prefix):
         BitUtils.__check_base(base)
-        return f"^(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}$"
+        return fr"^(?>\+|-|){prefix}[{BitUtils.BASE_DIGIT_LIST[0]}-{BitUtils.BASE_DIGIT_LIST[base - 1]}]{{1,{BitUtils.get_digit_count_max(base)}}}$"
 
     @staticmethod
     def get_int_with_check(val, bit_count=BIT_COUNT_MAX, signed=True, base=DECIMAL_BASE):
@@ -477,7 +477,7 @@ class StringAsciiWords(str):
 
     @staticmethod
     def get_regex():
-        return f"[\w \-,.]+"
+        return fr"[\w \-,.]+"
 
 
 class BaseParser:
@@ -691,13 +691,13 @@ class LinuxKernelVersion(BaseParser):
         is_capture = True
         tmp = LinuxKernelVersion()
         result = ""
-        result += f"{tmp.get_regex_for(LinuxKernelVersion.__MAJOR, is_capture)}\."
-        result += f"{tmp.get_regex_for(LinuxKernelVersion.__MINOR, is_capture)}"
-        result += f"(?>\.{tmp.get_regex_for(LinuxKernelVersion.__REVISION, is_capture)})?"
-        result += f"(?>-rc{tmp.get_regex_for(LinuxKernelVersion.__RELEASE_CANDIDATE, is_capture)})?"
-        result += f"(?>-{tmp.get_regex_for(LinuxKernelVersion.__PATCH, is_capture)})?"
-        result += f"(?>[\.-]{tmp.get_regex_for(LinuxKernelVersion.__VARIANT, is_capture)})?"
-        result += f"$"
+        result += fr"{tmp.get_regex_for(LinuxKernelVersion.__MAJOR, is_capture)}\."
+        result += fr"{tmp.get_regex_for(LinuxKernelVersion.__MINOR, is_capture)}"
+        result += fr"(?>\.{tmp.get_regex_for(LinuxKernelVersion.__REVISION, is_capture)})?"
+        result += fr"(?>-rc{tmp.get_regex_for(LinuxKernelVersion.__RELEASE_CANDIDATE, is_capture)})?"
+        result += fr"(?>-{tmp.get_regex_for(LinuxKernelVersion.__PATCH, is_capture)})?"
+        result += fr"(?>[\.-]{tmp.get_regex_for(LinuxKernelVersion.__VARIANT, is_capture)})?"
+        result += "$"
         return result
 
 
@@ -1218,12 +1218,12 @@ class Cpu(BaseParser):
     @staticmethod
     def __get_regex():
         tmp = Cpu()
-        result = "\(uarch synth\) ="
-        result += f" {tmp.get_regex_for(Cpu.__CPU_VENDOR)}"
-        result += f"(?: {tmp.get_regex_for(Cpu.__CPU_UARCH)})?"
-        result += f"(?> \\{{{tmp.get_regex_for(Cpu.__CPU_UARCH_FAMILY)}\\}})?"
-        result += f"(?>, {tmp.get_regex_for(Cpu.__CPU_TECHNICAL_PROCESS)})?"
-        result += f"$"
+        result = r"\(uarch synth\) ="
+        result += fr" {tmp.get_regex_for(Cpu.__CPU_VENDOR)}"
+        result += fr"(?: {tmp.get_regex_for(Cpu.__CPU_UARCH)})?"
+        result += fr"(?> \{{{tmp.get_regex_for(Cpu.__CPU_UARCH_FAMILY)}\}})?"
+        result += fr"(?>, {tmp.get_regex_for(Cpu.__CPU_TECHNICAL_PROCESS)})?"
+        result += "$"
         return result
 
     @staticmethod
@@ -2333,32 +2333,29 @@ class VmName:
 
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
 class VmMetaData:
-    class Parameter(pathlib.Path):
-        _flavour = type(pathlib.Path())._flavour
+    class Parameter:
 
-        def __new__(cls, name, parameter_dir_path, value_default_handler=lambda: None,
+        def __init__(self, name, parameter_dir_path, value_default_handler=lambda: None,
                     deserialize_handler=lambda x: str(x),
                     serialize_handler=lambda x: x,
                     encoding="UTF8", extension="txt"):
-            instance = super(VmMetaData.Parameter, cls).__new__(cls, pathlib.Path(
-                str(parameter_dir_path)).resolve() / f"{name}.{extension}")
-            instance.__value_default_handler = value_default_handler
-            instance.__deserialize_handler = deserialize_handler
-            instance.__serialize_handler = serialize_handler
-            instance.__encoding = encoding
-            return instance
+            self.path = pathlib.Path(str(parameter_dir_path)).resolve() / f"{name}.{extension}"
+            self.__value_default_handler = value_default_handler
+            self.__deserialize_handler = deserialize_handler
+            self.__serialize_handler = serialize_handler
+            self.__encoding = encoding
 
         def exists(self):
-            return super(VmMetaData.Parameter, self).exists() and super(VmMetaData.Parameter, self).resolve().is_file()
+            return self.path.exists() and self.path.resolve().is_file()
 
         def raise_exception_if_non_exists(self):
             if not self.exists():
-                raise Exception(f'[Vm] Parameter "{self.name}" in "{self}" NOT FOUND')
+                raise Exception(f'[Vm] Parameter "{self.path.name}" in "{self}" NOT FOUND')
 
         def load(self):
             result = self.__value_default_handler() if self.__value_default_handler else None
             if self.exists():
-                result = self.read_text(encoding=self.__encoding)
+                result = self.path.read_text(encoding=self.__encoding)
                 if self.__deserialize_handler:
                     result = self.__deserialize_handler(result)
             elif result is not None:
@@ -2367,10 +2364,13 @@ class VmMetaData:
             return result
 
         def store(self, value):
-            self.parent.mkdir(parents=True, exist_ok=True)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
             if self.__serialize_handler:
                 value = self.__serialize_handler(value)
-            self.write_text(str(value), encoding=self.__encoding)
+            self.path.write_text(str(value), encoding=self.__encoding)
+
+        def makedirs(self):
+            self.path.parent.mkdir(parents=True, exist_ok=True)
 
     IMAGE_EXTENSION = "img"
 
@@ -2416,10 +2416,10 @@ class VmMetaData:
         return self.__image_path.raise_exception_if_non_exists()
 
     def get_name(self):
-        return self.__image_path.stem
+        return self.__image_path.path.stem
 
     def get_image_path(self):
-        return pathlib.Path(self.__image_path)
+        return self.__image_path.path
 
     def image_exists(self):
         return self.__image_path.exists()
@@ -2472,7 +2472,7 @@ class VmMetaData:
         return self.get_image_path().parent / "data"
 
     def make_dirs(self):
-        self.__image_path.parent.mkdir(parents=True, exist_ok=True)
+        self.__image_path.makedirs()
         self.get_working_dir_path().mkdir(parents=True, exist_ok=True)
 
 
@@ -3426,10 +3426,10 @@ class PciAddress(BaseParser):
         result = ""
         if is_start_end_of_line:
             result += "^"
-        result += f"(?>{tmp.get_regex_for(PciAddress.__DOMAIN, is_capture)}:)?"
-        result += f"{tmp.get_regex_for(PciAddress.__BUS, is_capture)}:"
-        result += f"{tmp.get_regex_for(PciAddress.__SLOT, is_capture)}\."
-        result += f"{tmp.get_regex_for(PciAddress.__FUNC, is_capture)}"
+        result += fr"(?>{tmp.get_regex_for(PciAddress.__DOMAIN, is_capture)}:)?"
+        result += fr"{tmp.get_regex_for(PciAddress.__BUS, is_capture)}:"
+        result += fr"{tmp.get_regex_for(PciAddress.__SLOT, is_capture)}\."
+        result += fr"{tmp.get_regex_for(PciAddress.__FUNC, is_capture)}"
         if is_start_end_of_line:
             result += "$"
         return result
@@ -3512,7 +3512,7 @@ class Pci(BaseParser):
 
         @staticmethod
         def get_regex():
-            return "Capabilities: \[[0-9A-Fa-f]{2}\] Express"
+            return r"Capabilities: \[[0-9A-Fa-f]{2}\] Express"
 
     # https://github.com/pciutils/pciutils/blob/master/ls-ecaps.c#L266
     class AcsCapability(int):
@@ -3521,7 +3521,7 @@ class Pci(BaseParser):
 
         @staticmethod
         def get_regex():
-            return "Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Access Control Services"
+            return r"Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Access Control Services"
 
     # https://github.com/pciutils/pciutils/blob/master/ls-ecaps.c#L381
     class SriovCapability(int):
@@ -3530,7 +3530,7 @@ class Pci(BaseParser):
 
         @staticmethod
         def get_regex():
-            return "Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Single Root I/O Virtualization \(SR-IOV\)"
+            return r"Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Single Root I/O Virtualization \(SR-IOV\)"
 
     __ADDRESS = "address"
     __CLASS_NAME = "class_name"
@@ -3827,26 +3827,26 @@ class Pci(BaseParser):
     def __get_regex():
         tmp = Pci()
         result = ""
-        result += f"{tmp.get_regex_for(Pci.__ADDRESS)} "
-        result += f"{tmp.get_regex_for(Pci.__CLASS_NAME)} "
-        result += f"\[{tmp.get_regex_for(Pci.__CLASS_CODE)}]: "
-        result += f"{tmp.get_regex_for(Pci.__DEVICE_NAME)} "
-        result += f"\[{tmp.get_regex_for(Pci.__VENDOR_ID)}:{tmp.get_regex_for(Pci.__DEVICE_ID)}\] "
-        result += f"\(rev {tmp.get_regex_for(Pci.__REVISION)}\)"
-        result += f"(?> \(prog-if {tmp.get_regex_for(Pci.__PROG_IF)} \[.*\]\))?"
+        result += fr"{tmp.get_regex_for(Pci.__ADDRESS)} "
+        result += fr"{tmp.get_regex_for(Pci.__CLASS_NAME)} "
+        result += fr"\[{tmp.get_regex_for(Pci.__CLASS_CODE)}]: "
+        result += fr"{tmp.get_regex_for(Pci.__DEVICE_NAME)} "
+        result += fr"\[{tmp.get_regex_for(Pci.__VENDOR_ID)}:{tmp.get_regex_for(Pci.__DEVICE_ID)}\] "
+        result += fr"\(rev {tmp.get_regex_for(Pci.__REVISION)}\)"
+        result += fr"(?> \(prog-if {tmp.get_regex_for(Pci.__PROG_IF)} \[.*\]\))?"
         result += "|"
-        result += f"Subsystem: {tmp.get_regex_for(Pci.__SUBSYSTEM_NAME)} "
-        result += f"\[{tmp.get_regex_for(Pci.__SUBSYSTEM_VENDOR_ID)}:{tmp.get_regex_for(Pci.__SUBSYSTEM_ID)}\]"
+        result += fr"Subsystem: {tmp.get_regex_for(Pci.__SUBSYSTEM_NAME)} "
+        result += fr"\[{tmp.get_regex_for(Pci.__SUBSYSTEM_VENDOR_ID)}:{tmp.get_regex_for(Pci.__SUBSYSTEM_ID)}\]"
         result += "|"
-        result += f"IOMMU group: {tmp.get_regex_for(Pci.__IOMMU_GROUP)}"
+        result += fr"IOMMU group: {tmp.get_regex_for(Pci.__IOMMU_GROUP)}"
         result += "|"
-        result += f"Kernel driver in use: {tmp.get_regex_for(Pci.__KERNEL_MODULE)}"
+        result += fr"Kernel driver in use: {tmp.get_regex_for(Pci.__KERNEL_MODULE)}"
         result += "|"
-        result += f"{tmp.get_regex_for(Pci.__IS_PCI_EXPRESS)}"
+        result += fr"{tmp.get_regex_for(Pci.__IS_PCI_EXPRESS)}"
         result += "|"
-        result += f"{tmp.get_regex_for(Pci.__IS_ACS)}"
+        result += fr"{tmp.get_regex_for(Pci.__IS_ACS)}"
         result += "|"
-        result += f"{tmp.get_regex_for(Pci.__IS_SRIOV)}"
+        result += fr"{tmp.get_regex_for(Pci.__IS_SRIOV)}"
         return result
 
     @staticmethod
@@ -5740,7 +5740,7 @@ echo "message 2"
 
 exit {self.__EXIT_CODE}   
 """
-        script1.set(test_script)
+        script1.set(test_script, set_executable=True)
         async_script_runner.add(str(script1))
         result = await async_script_runner.run_all()
         pid, exit_code = result[0]
