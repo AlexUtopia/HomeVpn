@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import copy
+import enum
 import hashlib
 import shutil
 import atexit
@@ -66,7 +67,7 @@ class Logger:
             self.__logger.addHandler(file_handler)
 
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setFormatter(logging.Formatter(fmt='{asctime} {levelname: <8} {message}', style='{'))
+            console_handler.setFormatter(logging.Formatter(fmt='{message}', style='{'))
             self.__logger.addHandler(console_handler)
 
         def get_logger(self):
@@ -2336,9 +2337,9 @@ class VmMetaData:
     class Parameter:
 
         def __init__(self, name, parameter_dir_path, value_default_handler=lambda: None,
-                    deserialize_handler=lambda x: str(x),
-                    serialize_handler=lambda x: x,
-                    encoding="UTF8", extension="txt"):
+                     deserialize_handler=lambda x: str(x),
+                     serialize_handler=lambda x: x,
+                     encoding="UTF8", extension="txt"):
             self.path = pathlib.Path(str(parameter_dir_path)).resolve() / f"{name}.{extension}"
             self.__value_default_handler = value_default_handler
             self.__deserialize_handler = deserialize_handler
@@ -3413,9 +3414,41 @@ class PciAddress(BaseParser):
         return self.__str__()
 
     def __eq__(self, other):
-        if id(self) == id(other):
+        if other is self:
             return True
         return self.__str__() == other.__str__()
+
+    def __lt__(self, other):
+        if not isinstance(other, PciAddress):
+            other = PciAddress(other)
+        if self.domain < other.domain:
+            return True
+        elif self.domain > other.domain:
+            return False
+        elif self.bus < other.bus:
+            return True
+        elif self.bus > other.bus:
+            return False
+        elif self.slot < other.slot:
+            return True
+        elif self.slot > other.slot:
+            return False
+        elif self.func < other.func:
+            return True
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __le__(self, other):
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other):
+        return not self.__le__(other)
+
+    def __ge__(self, other):
+        return not self.__lt__(other)
 
     def get_address_without_domain(self):
         return f"{self.bus}:{self.slot}.{self.func}"
@@ -3503,6 +3536,60 @@ class UnitTest_PciAddress(unittest.TestCase):
                 self.assertEqual(str(pci_address_type(initiate)), test_data["expected"])
 
 
+# fixme utopia Add unit tests
+class PciPassthroughMode(enum.Enum):
+    ## Пробросить только указанные PCI устройства
+    NONE = 0
+
+    ## Пробросить только указанные PCI устройства
+    DEFAULT = 1
+
+    ## Пробросить устройства которые не входят в IOMMU группы с непробрасываемыми устройствами
+    FLEX = 2
+
+    ## Пробросить все устройства IOMMU групп куда входят целевые PCI устройства
+    # @warning Использовать с особой осторожностью и пониманием дела
+    FORCE = 3
+
+    def __str__(self):
+        return self.name.lower()
+
+    def __repr__(self):
+        return str(self)
+
+    @staticmethod
+    def argparse(s):
+        try:
+            return PciPassthroughMode[s.strip().upper()]
+        except KeyError:
+            return s
+
+    def __bool__(self):
+        return not self.is_none()
+
+    def is_none(self):
+        return self == PciPassthroughMode.NONE
+
+    def is_default(self):
+        return self == PciPassthroughMode.DEFAULT
+
+    def is_flex(self):
+        return self == PciPassthroughMode.FLEX
+
+    def is_force(self):
+        return self == PciPassthroughMode.FORCE
+
+    @staticmethod
+    def get_help(indent_spaces_count = 1):
+        indent = " " * int(indent_spaces_count)
+        result = ""
+        result += f"{indent}   {PciPassthroughMode.NONE} - PCI device(s) not passthrough\n"
+        result += f"{indent}{PciPassthroughMode.DEFAULT} - Passthrough only target PCI device(s) if possible\n"
+        result += f"{indent}   {PciPassthroughMode.FLEX} - Passthrough only those PCI device(s) that can be passthroughed\n"
+        result += f"{indent}  {PciPassthroughMode.FORCE} - Passthrough all devices of IOMMU groups that include target PCI device(s)"
+        return result
+
+
 # https://en.wikipedia.org/wiki/PCI_configuration_space
 class Pci(BaseParser):
     # https://github.com/pciutils/pciutils/blob/master/ls-caps.c#L1457
@@ -3530,7 +3617,7 @@ class Pci(BaseParser):
 
         @staticmethod
         def get_regex():
-            return r"Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Single Root I/O Virtualization \(SR-IOV\)"
+            return r"Capabilities: \[[0-9A-Fa-f]{3} v\d+\] Single Root I\/O Virtualization \(SR-IOV\)"
 
     __ADDRESS = "address"
     __CLASS_NAME = "class_name"
@@ -3574,6 +3661,20 @@ class Pci(BaseParser):
     def __init__(self):
         super(Pci, self).__init__(self.__TABLE)
 
+    def __eq__(self, other):
+        if other is self:
+            return True
+        elif isinstance(other, Pci):
+            return self.get_address_and_id() == other.get_address_and_id()
+        else:
+            return False
+
+    def __hash__(self):
+        return self.get_address_and_id().__hash__()
+
+    def get_short_description(self, indent_spaces_count=0):
+        return f"{' ' * indent_spaces_count}[{self.get_address_and_id()}] ({self.class_name}) {self.device_name}"
+
     def _init(self, pci):
         self.copy_if(pci)
 
@@ -3590,6 +3691,9 @@ class Pci(BaseParser):
 
     def get_id(self):
         return f"{self.vendor_id}:{self.device_id}"
+
+    def get_address_and_id(self):
+        return f"{self.address}_{self.get_id()}"
 
     def get_kernel_parameters(self):
         return [{"module_blacklist": self.kernel_module}]
@@ -3645,7 +3749,7 @@ class Pci(BaseParser):
         return result
 
     def get_rom_file_name(self):
-        return f"{self.address}_{self.get_id()}_rom.bin"
+        return f"{self.get_address_and_id()}_rom.bin"
 
     def __get_sysfs_pci_device_path(self):
         return f"/sys/bus/pci/devices/{self.address}"
@@ -3662,13 +3766,27 @@ class Pci(BaseParser):
                     return False
         return True
 
-    class PciList(list):
+    class PciList(set):
 
         def __str__(self):
-            return json.dumps(self, default=lambda o: o.get_fields_as_dict())
+            return json.dumps(list(self), default=lambda o: o.get_fields_as_dict())
 
         def __repr__(self):
             return self.__str__()
+
+        def get_short_description(self, pci_list_other, indent_spaces_count=0):
+            intersection = "\n".join([pci.get_short_description(indent_spaces_count=indent_spaces_count) for pci in
+                                      self.intersection(pci_list_other)])
+            if intersection:
+                intersection = f"\n{intersection}"
+
+            difference = "\n".join([pci.get_short_description(indent_spaces_count=indent_spaces_count) for pci in
+                                    self.difference(pci_list_other)])
+            if difference:
+                difference = f"\n{difference}"
+
+            indent = ' ' * int(indent_spaces_count / 2)
+            return f"{indent}For passthrough:{intersection}\n{indent}Other:{difference}"
 
         @staticmethod
         def from_string(model):
@@ -3678,7 +3796,7 @@ class Pci(BaseParser):
         def from_json(model):
             result = Pci.PciList()
             for item in model:
-                result.append(Pci.from_json(item))
+                result.add(Pci.from_json(item))
             return result
 
         def is_iommu_enabled(self):
@@ -3702,7 +3820,7 @@ class Pci(BaseParser):
             result = {}
             for pci in self:
                 if pci.iommu_group in result:
-                    result[pci.iommu_group].append(pci)
+                    result[pci.iommu_group].add(pci)
                 else:
                     result[pci.iommu_group] = Pci.PciList([pci])
             return result
@@ -3713,34 +3831,43 @@ class Pci(BaseParser):
                 return pci_table_by_iommu_group[iommu_group]
             return Pci.PciList()
 
-        def get_vga_list(self, with_consumer=False):
+        def get_vga_list(self, mode=PciPassthroughMode.DEFAULT, vga_audio_passthrough_mode=PciPassthroughMode.NONE):
             result = Pci.PciList()
             for pci in self:
                 if pci.class_code.is_vga():
-                    result.append(pci)
-                    if with_consumer:
-                        result.extend(self.get_by_address(pci.get_child_address_list()))
+                    result.add(pci)
+
+            vga_audio_list = result.__get_vga_audio_list(mode=vga_audio_passthrough_mode)
+
+            result = self.get_passedthrough(result, mode=mode)
+            result.update(vga_audio_list)
             return result
 
-        def get_usb_host_list(self):
+        def __get_vga_audio_list(self, mode=PciPassthroughMode.NONE):
+            result = Pci.PciList()
+            for pci in self:
+                result.update(self.get_passedthrough(self.get_by_address(pci.get_child_address_list()), mode=mode))
+            return result
+
+        def get_usb_host_list(self, mode=PciPassthroughMode.DEFAULT):
             result = Pci.PciList()
             for pci in self:
                 if pci.class_code.is_usb_host_controller(pci.prog_if):
-                    result.append(pci)
-            return result
+                    result.add(pci)
+            return self.get_passedthrough(result, mode=mode)
 
-        def get_isa_bridge_list(self):
+        def get_isa_bridge_list(self, mode=PciPassthroughMode.DEFAULT):
             result = Pci.PciList()
             for pci in self:
                 if pci.class_code.is_isa_bridge():
-                    result.append(pci)
-            return result
+                    result.add(pci)
+            return self.get_passedthrough(result, mode=mode)
 
         def get_pci_list_by_capabilities(self, is_pci_express=None, is_acs=None, is_sriov=None):
             result = Pci.PciList()
             for pci in self:
                 if pci.is_capabilities(is_pci_express=is_pci_express, is_acs=is_acs, is_sriov=is_sriov):
-                    result.append(pci)
+                    result.add(pci)
             return result
 
         def is_each_device_in_its_own_iommu_group(self, pci_list_for_checking):
@@ -3761,27 +3888,49 @@ class Pci(BaseParser):
             result = True
             for iommu_group, pci_list in pci_list_for_checking.get_pci_table_by_iommu_group().items():
                 if iommu_group in pci_table_by_iommu_group:
-                    if len(pci_table_by_iommu_group[iommu_group]) != len(pci_list):
+                    pci_list_by_iommu_group = pci_table_by_iommu_group[iommu_group]
+                    if len(pci_list_by_iommu_group) != len(pci_list):
                         if len(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_acs=False)) != len(
                                 pci_list):
                             # Условия для применения ACS override patch: PCI Express устройство (is_pci_express=True) и отсутствие capability ACS (is_acs=False)
                             # https://github.com/benbaker76/linux-acs-override/blob/main/6.3/acso.patch#L101
                             result = None
-                            pci_list_problematic = "\n".join(
-                                [f"    [{pci.get_id()}|{pci.address}] ({pci.class_name}) {pci.device_name}" for pci in
-                                 pci_list])
                             Logger.instance().warning(
-                                f"ACS override patch not applicable for PCI devices in IOMMU group {iommu_group}:\n{pci_list_problematic}")
+                                f"[-] IOMMU group {iommu_group} will NOT be passedthrough completely:\n{pci_list_by_iommu_group.get_short_description(indent_spaces_count=4, pci_list_other=pci_list)}\n")
                         else:
                             if result is not None:
                                 result = False
+                            Logger.instance().info(
+                                f"[o] IOMMU group {iommu_group} will be passedthrough completely if ASC override applicable:\n{pci_list_by_iommu_group.get_short_description(indent_spaces_count=4, pci_list_other=pci_list)}\n")
+                    else:
+                        Logger.instance().info(
+                            f"[+] IOMMU group {iommu_group} will be passedthrough completely:\n{pci_list_by_iommu_group.get_short_description(indent_spaces_count=4, pci_list_other=pci_list_by_iommu_group)}\n")
+            return result
+
+        def get_passedthrough(self, target_pci_list, mode=PciPassthroughMode.DEFAULT):
+            mode = PciPassthroughMode(mode)
+            if mode.is_none():
+                return []
+
+            if mode.is_default():
+                return target_pci_list
+
+            result = []
+            pci_table_by_iommu_group = self.get_pci_table_by_iommu_group()
+            for iommu_group, pci_list in target_pci_list.get_pci_table_by_iommu_group().items():
+                if iommu_group in pci_table_by_iommu_group:
+                    if mode.is_flex():
+                        if len(pci_table_by_iommu_group[iommu_group]) == len(pci_list):
+                            result.extend(pci_table_by_iommu_group[iommu_group])
+                    elif mode.is_force():
+                        result.extend(pci_table_by_iommu_group[iommu_group])
             return result
 
         def get_by_address(self, pci_address_list):
             result = Pci.PciList()
             for pci in self:
                 if pci.address in pci_address_list:
-                    result.append(pci)
+                    result.add(pci)
             return result
 
         def get_pci_id_list(self):
@@ -3804,23 +3953,27 @@ class Pci(BaseParser):
             for pci in self:
                 pci.check_platform(qemu_platform)
 
+
+        def to_sorted_list(self):
+            result = list(self)
+            result.sort(key=lambda x: x.address)
+            return result
+
     @staticmethod
-    def get_list():
+    def get_list(lspci_output_mock=None):
         result = Pci.PciList()
 
-        lspci_out = Pci.__run_lspci()
+        lspci_out = lspci_output_mock if lspci_output_mock else Pci.__run_lspci()
 
+        pci = None
         for match in re.finditer(Pci.__get_regex(), lspci_out, flags=re.MULTILINE):
             for key, value in match.groupdict().items():
                 if value is not None:
                     if key == Pci.__ADDRESS:
-                        result.append(Pci())
-
-                    pci = result[-1]
+                        if pci:
+                            result.add(Pci.__build(pci))
+                        pci = Pci()
                     pci[key] = value
-
-        for index, pci in enumerate(result):
-            result[index] = Pci.__build(pci)
         return result
 
     @staticmethod
@@ -3829,10 +3982,10 @@ class Pci(BaseParser):
         result = ""
         result += fr"{tmp.get_regex_for(Pci.__ADDRESS)} "
         result += fr"{tmp.get_regex_for(Pci.__CLASS_NAME)} "
-        result += fr"\[{tmp.get_regex_for(Pci.__CLASS_CODE)}]: "
+        result += fr"\[{tmp.get_regex_for(Pci.__CLASS_CODE)}\]: "
         result += fr"{tmp.get_regex_for(Pci.__DEVICE_NAME)} "
-        result += fr"\[{tmp.get_regex_for(Pci.__VENDOR_ID)}:{tmp.get_regex_for(Pci.__DEVICE_ID)}\] "
-        result += fr"\(rev {tmp.get_regex_for(Pci.__REVISION)}\)"
+        result += fr"\[{tmp.get_regex_for(Pci.__VENDOR_ID)}:{tmp.get_regex_for(Pci.__DEVICE_ID)}\]"
+        result += fr"(?> \(rev {tmp.get_regex_for(Pci.__REVISION)}\))?"
         result += fr"(?> \(prog-if {tmp.get_regex_for(Pci.__PROG_IF)} \[.*\]\))?"
         result += "|"
         result += fr"Subsystem: {tmp.get_regex_for(Pci.__SUBSYSTEM_NAME)} "
@@ -3862,6 +4015,19 @@ class Pci(BaseParser):
         if cmd_result.returncode:
             return ""
         return cmd_result.stdout
+
+
+class UnitTest_Pci(unittest.TestCase):
+    ENCODING = "UTF8"
+
+    def test_lspci_output_parse(self):
+        for path in (pathlib.Path(str(Path("test_data"))) / "UnitTest_Pci" / "lspci_output_parse").iterdir():
+            lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=UnitTest_Pci.ENCODING)
+            expected_result = Pci.PciList.from_string((path / "expected_result.txt").read_text(encoding=UnitTest_Pci.ENCODING))
+
+            result = Pci.get_list(lspci_output_mock=lspci_output_mock)
+            self.assertEqual(result, expected_result)
+            self.assertEqual(str(result.to_sorted_list()), str(expected_result.to_sorted_list()))
 
 
 class VfioPci:
@@ -4115,7 +4281,7 @@ class VgaPciIntel(Pci):
         return result
 
     def is_other_vga_disable(self):
-        return self.__check_passthrough_in_legacy_mode()
+        return True  # self.__check_passthrough_in_legacy_mode() # Идея не работает из-за невозможности запуска gtk
 
     def check_platform(self, qemu_platform):
         if self.__check_passthrough_in_legacy_mode():
@@ -4133,6 +4299,11 @@ class VgaPciIntel(Pci):
             if CurrentOs.is_bios_boot() and qemu_platform.is_bios_boot():
                 return
             if CurrentOs.is_uefi_boot() and qemu_platform.is_uefi_boot():  # fixme utopia Проверить на Ноутбуке Галины
+                # https://lore.kernel.org/all/20250312102929.329ff4f5.alex.williamson@redhat.com/T/
+                # https://gitlab.com/qemu-project/qemu/-/issues/1538
+                # Так в UPT режиме работать будет?
+                return
+            if CurrentOs.is_uefi_boot() and qemu_platform.is_bios_boot():
                 # https://lore.kernel.org/all/20250312102929.329ff4f5.alex.williamson@redhat.com/T/
                 # https://gitlab.com/qemu-project/qemu/-/issues/1538
                 # Так в UPT режиме работать будет?
@@ -6155,7 +6326,8 @@ class QemuCpu:
         if not logical_cpu_count:
             logical_cpu_count = 1
             Logger.instance().warning(f"[Cpu] logic cores count undefined, use {logical_cpu_count} core")
-        return {"-cpu": "host", "-smp": { "cpus": logical_cpu_count, "maxcpus": logical_cpu_count }}
+        return {"-cpu": "host", "-smp": {"cpus": logical_cpu_count, "maxcpus": logical_cpu_count}}
+
 
 # fixme utopia Обеспечить возможность установки win11
 # https://serverfault.com/a/1096401/1120954
@@ -6318,10 +6490,10 @@ class VirtualMachine:
 
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
-                 initiate_vga_passthrough=False,
-                 initiate_vga_audio_passthrough=False,
-                 initiate_usb_host_passthrough=False,
-                 initiate_isa_bridge_passthrough=False,
+                 initiate_vga_passthrough=PciPassthroughMode.NONE,
+                 initiate_vga_audio_passthrough=PciPassthroughMode.NONE,
+                 initiate_usb_host_passthrough=PciPassthroughMode.NONE,
+                 initiate_isa_bridge_passthrough=PciPassthroughMode.NONE,
                  initiate_builtin_kbd_and_mouse_passthrough=False,
                  asc_override_patched_kernel=False,
                  qemu_pci_passthrough=None, grub_config_backup_path=None,
@@ -6330,10 +6502,10 @@ class VmRunner:
         self.__project_config = project_config
         self.__startup = startup
         self.__block_internet_access = bool(block_internet_access)
-        self.__initiate_vga_passthrough = bool(initiate_vga_passthrough)
-        self.__initiate_vga_audio_passthrough = bool(initiate_vga_audio_passthrough)
-        self.__initiate_usb_host_passthrough = bool(initiate_usb_host_passthrough)
-        self.__initiate_isa_bridge_passthrough = bool(initiate_isa_bridge_passthrough)
+        self.__initiate_vga_passthrough = PciPassthroughMode(initiate_vga_passthrough)
+        self.__initiate_vga_audio_passthrough = PciPassthroughMode(initiate_vga_audio_passthrough)
+        self.__initiate_usb_host_passthrough = PciPassthroughMode(initiate_usb_host_passthrough)
+        self.__initiate_isa_bridge_passthrough = PciPassthroughMode(initiate_isa_bridge_passthrough)
         self.__initiate_builtin_kbd_and_mouse_passthrough = bool(initiate_builtin_kbd_and_mouse_passthrough)
         self.__asc_override_patched_kernel = bool(asc_override_patched_kernel)
         self.__qemu_pci_passthrough = qemu_pci_passthrough
@@ -6368,9 +6540,9 @@ class VmRunner:
             return
 
         pci_list_for_passthrough = Pci.PciList()
-        pci_list_for_passthrough.extend(self.__get_pci_vga_list_for_passthrough(pci_list))
-        pci_list_for_passthrough.extend(self.__get_usb_host_list_for_passthrough(pci_list))
-        pci_list_for_passthrough.extend(self.__get_isa_bridge_list_for_passthrough(pci_list))
+        pci_list_for_passthrough.update(self.__get_pci_vga_list_for_passthrough(pci_list))
+        pci_list_for_passthrough.update(self.__get_usb_host_list_for_passthrough(pci_list))
+        pci_list_for_passthrough.update(self.__get_isa_bridge_list_for_passthrough(pci_list))
 
         if len(pci_list_for_passthrough) == 0:
             Logger.instance().warning("[Vm] PCI passthrough devices NOT FOUND")
@@ -6420,24 +6592,25 @@ class VmRunner:
 
         args = [self.__vm_name, "--bi" if self.__block_internet_access else "",
                 {"--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)),
-                 "--grub_config_backup_path": str(grub_config_backup_path)},
-                "--vga_passthrough" if self.__initiate_vga_passthrough else "",
-                "--usb_host_passthrough" if self.__initiate_usb_host_passthrough else "",
-                "--isa_bridge_passthrough" if self.__initiate_isa_bridge_passthrough else "",
+                 "--grub_config_backup_path": str(grub_config_backup_path),
+                 "--vga_passthrough": self.__initiate_vga_passthrough,
+                 "--vga_audio_passthrough": self.__initiate_vga_audio_passthrough,
+                 "--usb_host_passthrough": self.__initiate_usb_host_passthrough,
+                 "--isa_bridge_passthrough": self.__initiate_isa_bridge_passthrough},
                 "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else ""]
 
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        Power.reboot()
+        # Power.reboot()
 
     def after_reboot(self):
-        sleep_sec = 30
+        sleep_sec = 15
         # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
         Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
         time.sleep(sleep_sec)
-        dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
-        Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
+        # dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
+        # Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
         Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
 
         for i in range(1):
@@ -6455,7 +6628,8 @@ class VmRunner:
             return Pci.PciList()
 
         # VGA + Audio controller
-        result = pci_list.get_vga_list(with_consumer=self.__initiate_vga_audio_passthrough)
+        result = pci_list.get_vga_list(mode=self.__initiate_vga_passthrough,
+                                       vga_audio_passthrough_mode=self.__initiate_vga_audio_passthrough)
         if len(result) == 0:
             Logger.instance().warning("[Vm] PCI VGA NOT FOUND")
             return Pci.PciList()
@@ -6464,25 +6638,15 @@ class VmRunner:
             Logger.instance().warning("[Vm] Multiple VGA FOUND")  # fixme utopia Дать выбрать какой VGA пробрасывать
             return Pci.PciList()
 
-        iommu_group = result[0].iommu_group
-        if iommu_group is None:
-            Logger.instance().warning("[Vm] VGA does not include to iommu group")
-            return Pci.PciList()
-
         return result
 
     def __get_usb_host_list_for_passthrough(self, pci_list):
         if not self.__initiate_usb_host_passthrough:
             return Pci.PciList()
 
-        result = pci_list.get_usb_host_list()
+        result = pci_list.get_usb_host_list(mode=self.__initiate_usb_host_passthrough)
         if len(result) == 0:
             Logger.instance().warning("[Vm] PCI USB Host NOT FOUND")
-            return Pci.PciList()
-
-        iommu_group = result[0].iommu_group
-        if iommu_group is None:
-            Logger.instance().warning("[Vm] PCI USB host does not include to iommu group")
             return Pci.PciList()
 
         return result
@@ -6491,14 +6655,9 @@ class VmRunner:
         if not self.__initiate_isa_bridge_passthrough:
             return Pci.PciList()
 
-        result = pci_list.get_isa_bridge_list()
+        result = pci_list.get_isa_bridge_list(mode=self.__initiate_isa_bridge_passthrough)
         if len(result) == 0:
             Logger.instance().warning("[Vm] PCI ISA bridge NOT FOUND")
-            return Pci.PciList()
-
-        iommu_group = result[0].iommu_group
-        if iommu_group is None:
-            Logger.instance().warning("[Vm] PCI ISA bridge does not include to iommu group")
             return Pci.PciList()
 
         return result
@@ -6798,29 +6957,34 @@ def main():
     parser_vm_create.add_argument("vm_name", type=str, help="Virtual machine name")
     parser_vm_create.add_argument("--image_size", type=int, help="Virtual machine image size in gibibytes", default=50)
 
-    parser_vm_run = subparsers.add_parser("vm_run", help="Run virtual machine")
+    parser_vm_run = subparsers.add_parser("vm_run", help="Run virtual machine",
+                                          formatter_class=argparse.RawTextHelpFormatter)
     parser_vm_run.add_argument("vm_name", type=str, help="Virtual machine name")
     parser_vm_run.add_argument("--bi", help="Block internet access, but not the local network",
                                action='store_true')
-    parser_vm_run.add_argument("--vga_passthrough", help="Initiate VGA PCI passthrough to virtual machine",
-                               action='store_true')
-    parser_vm_run.add_argument("--vga_audio_passthrough",
-                               help="Initiate VGA PCI audio (HDMI audio, DisplayPort audio) passthrough to virtual machine",
-                               action='store_true')
     parser_vm_run.add_argument("--vm_platform", type=str,
-                               help=f"QEMU platform: {', '.join(QemuPlatform.QEMU_PLATFORM_LIST)}",
+                               help=f"QEMU platform (default %(default)s): {', '.join(QemuPlatform.QEMU_PLATFORM_LIST)}",
                                default=QemuPlatform.QEMU_PLATFORM_I440FX_BIOS)
-    parser_vm_run.add_argument("--usb_host_passthrough",
-                               help="Initiate all USB host PCI passthrough to virtual machine",
-                               action='store_true')
-    parser_vm_run.add_argument("--isa_bridge_passthrough",
-                               help="Initiate ISA bridge (laptop keyboard, touchpad and others) PCI passthrough to virtual machine",
-                               action='store_true')
+    parser_vm_run.add_argument("--vga_passthrough", type=PciPassthroughMode.argparse, choices=list(PciPassthroughMode),
+                               help=f"Initiate VGA PCI passthrough to virtual machine (default %(default)s)\n{PciPassthroughMode.get_help()}",
+                               default=PciPassthroughMode.NONE)
+    parser_vm_run.add_argument("--vga_audio_passthrough", type=PciPassthroughMode.argparse,
+                               choices=list(PciPassthroughMode),
+                               help=f"Initiate VGA PCI audio (HDMI audio, DisplayPort audio) passthrough to virtual machine (default %(default)s)\n{PciPassthroughMode.get_help()}",
+                               default=PciPassthroughMode.NONE)
+    parser_vm_run.add_argument("--usb_host_passthrough", type=PciPassthroughMode.argparse,
+                               choices=list(PciPassthroughMode),
+                               help=f"Initiate all USB host (UHCI/OHCI/EHCI/XHCI) PCI passthrough to virtual machine (default %(default)s)\n{PciPassthroughMode.get_help()}",
+                               default=PciPassthroughMode.NONE)
+    parser_vm_run.add_argument("--isa_bridge_passthrough", type=PciPassthroughMode.argparse,
+                               choices=list(PciPassthroughMode),
+                               help=f"Initiate ISA bridge (laptop keyboard, touchpad and others) PCI passthrough to virtual machine (default %(default)s)\n{PciPassthroughMode.get_help()}",
+                               default=PciPassthroughMode.NONE)
     parser_vm_run.add_argument("--builtin_kbd_and_mouse_passthrough",
-                               help="Builtin keyboard and mouse passthrough. Relevant for laptops. If use --isa_bridge_passthrough parameter --builtin_kbd_and_mouse_passthrough parameter disabled because PCI ISA bridge usually contains connection to builtin keyboard and mouse. Recommended use this parameter with --vga_passthrough",
+                               help="Builtin keyboard and mouse passthrough. Relevant for laptops.\nIf use --isa_bridge_passthrough parameter --builtin_kbd_and_mouse_passthrough parameter will be disabled\nbecause PCI ISA bridge usually contains connection to builtin keyboard and mouse.\nRecommended use this parameter with --vga_passthrough",
                                action='store_true')
     parser_vm_run.add_argument("--asc_override_patched_kernel",
-                               help="Download, install and configure ASC override patched Linux kernel. See https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF#Bypassing_the_IOMMU_groups_(ACS_override_patch)",
+                               help="Download, install and configure ASC override patched Linux kernel.\nSee https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF#Bypassing_the_IOMMU_groups_(ACS_override_patch)",
                                action='store_true')
     parser_vm_run.add_argument("--os_distr_path", type=Path, help="OS distributive iso image path")
     parser_vm_run.add_argument("--qemu_pci_passthrough", type=QemuPciPassthrough,
@@ -6888,6 +7052,9 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        print(Pci.get_list().to_sorted_list())
+        return
+
         print(VmRegistry("./vm").list())
         return
 

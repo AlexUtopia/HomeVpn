@@ -606,7 +606,7 @@ https://wiki.archlinux.org/title/Running_GUI_applications_as_root#Using_xhost
 
 ```bash
 
-xhost +SI:localuser:root 
+xhost +SI:localuser:root
 
 ```
 
