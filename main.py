@@ -3276,6 +3276,13 @@ class PciClassCode(UInt16Hex):
     BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
     BASE_CLASS_VGA = 0x03
 
+    BASE_CLASS_MULTIMEDIA_DEVICE = 0x04
+    BASE_CLASS_MULTIMEDIA_DEVICE_VIDEO_VENDOR_SPECIFIC = 0x00
+    BASE_CLASS_MULTIMEDIA_DEVICE_AUDIO_VENDOR_SPECIFIC = 0x01
+    BASE_CLASS_MULTIMEDIA_DEVICE_COMPUTER_TELEPHONY_VENDOR_SPECIFIC = 0x02
+    BASE_CLASS_MULTIMEDIA_DEVICE_HIGH_DEFINITION_AUDIO_V1 = 0x03
+    BASE_CLASS_MULTIMEDIA_DEVICE_OTHER_VENDOR_SPECIFIC = 0x80
+
     BASE_CLASS_BRIDGE_DEVICE = 0x06
     BASE_CLASS_BRIDGE_DEVICE_HOST = 0x00
     BASE_CLASS_BRIDGE_DEVICE_ISA = 0x01
@@ -3290,6 +3297,9 @@ class PciClassCode(UInt16Hex):
     BASE_CLASS_BRIDGE_DEVICE_INFINIBAND_TO_PCI = 0x0A
 
     BASE_CLASS_SERIAL_BUS_CONTROLLER = 0x0C
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_IEEE1394 = 0x00
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_ACCESS = 0x01
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_SSA = 0x02
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB = 0x03
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI = 0x00
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_OHCI = 0x10
@@ -3297,8 +3307,8 @@ class PciClassCode(UInt16Hex):
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI = 0x30
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_WITHOUT_SPECIFIC_PROG_IF = 0x80
     BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_DEVICE = 0xFE
-
     BASE_CLASS_SERIAL_BUS_CONTROLLER_SMBUS = 0x05
+    BASE_CLASS_SERIAL_BUS_CONTROLLER_CAN = 0x09
 
     def __new__(cls, class_code=0):
         return super(PciClassCode, cls).__new__(cls, class_code)
@@ -3313,6 +3323,10 @@ class PciClassCode(UInt16Hex):
     def is_vga(self):
         return self.get_base_class() == self.BASE_CLASS_VGA or (
                 self.get_base_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
+
+    def is_audio(self):
+        return (self.get_base_class() == self.BASE_CLASS_MULTIMEDIA_DEVICE) and (
+                self.get_sub_class() == self.BASE_CLASS_MULTIMEDIA_DEVICE_HIGH_DEFINITION_AUDIO_V1)
 
     def is_usb_host_controller(self, prog_if):
         return self.is_usb_uhci_controller(prog_if) or self.is_usb_ohci_controller(
@@ -3335,21 +3349,90 @@ class PciClassCode(UInt16Hex):
                 prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI)
 
     def is_usb(self):
-        return self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER and self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB
+        return (self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER) and (
+                    self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB)
 
     def is_isa_bridge(self):
-        return self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE and self.get_sub_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA
+        return (self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE) and (
+                    self.get_sub_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA)
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
-class PciVendorId(UInt16Hex):
+class PciVidPid(BaseParser):
     INTEL = 0x8086
 
-    def __new__(cls, vendor_id=0):
-        return super(PciVendorId, cls).__new__(cls, vendor_id)
+    __VID = "vid"
+    __PID = "pid"
+
+    __SEPARATOR = ":"
+
+    __TABLE = {__VID: {"type": UInt16Hex},
+               __PID: {"type": UInt16Hex}}
+
+    def __init__(self, vid_pid=None):
+        super(PciVidPid, self).__init__(PciVidPid.__TABLE)
+        if vid_pid is None:  # Создать умолчательный объект
+            return
+
+        if self.copy_if(vid_pid):  # Копирующий конструктор (в том числе если pci_address - это словарь)
+            return
+
+        # Создать объект из строки, например, из результата разбора выхлопа lspci
+        if self.init_fields(re.compile(PciVidPid.get_regex(is_capture=True, is_start_end_of_line=False)),
+                            vid_pid):
+            return
+
+        raise Exception(f"[PciAddress] Format FAIL: {vid_pid} | {type(vid_pid)}")
+
+    def __str__(self):
+        return f"{self.vid}{self.__SEPARATOR}{self.pid}"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __eq__(self, other):
+        if other is self:
+            return True
+        return self.__str__() == other.__str__()
+
+    def __lt__(self, other):
+        if not isinstance(other, PciAddress):
+            other = PciAddress(other)
+        if self.vid < other.vid:
+            return True
+        elif self.vid > other.vid:
+            return False
+        elif self.pid < other.pid:
+            return True
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __le__(self, other):
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other):
+        return not self.__le__(other)
+
+    def __ge__(self, other):
+        return not self.__lt__(other)
+
+    @staticmethod
+    def get_regex(is_capture=False, is_start_end_of_line=False):
+        tmp = PciVidPid()
+        result = ""
+        if is_start_end_of_line:
+            result += "^"
+        result += fr"{tmp.get_regex_for(PciVidPid.__VID, is_capture)}{PciVidPid.__SEPARATOR}"
+        result += fr"{tmp.get_regex_for(PciVidPid.__PID, is_capture)}"
+        if is_start_end_of_line:
+            result += "$"
+        return result
 
     def is_intel(self):
-        return self.__int__() == self.INTEL
+        return self.vid == self.INTEL
 
 
 def get_all_subclasses(cls):
@@ -3580,7 +3663,7 @@ class PciPassthroughMode(enum.Enum):
         return self == PciPassthroughMode.FORCE
 
     @staticmethod
-    def get_help(indent_spaces_count = 1):
+    def get_help(indent_spaces_count=1):
         indent = " " * int(indent_spaces_count)
         result = ""
         result += f"{indent}   {PciPassthroughMode.NONE} - PCI device(s) not passthrough\n"
@@ -3623,12 +3706,10 @@ class Pci(BaseParser):
     __CLASS_NAME = "class_name"
     __CLASS_CODE = "class_code"
     __DEVICE_NAME = "device_name"
-    __VENDOR_ID = "vendor_id"
     __DEVICE_ID = "device_id"
     __REVISION = "revision"
     __PROG_IF = "prog_if"
     __SUBSYSTEM_NAME = "subsystem_name"
-    __SUBSYSTEM_VENDOR_ID = "subsystem_vendor_id"
     __SUBSYSTEM_ID = "subsystem_id"
     __IOMMU_GROUP = "iommu_group"
     __KERNEL_MODULE = "kernel_module"
@@ -3640,13 +3721,11 @@ class Pci(BaseParser):
                __CLASS_NAME: {"type": String},
                __CLASS_CODE: {"type": PciClassCode},
                __DEVICE_NAME: {"type": String},
-               __VENDOR_ID: {"type": PciVendorId},
-               __DEVICE_ID: {"type": UInt16Hex},
+               __DEVICE_ID: {"type": PciVidPid},
                __REVISION: {"type": UInt8Hex},
                __PROG_IF: {"type": UInt8Hex},
                __SUBSYSTEM_NAME: {"type": String},
-               __SUBSYSTEM_VENDOR_ID: {"type": PciVendorId},
-               __SUBSYSTEM_ID: {"type": UInt16Hex},
+               __SUBSYSTEM_ID: {"type": PciVidPid},
                __IOMMU_GROUP: {"type": UInt8, "default": None},
                __KERNEL_MODULE: {"type": String},
                __IS_PCI_EXPRESS: {"type": PciExpressCapability},
@@ -3690,7 +3769,7 @@ class Pci(BaseParser):
         return Pci.__build(result)
 
     def get_id(self):
-        return f"{self.vendor_id}:{self.device_id}"
+        return self.device_id
 
     def get_address_and_id(self):
         return f"{self.address}_{self.get_id()}"
@@ -3709,24 +3788,6 @@ class Pci(BaseParser):
 
     def check_platform(self, qemu_platform):
         pass
-
-    def get_parent_address_list(self):
-        return self.__get_related_address_list("supplier")
-
-    def get_child_address_list(self):
-        return self.__get_related_address_list("consumer")
-
-    def __get_related_address_list(self, name):
-        if not CurrentOs.is_linux():
-            return []
-
-        result = list()
-        for path in pathlib.Path(self.__get_sysfs_pci_device_path()).glob(f"{name}:pci:*"):
-            try:
-                result.append(PciAddress(str(path.name)))
-            except Exception as ex:
-                pass
-        return result
 
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
@@ -3837,17 +3898,26 @@ class Pci(BaseParser):
                 if pci.class_code.is_vga():
                     result.add(pci)
 
-            vga_audio_list = result.__get_vga_audio_list(mode=vga_audio_passthrough_mode)
-
+            vga_audio_list = self.get_vga_audio_list(result, mode=vga_audio_passthrough_mode)
             result = self.get_passedthrough(result, mode=mode)
             result.update(vga_audio_list)
             return result
 
-        def __get_vga_audio_list(self, mode=PciPassthroughMode.NONE):
+        def get_vga_audio_list(self, pci_vga_list, mode=PciPassthroughMode.DEFAULT):
+            result = Pci.PciList()
+            for pci in pci_vga_list:
+                result.update(self.get_audio_list(subsystem_id=pci.subsystem_id, mode=mode))
+            return result
+
+        def get_audio_list(self, subsystem_id=None, mode=PciPassthroughMode.DEFAULT):
             result = Pci.PciList()
             for pci in self:
-                result.update(self.get_passedthrough(self.get_by_address(pci.get_child_address_list()), mode=mode))
-            return result
+                if pci.class_code.is_audio():
+                    if not subsystem_id:
+                        result.add(pci)
+                    elif subsystem_id == pci.subsystem_id:
+                        result.add(pci)
+            return self.get_passedthrough(result, mode=mode)
 
         def get_usb_host_list(self, mode=PciPassthroughMode.DEFAULT):
             result = Pci.PciList()
@@ -3953,7 +4023,6 @@ class Pci(BaseParser):
             for pci in self:
                 pci.check_platform(qemu_platform)
 
-
         def to_sorted_list(self):
             result = list(self)
             result.sort(key=lambda x: x.address)
@@ -3984,12 +4053,12 @@ class Pci(BaseParser):
         result += fr"{tmp.get_regex_for(Pci.__CLASS_NAME)} "
         result += fr"\[{tmp.get_regex_for(Pci.__CLASS_CODE)}\]: "
         result += fr"{tmp.get_regex_for(Pci.__DEVICE_NAME)} "
-        result += fr"\[{tmp.get_regex_for(Pci.__VENDOR_ID)}:{tmp.get_regex_for(Pci.__DEVICE_ID)}\]"
+        result += fr"\[{tmp.get_regex_for(Pci.__DEVICE_ID)}\]"
         result += fr"(?> \(rev {tmp.get_regex_for(Pci.__REVISION)}\))?"
         result += fr"(?> \(prog-if {tmp.get_regex_for(Pci.__PROG_IF)} \[.*\]\))?"
         result += "|"
         result += fr"Subsystem: {tmp.get_regex_for(Pci.__SUBSYSTEM_NAME)} "
-        result += fr"\[{tmp.get_regex_for(Pci.__SUBSYSTEM_VENDOR_ID)}:{tmp.get_regex_for(Pci.__SUBSYSTEM_ID)}\]"
+        result += fr"\[{tmp.get_regex_for(Pci.__SUBSYSTEM_ID)}\]"
         result += "|"
         result += fr"IOMMU group: {tmp.get_regex_for(Pci.__IOMMU_GROUP)}"
         result += "|"
@@ -4023,7 +4092,8 @@ class UnitTest_Pci(unittest.TestCase):
     def test_lspci_output_parse(self):
         for path in (pathlib.Path(str(Path("test_data"))) / "UnitTest_Pci" / "lspci_output_parse").iterdir():
             lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=UnitTest_Pci.ENCODING)
-            expected_result = Pci.PciList.from_string((path / "expected_result.txt").read_text(encoding=UnitTest_Pci.ENCODING))
+            expected_result = Pci.PciList.from_string(
+                (path / "expected_result.txt").read_text(encoding=UnitTest_Pci.ENCODING))
 
             result = Pci.get_list(lspci_output_mock=lspci_output_mock)
             self.assertEqual(result, expected_result)
@@ -4321,7 +4391,7 @@ class VgaPciIntel(Pci):
 
     @staticmethod
     def is_my_instance(pci):
-        return pci.class_code.is_vga() and pci.vendor_id.is_intel()
+        return pci.class_code.is_vga() and pci.device_id.is_intel()
 
     def __check_passthrough_in_legacy_mode(self):
         if self.__cpu.is_intel_above_broadwell():
