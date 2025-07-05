@@ -3374,7 +3374,7 @@ class PciVidPid(BaseParser):
         if vid_pid is None:  # Создать умолчательный объект
             return
 
-        if self.copy_if(vid_pid):  # Копирующий конструктор (в том числе если pci_address - это словарь)
+        if self.copy_if(vid_pid):  # Копирующий конструктор (в том числе если vid_pid - это словарь)
             return
 
         # Создать объект из строки, например, из результата разбора выхлопа lspci
@@ -3859,6 +3859,12 @@ class Pci(BaseParser):
             for item in model:
                 result.add(Pci.from_json(item))
             return result
+
+        def is_vfio_pci_applied(self):
+            for pci in self:
+                if pci.kernel_module and pci.kernel_module == "vfio-pci":
+                    return True
+            return False
 
         def is_iommu_enabled(self):
             return len(self.get_iommu_group_list()) == len(self)
@@ -5529,11 +5535,11 @@ class Normalizer:
         elif isinstance(config, list):
             for item in config:
                 self.__normalize_recursive(item, result_ref, key_list)
-        elif isinstance(config, str):  # Ключи без значений
+        else:  # Ключи без значений
             _key_list = key_list
             if not _key_list:
-                _key_list = [config]
-            result_ref[config] = Normalizer.EmptyValue()
+                _key_list = [str(config)]
+            result_ref[str(config)] = Normalizer.EmptyValue()
 
     def __normalize_recursive2(self, config, result_ref):
         if isinstance(config, dict):
@@ -7058,7 +7064,7 @@ def main():
                                action='store_true')
     parser_vm_run.add_argument("--os_distr_path", type=Path, help="OS distributive iso image path")
     parser_vm_run.add_argument("--qemu_pci_passthrough", type=QemuPciPassthrough,
-                               help="PCI VGA list for passthrough to virtual machine. Not for human use")
+                               help="PCI list for passthrough to virtual machine. Not for human use")
     parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
                                help="Grub config backup file path. Not for human use")
 
@@ -7122,7 +7128,10 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
-        print(Pci.get_list().to_sorted_list())
+        print(Pci.get_list().get_pci_id_list())
+        return
+
+        print(Pci.get_list().is_vfio_pci_applied())
         return
 
         print(VmRegistry("./vm").list())
