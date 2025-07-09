@@ -6709,7 +6709,7 @@ class VmRunner:
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])} {Shell().suppress_stdout_stderr()}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
-        # Power.reboot()
+        Power.reboot()
 
     def after_reboot(self):
         sleep_sec = 15
