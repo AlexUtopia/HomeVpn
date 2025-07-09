@@ -6436,6 +6436,14 @@ class QemuCpu:
         return {"-cpu": "host", "-smp": {"cpus": logical_cpu_count, "maxcpus": logical_cpu_count}}
 
 
+class QemuRtc:
+    def __init__(self):
+        pass
+
+    def get_qemu_parameters(self):
+        return {"-rtc": {"base": "localtime", "clock": "host"}}
+
+
 # fixme utopia Обеспечить возможность установки win11
 # https://serverfault.com/a/1096401/1120954
 # https://extralan.ru/?p=3060
@@ -6450,7 +6458,7 @@ class VirtualMachine:
                  vm_meta_data,
                  qemu_serial=None, qemu_logging=None,
                  qemu_platform=None, qemu_vga=None, qemu_pci_passthrough=None, qemu_cdrom=QemuCdRom(),
-                 qemu_builtin_kbd_and_mouse_passthrough=None, qemu_cpu=None):
+                 qemu_builtin_kbd_and_mouse_passthrough=None, qemu_cpu=None, qemu_rtc=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
@@ -6462,6 +6470,7 @@ class VirtualMachine:
         self.__qemu_cdrom = QemuCdRom() if qemu_cdrom is None else qemu_cdrom
         self.__qemu_builtin_kbd_and_mouse_passthrough = qemu_builtin_kbd_and_mouse_passthrough
         self.__qemu_cpu = QemuCpu() if qemu_cpu is None else qemu_cpu
+        self.__qemu_rtc = QemuRtc() if qemu_rtc is None else qemu_rtc
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -6491,7 +6500,8 @@ class VirtualMachine:
                               self.__get_qemu_logging_command_line(),
                               self.__get_qemu_cdrom_command_line(),
                               self.__get_qemu_builtin_kbd_and_mouse_passthrough_command_line(),
-                              self.__get_qemu_cpu_command_line()
+                              self.__get_qemu_cpu_command_line(),
+                              self.__get_qemu_rtc_command_line()
                               ]
         return " ".join(command_parts_list)
 
@@ -6593,6 +6603,11 @@ class VirtualMachine:
         if self.__qemu_cpu is None:
             return ""
         return self.__serializer.serialize(self.__qemu_cpu.get_qemu_parameters())
+
+    def __get_qemu_rtc_command_line(self):
+        if self.__qemu_rtc is None:
+            return ""
+        return self.__serializer.serialize(self.__qemu_rtc.get_qemu_parameters())
 
 
 class VmRunner:
