@@ -985,6 +985,34 @@ class CurrentOs:
         return CurrentOs.is_uefi_boot() and False
 
 
+class Shell:
+    def __init__(self):
+        pass
+
+    def suppress_stdout(self):
+        if CurrentOs.is_windows():
+            # https://www.robvanderwoude.com/redirection.php
+            return '> NUL'
+        else:
+            return '> "/dev/null"'
+
+    def suppress_stdout_stderr(self):
+        return f"{self.suppress_stdout()} 2>&1"
+
+    def get_script_file_extension(self):
+        if CurrentOs.is_windows():
+            return ".bat"
+        else:
+            return ".sh"
+
+    def make_script(self, script_body, is_debug=False):
+        if CurrentOs.is_windows():
+            utf8_encoding = 65001
+            return f'cpch {utf8_encoding}\n{"@echo off\n" if bool(is_debug) else ""}\n{script_body}\n'
+        else:
+            return f'#!/bin/bash\n{"set -x\n" if bool(is_debug) else ""}\n{script_body}\n'
+
+
 class LinuxKernel:
     LIQUORIX_KERNEL_SETUP_SCRIPT_URL = "https://liquorix.net/install-liquorix.sh"
 
@@ -3350,11 +3378,11 @@ class PciClassCode(UInt16Hex):
 
     def is_usb(self):
         return (self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER) and (
-                    self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB)
+                self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB)
 
     def is_isa_bridge(self):
         return (self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE) and (
-                    self.get_sub_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA)
+                self.get_sub_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA)
 
 
 # https://github.com/pciutils/pciutils/blob/master/pci.ids
@@ -5870,11 +5898,12 @@ class AsyncRunner:
         self.__runnable_descriptor_list_parallel = []
         self.__runnable_descriptor_list_sequential = []
 
-    def add(self, script_path_or_command, is_background_executing=False, shell=True):
+    def add(self, script_path_or_command, is_background_executing=False, shell=True, log_stdout=True,
+            log_stderr=True):
         if bool(is_background_executing):
-            self.__runnable_descriptor_list_parallel.append((script_path_or_command, shell))
+            self.__runnable_descriptor_list_parallel.append((script_path_or_command, shell, log_stdout, log_stderr))
         else:
-            self.__runnable_descriptor_list_sequential.append((script_path_or_command, shell))
+            self.__runnable_descriptor_list_sequential.append((script_path_or_command, shell, log_stdout, log_stderr))
 
     async def run_all(self):
         runnable_list = [
@@ -5887,7 +5916,7 @@ class AsyncRunner:
         return result[0] + result[1]
 
     async def __run(self, runnable_descriptor):
-        script_path_or_command, shell = runnable_descriptor
+        script_path_or_command, shell, log_stdout, log_stderr = runnable_descriptor
 
         Logger.instance().debug(f'[ScriptRun] Start "{script_path_or_command}"')
 
@@ -5905,7 +5934,8 @@ class AsyncRunner:
         pid = process.pid
         try:
             Logger.instance().debug(f'[ScriptRun] Started [pid={pid}] "{script_path_or_command}"')
-            await self.__run_parallel(self.__log_stdout(process.stdout), self.__log_stderr(process.stderr))
+            await self.__run_parallel(self.__log_stdout(process.stdout, is_log=log_stdout),
+                                      self.__log_stderr(process.stderr, is_log=log_stderr))
             return await self.__wait(process, script_path_or_command)
         except asyncio.CancelledError:
             process.kill()
@@ -5948,19 +5978,21 @@ class AsyncRunner:
     async def __pass_value(self, val):
         return val
 
-    async def __log_stdout(self, stdout_stream):
+    async def __log_stdout(self, stdout_stream, is_log):
         while True:
             buffer = await stdout_stream.readline()
             if buffer:
-                Logger.instance().debug(buffer.decode(self.STDOUT_DECODE))
+                if bool(is_log):
+                    Logger.instance().debug(buffer.decode(self.STDOUT_DECODE))
             else:
                 break
 
-    async def __log_stderr(self, stderr_stream):
+    async def __log_stderr(self, stderr_stream, is_log):
         while True:
             buffer = await stderr_stream.readline()
             if buffer:
-                Logger.instance().error(buffer.decode(self.STDERR_DECODE))
+                if bool(is_log):
+                    Logger.instance().error(buffer.decode(self.STDERR_DECODE))
             else:
                 break
 
@@ -6016,10 +6048,8 @@ class StartupCrontab:
         __IS_EXECUTE_ONCE_LABEL = "_once"
         __IS_EXECUTE_ONCE = "is_execute_once"
 
-        __EXTENSION = ".sh"
-
         __REGEX_MD5 = "[a-f0-9]{32}"
-        __REGEX = f"(?P<{__NAME}>{__REGEX_MD5})(?P<{__IS_BACKGROUND_EXECUTING}>{__IS_BACKGROUND_EXECUTING_LABEL})?(?P<{__IS_EXECUTE_ONCE}>{__IS_EXECUTE_ONCE_LABEL})?\\{__EXTENSION}"
+        __REGEX = f"(?P<{__NAME}>{__REGEX_MD5})(?P<{__IS_BACKGROUND_EXECUTING}>{__IS_BACKGROUND_EXECUTING_LABEL})?(?P<{__IS_EXECUTE_ONCE}>{__IS_EXECUTE_ONCE_LABEL})?\\{Shell().get_script_file_extension()}"
 
         def __init__(self, is_background_executing, is_execute_once, startup_script_content, name=None):
             self.is_background_executing = is_background_executing
@@ -6034,10 +6064,10 @@ class StartupCrontab:
             return self.__str__()
 
         def get(self):
-            return f"{self.name}{self.__get_background_executing_prefix()}{self.__get_execute_once_prefix()}{self.__EXTENSION}"
+            return f"{self.name}{self.__get_background_executing_prefix()}{self.__get_execute_once_prefix()}{Shell().get_script_file_extension()}"
 
         def get_wildcard(self):
-            return f"{self.name}*{self.__EXTENSION}"
+            return f"{self.name}*{Shell().get_script_file_extension()}"
 
         def __get_startup_script_name_by_content(self, startup_script_content):
             return hashlib.md5(str(startup_script_content).encode(self.__ENCODE)).hexdigest()
@@ -6069,6 +6099,7 @@ class StartupCrontab:
     def register_script(self, startup_script_content, is_background_executing=False,
                         is_execute_once=False):
         self.__register_supervisor_script()
+        startup_script_content = Shell().make_script(startup_script_content)
         startup_script_name = StartupCrontab.StartupScriptName(is_background_executing=is_background_executing,
                                                                is_execute_once=is_execute_once,
                                                                startup_script_content=startup_script_content)
@@ -6675,7 +6706,7 @@ class VmRunner:
                  "--isa_bridge_passthrough": self.__initiate_isa_bridge_passthrough},
                 "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else ""]
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])}'
+        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])} {Shell().suppress_stdout_stderr()}'
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
         # Power.reboot()
@@ -6695,6 +6726,7 @@ class VmRunner:
             except Exception as ex:
                 Logger.instance().exception(f"[Vm] {i} Run after reboot FAIL")
 
+        # fixme utopia В отдельный метод
         self.__grub.restore_from_backup()
         self.__grub.update()
         Power.reboot()
