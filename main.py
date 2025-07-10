@@ -4282,10 +4282,12 @@ class QemuPlatform:
     QEMU_PLATFORM_Q35_UEFI = "q35+uefi"
     QEMU_PLATFORM_Q35_UEFI_SECURE = "q35+uefi-secure"
 
+    DEFAULT = QEMU_PLATFORM_I440FX_BIOS
+
     QEMU_PLATFORM_LIST = [QEMU_PLATFORM_I440FX_BIOS, QEMU_PLATFORM_Q35_BIOS, QEMU_PLATFORM_Q35_UEFI,
                           QEMU_PLATFORM_Q35_UEFI_SECURE]
 
-    def __init__(self, vm_meta_data, vm_platform=QEMU_PLATFORM_I440FX_BIOS):
+    def __init__(self, vm_meta_data, vm_platform=DEFAULT):
         self.__vm_meta_data = vm_meta_data
         self.__vm_platform = vm_platform
         self.__tpm = None
@@ -6444,6 +6446,32 @@ class QemuRtc:
         return {"-rtc": {"base": "localtime", "clock": "host"}}
 
 
+class QemuRam:
+    DEFAULT = 4096
+    BYTES_IN_MIBIBYTE = 1024 * 1024
+
+    def __init__(self, ram_size_in_mib=DEFAULT):
+        self.__ram_size_in_mib = int(ram_size_in_mib)
+        if not bool(self.__ram_size_in_mib):
+            self.__ram_size_in_mib = self.DEFAULT
+        self.check()
+
+    def __str__(self):
+        return str(self.__ram_size_in_mib)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_qemu_parameters(self):
+        return {"-m": self.__ram_size_in_mib}
+
+    def check(self):
+        mem = psutil.virtual_memory()
+        size_in_bytes = self.__ram_size_in_mib * self.BYTES_IN_MIBIBYTE
+        if size_in_bytes > mem.available:
+            raise Exception(f"[Ram] Vm RAM size FAIL: required={size_in_bytes} (bytes), available={mem.available} (bytes)")
+
+
 # fixme utopia Обеспечить возможность установки win11
 # https://serverfault.com/a/1096401/1120954
 # https://extralan.ru/?p=3060
@@ -6458,7 +6486,7 @@ class VirtualMachine:
                  vm_meta_data,
                  qemu_serial=None, qemu_logging=None,
                  qemu_platform=None, qemu_vga=None, qemu_pci_passthrough=None, qemu_cdrom=QemuCdRom(),
-                 qemu_builtin_kbd_and_mouse_passthrough=None, qemu_cpu=None, qemu_rtc=None):
+                 qemu_builtin_kbd_and_mouse_passthrough=None, qemu_cpu=None, qemu_rtc=None, qemu_ram=None):
         self.__tap = Tap()
         self.__network_bridge = network_bridge
         self.__vm_meta_data = vm_meta_data
@@ -6471,6 +6499,7 @@ class VirtualMachine:
         self.__qemu_builtin_kbd_and_mouse_passthrough = qemu_builtin_kbd_and_mouse_passthrough
         self.__qemu_cpu = QemuCpu() if qemu_cpu is None else qemu_cpu
         self.__qemu_rtc = QemuRtc() if qemu_rtc is None else qemu_rtc
+        self.__qemu_ram = QemuRam() if qemu_ram is None else qemu_ram
         self.__serializer = QemuSerializer()
 
     def run(self):
@@ -6488,7 +6517,6 @@ class VirtualMachine:
         command_parts_list = [self.__qemu_command_line(),
                               self.__get_qemu_platform_command_line(),
                               self.__kvm_enable(),
-                              self.__ram_size(),
                               self.__network(),
                               self.__other(),
                               self.__disk(),
@@ -6501,7 +6529,8 @@ class VirtualMachine:
                               self.__get_qemu_cdrom_command_line(),
                               self.__get_qemu_builtin_kbd_and_mouse_passthrough_command_line(),
                               self.__get_qemu_cpu_command_line(),
-                              self.__get_qemu_rtc_command_line()
+                              self.__get_qemu_rtc_command_line(),
+                              self.__get_qemu_ram_command_line()
                               ]
         return " ".join(command_parts_list)
 
@@ -6518,10 +6547,6 @@ class VirtualMachine:
             return "-accel whpx"
         else:
             return "-accel tcg"
-
-    @staticmethod
-    def __ram_size():  # fixme utopia Использовать psutil
-        return "-m 8000"
 
     def __network(self):
         self.__tap.create()
@@ -6609,6 +6634,11 @@ class VirtualMachine:
             return ""
         return self.__serializer.serialize(self.__qemu_rtc.get_qemu_parameters())
 
+    def __get_qemu_ram_command_line(self):
+        if self.__qemu_ram is None:
+            return ""
+        return self.__serializer.serialize(self.__qemu_ram.get_qemu_parameters())
+
 
 class VmRunner:
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
@@ -6619,7 +6649,7 @@ class VmRunner:
                  initiate_builtin_kbd_and_mouse_passthrough=False,
                  asc_override_patched_kernel=False,
                  qemu_pci_passthrough=None, grub_config_backup_path=None,
-                 vm_platform=None, os_distr_path=None):
+                 vm_platform=None, ram=None, os_distr_path=None):
         self.__vm_name = vm_name
         self.__project_config = project_config
         self.__startup = startup
@@ -6632,6 +6662,7 @@ class VmRunner:
         self.__asc_override_patched_kernel = bool(asc_override_patched_kernel)
         self.__qemu_pci_passthrough = qemu_pci_passthrough
         self.__vm_platform = vm_platform
+        self.__ram = ram
         self.__os_distr_path = os_distr_path
         self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
         self.__serializer = ShellSerializer()
@@ -6712,8 +6743,12 @@ class VmRunner:
             return
         self.__grub.update()
 
+        # fixme utopia Параметры командной строки надо отдавать как есть в виде словаря, а словарь лишь дополнить
+        #  параметрами qemu_pci_passthrough и grub_config_backup_path
         args = [self.__vm_name, "--bi" if self.__block_internet_access else "",
-                {"--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)),
+                {"--vm_platform": self.__vm_platform if self.__vm_platform else QemuPlatform.DEFAULT,
+                 "-m": self.__ram if self.__ram else QemuRam.DEFAULT,
+                 "--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)),
                  "--grub_config_backup_path": str(grub_config_backup_path),
                  "--vga_passthrough": self.__initiate_vga_passthrough,
                  "--vga_audio_passthrough": self.__initiate_vga_audio_passthrough,
@@ -6821,7 +6856,7 @@ class VmRunner:
                             qemu_pci_passthrough=self.__qemu_pci_passthrough,
                             qemu_platform=QemuPlatform(vm_meta_data, self.__vm_platform),
                             qemu_cdrom=QemuCdRom(self.__os_distr_path, Virtio(self.__project_config).get_win_drivers()),
-                            qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough)
+                            qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough, qemu_ram=self.__ram)
         vm.run()
         tcp_forwarding_thread.join()
 
@@ -7086,8 +7121,12 @@ def main():
     parser_vm_run.add_argument("--bi", help="Block internet access, but not the local network",
                                action='store_true')
     parser_vm_run.add_argument("--vm_platform", type=str,
-                               help=f"QEMU platform (default %(default)s): {', '.join(QemuPlatform.QEMU_PLATFORM_LIST)}",
+                               help=f"QEMU platform (default %(default)s)",
+                               choices=list(QemuPlatform.QEMU_PLATFORM_LIST),
                                default=QemuPlatform.QEMU_PLATFORM_I440FX_BIOS)
+    parser_vm_run.add_argument("-m", type=QemuRam,
+                               help=f"Virtual machine RAM size in MibiBytes (default %(default)s MiB)",
+                               default=QemuRam())
     parser_vm_run.add_argument("--vga_passthrough", type=PciPassthroughMode.argparse, choices=list(PciPassthroughMode),
                                help=f"Initiate VGA PCI passthrough to virtual machine (default %(default)s)\n{PciPassthroughMode.get_help()}",
                                default=PciPassthroughMode.NONE)
@@ -7133,7 +7172,11 @@ def main():
 
     parser_test = subparsers.add_parser("test", help="TEST")
 
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+    except Exception as ex:
+        Logger.instance().error(ex)
+        return
     if args.command == "config":
         print(project_config.get_config_parameter_strong(args.config_parameter_name))
 
@@ -7164,6 +7207,7 @@ def main():
                  qemu_pci_passthrough=args.qemu_pci_passthrough,
                  grub_config_backup_path=args.grub_config_backup_path,
                  vm_platform=args.vm_platform,
+                 ram=args.m,
                  os_distr_path=args.os_distr_path).run()
 
     elif args.command == "vm_ssh_fwd":
