@@ -1401,7 +1401,7 @@ function openjdk_install() {
 }
 
 function pycharm_install() {
-    local PYCHARM="pycharm-community-2025.1.2"
+    local PYCHARM="pycharm-community-2025.1.3.1"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
     local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
     local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"

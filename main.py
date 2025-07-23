@@ -3,6 +3,7 @@ import asyncio
 import copy
 import enum
 import hashlib
+import multiprocessing
 import shutil
 import atexit
 import os.path
@@ -20,6 +21,7 @@ import urllib.request
 import urllib.parse
 import uuid
 
+import filelock
 import netaddr
 import os_release
 import randmac
@@ -2805,6 +2807,39 @@ class DnsDhcpProvider(DaemonManagerBase):
         return self.__interface_ip_interface.ip
 
 
+class LockDecorator:
+    def __init__(self, func, mutex_dir_path=Path(".tmp/network_bridge")):
+        self.__func = func
+        self.__interprocess_lock = filelock.FileLock(pathlib.Path(str(mutex_dir_path)) / "lock.lock")
+        self.__my_process_lock = filelock.FileLock(
+            pathlib.Path(str(mutex_dir_path)) / "processes" / self.__get_my_process_lock_file_name())
+
+    def create(self, *args, **kwargs):
+        with self.__interprocess_lock:
+            self.__func(*args, **kwargs)
+
+    def close(self, *args, **kwargs):
+        with self.__interprocess_lock:
+            if self.__check_close():
+                self.__func(*args, **kwargs)
+
+    def __check_close(self):
+        my_process_lock_file_path = pathlib.Path(self.__my_process_lock.lock_file)
+        for path in my_process_lock_file_path.parent.iterdir():
+            if path == my_process_lock_file_path:
+                lock = filelock.FileLock(path, timeout=0)
+                try:
+                    lock.acquire()
+                    if not lock.is_locked:
+                        return False
+                finally:
+                    lock.release()
+        return True
+
+    def __get_my_process_lock_file_name(self):
+        return f"{os.getpid()}.lock"
+
+
 class NetworkBridge:
     def __init__(self, name, bridge_ip_address_and_mask,
                  dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None, block_internet_access=False,
@@ -2825,33 +2860,38 @@ class NetworkBridge:
         atexit.register(self.close)
 
     def create(self):
-        if self.__interface.exists():
-            return
+        with named_semaphores.NamedSemaphore(str(self.__interface),
+                                             handle_existence=named_semaphores.NamedSemaphore.Flags.LINK_OR_CREATE) as sem:
+            if self.__interface.exists():
+                return
 
-        self.__set_ip_forwarding()
+            self.__set_ip_forwarding()
 
-        try:
-            subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
-            subprocess.check_call(
-                "ip addr add {} dev {}".format(self.__get_ip_address_and_mask(), self.__interface),
-                shell=True)
-            subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
+            try:
+                subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
+                subprocess.check_call(
+                    "ip addr add {} dev {}".format(self.__get_ip_address_and_mask(), self.__interface),
+                    shell=True)
+                subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
 
-            self.__setup_firewall()
-            self.__setup_bridge_dns_dhcp()
-        except Exception as ex:
-            Logger.instance().error(f"[NetworkBridge] FAIL: {ex}")
-            self.close()
+                self.__setup_firewall()
+                self.__setup_bridge_dns_dhcp()
+            except Exception as ex:
+                Logger.instance().error(f"[NetworkBridge] Create FAIL: {ex}")
+                # fixme utopia Семаофр не рекурсивный
+                self.close()
 
     def close(self):
-        if not self.__interface.exists():
-            return
+        with named_semaphores.NamedSemaphore(str(self.__interface),
+                                             handle_existence=named_semaphores.NamedSemaphore.Flags.LINK_OR_CREATE) as sem:
+            if not self.__interface.exists():
+                return
 
-        self.__clear_firewall()
-        self.__clear_bridge_dns_dhcp()
+            self.__clear_firewall()
+            self.__clear_bridge_dns_dhcp()
 
-        subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
-        subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
+            subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
+            subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
 
     def add_and_configure_tap(self, tap_if, vm_meta_data):
         self.__dns_dhcp_provider.add_host(vm_meta_data)
@@ -2884,6 +2924,40 @@ class NetworkBridge:
         ip_address = self.__bridge_ip_address_and_mask.ip
         ip_network = self.__bridge_ip_address_and_mask.network.prefixlen
         return "{}/{}".format(ip_address, ip_network)
+
+
+class UnitTest_FileLock(unittest.TestCase):
+    def test_abandoned_behavior(self):
+        p1, p1_queue = self.__make_and_start_process("p1")
+        self.assertEqual(p1_queue.get(), "p1 locked")
+
+        p2, p2_queue = self.__make_and_start_process("p2")
+
+        p1.kill()
+        p1.join()
+
+        self.assertEqual(p2_queue.get(), "p2 locked")
+        self.assertEqual(p2_queue.get(), "p2 exit")
+        p2.join()
+
+        p1_queue.close()
+        p2_queue.close()
+
+    def __make_and_start_process(self, name):
+        queue = multiprocessing.Queue()
+        process = multiprocessing.Process(target=UnitTest_FileLock.__worker, args=(name, queue))
+        process.start()
+        self.assertEqual(queue.get(), f"{name} started")
+        return process, queue
+
+    @staticmethod
+    def __worker(name, queue):
+        queue.put(f"{name} started")
+        lock = filelock.FileLock(str(Path("test_data/UnitTest_FileLocker/test_abandoned_behavior/test_lock.lock")))
+        with lock:
+            queue.put(f"{name} locked")
+            time.sleep(10)
+        queue.put(f"{name} exit")
 
 
 class TapName:
@@ -4124,7 +4198,7 @@ class UnitTest_Pci(unittest.TestCase):
     ENCODING = "UTF8"
 
     def test_lspci_output_parse(self):
-        for path in (pathlib.Path(str(Path("test_data"))) / "UnitTest_Pci" / "lspci_output_parse").iterdir():
+        for path in (pathlib.Path(str(Path("test_data"))) / "UnitTest_Pci" / "test_lspci_output_parse").iterdir():
             lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=UnitTest_Pci.ENCODING)
             expected_result = Pci.PciList.from_string(
                 (path / "expected_result.txt").read_text(encoding=UnitTest_Pci.ENCODING))
@@ -6469,7 +6543,8 @@ class QemuRam:
         mem = psutil.virtual_memory()
         size_in_bytes = self.__ram_size_in_mib * self.BYTES_IN_MIBIBYTE
         if size_in_bytes > mem.available:
-            raise Exception(f"[Ram] Vm RAM size FAIL: required={size_in_bytes} (bytes), available={mem.available} (bytes)")
+            raise Exception(
+                f"[Ram] Vm RAM size FAIL: required={size_in_bytes} (bytes), available={mem.available} (bytes)")
 
 
 # fixme utopia Обеспечить возможность установки win11
@@ -6856,7 +6931,8 @@ class VmRunner:
                             qemu_pci_passthrough=self.__qemu_pci_passthrough,
                             qemu_platform=QemuPlatform(vm_meta_data, self.__vm_platform),
                             qemu_cdrom=QemuCdRom(self.__os_distr_path, Virtio(self.__project_config).get_win_drivers()),
-                            qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough, qemu_ram=self.__ram)
+                            qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough,
+                            qemu_ram=self.__ram)
         vm.run()
         tcp_forwarding_thread.join()
 

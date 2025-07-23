@@ -10,3 +10,4 @@ grequests==0.7.0
 PySocks==1.7.1
 py-cpuinfo==9.0.0
 python-crontab==3.2.0
+filelock==3.18.0
