@@ -1095,6 +1095,95 @@ class Cpu(BaseParser):
     # https://en.wikipedia.org/wiki/CPUID
     # https://www.etallen.com/cpuid.html
 
+    class Win11SupportedCpu:
+        __ENCODING = "utf8"
+        __DATA_DIR_PATH = pathlib.Path(Path("data")) / "win11_supported_cpu"
+
+        class CpuDescriptor:
+            def __init__(self, cpu_descriptor_as_string):
+                vendor_brand_model = cpu_descriptor_as_string.lower().split("\t")
+                self.__vendor = vendor_brand_model[0]
+                self.__brand = vendor_brand_model[1]
+                self.__model = vendor_brand_model[2]
+
+            def __eq__(self, other):
+                if other is self:
+                    return True
+                elif isinstance(other, str):
+                    cpu_name = self.__remove_trade_mark(other.lower())
+                    if not self.__compare(cpu_name, self.get_vendor_variants()):
+                        return False
+                    if not self.__compare(cpu_name, self.get_brand_variants()):
+                        return False
+                    return self.__compare(cpu_name, self.get_model())
+                elif isinstance(other, Cpu.Win11SupportedCpu.CpuDescriptor):
+                    return (self.get_vendor() == other.get_vendor()) and (self.get_brand() == other.get_brand()) and (
+                            self.get_model() == other.get_model())
+                else:
+                    return False
+
+            def get_vendor(self):
+                return self.__brand
+
+            def get_vendor_variants(self):
+                vendor = self.get_brand()
+                return [vendor, self.__replace_trade_mark(vendor), self.__remove_trade_mark(vendor)]
+
+            def get_brand(self):
+                return self.__brand
+
+            def get_brand_variants(self):
+                brand = self.get_brand()
+                return [brand, self.__replace_trade_mark(brand), self.__remove_trade_mark(brand),
+                        self.__remove_processor(brand)]
+
+            def get_model(self):
+                return self.__model
+
+            def get_model_variants(self):
+                model = self.get_brand()
+                return [model, self.__remove_processor(model)]
+
+            def __remove_trade_mark(self, value):
+                result = value
+                result = result.replace("®", "")
+                result = result.replace("(r)", "")
+                result = result.replace("™", "")
+                result = result.replace("(tm)", "")
+                return result
+
+            def __replace_trade_mark(self, value):
+                result = value
+                result = result.replace("®", "(r)")
+                result = result.replace("™", "(tm)")
+                return result
+
+            def __remove_processor(self, value):
+                result = value
+                result = result.replace("processor ", "")
+                result = result.replace(" processor", "")
+                result = result.replace("processor", "")
+                return result
+
+            def __compare(self, test_string, value_variants):
+                for value_variant in value_variants:
+                    if value_variant in test_string:
+                        return True
+                return False
+
+        def __init__(self):
+            pass
+
+        def is_support(self, cpu_name):
+            for cpu_list_by_vendor_file_path in self.__DATA_DIR_PATH.iterdir():
+                if cpu_list_by_vendor_file_path.is_file() or cpu_list_by_vendor_file_path.resolve().is_file():
+                    with open(cpu_list_by_vendor_file_path, mode="rt",
+                              encoding=self.__ENCODING) as cpu_list_by_vendor_file:
+                        cpu_descriptor = Cpu.Win11SupportedCpu.CpuDescriptor(cpu_list_by_vendor_file.readline())
+                        if cpu_descriptor == cpu_name:
+                            return True
+            return False
+
     __CPU_VENDOR = "vendor"
     __CPU_UARCH = "uarch"
     __CPU_UARCH_FAMILY = "uarch_family"
@@ -1230,6 +1319,10 @@ class Cpu(BaseParser):
             return Cpu(Cpu.__run_cpuid())
         else:
             raise Exception("[Cpu] Not support")
+
+    @staticmethod
+    def is_win11_support():
+        return Cpu.Win11SupportedCpu().is_support(cpuinfo.get_cpu_info()["brand_raw"])
 
     def __is_cpu_vendor(self, target_cpu_vendor):
         try:
@@ -2807,34 +2900,48 @@ class DnsDhcpProvider(DaemonManagerBase):
         return self.__interface_ip_interface.ip
 
 
-class LockDecorator:
-    def __init__(self, func, mutex_dir_path=Path(".tmp/network_bridge")):
-        self.__func = func
+# https://builtin.com/software-engineering-perspectives/python-class-decorator
+class IpcLockDecorator:
+    def __init__(self, mutex_dir_path=Path(".tmp/network_bridge")):
         self.__interprocess_lock = filelock.FileLock(pathlib.Path(str(mutex_dir_path)) / "lock.lock")
+        self.__processes_locks_dir_path = pathlib.Path(str(mutex_dir_path)) / "processes"
         self.__my_process_lock = filelock.FileLock(
-            pathlib.Path(str(mutex_dir_path)) / "processes" / self.__get_my_process_lock_file_name())
+            self.__processes_locks_dir_path / self.__get_my_process_lock_file_name())
 
-    def create(self, *args, **kwargs):
+    def lock(self, func):
         with self.__interprocess_lock:
-            self.__func(*args, **kwargs)
+            self.__my_process_acquire()
+            return func()
 
-    def close(self, *args, **kwargs):
+    def close(self, func):
         with self.__interprocess_lock:
             if self.__check_close():
-                self.__func(*args, **kwargs)
+                result = func()
+                self.__my_process_release()
+                return result
+        return None
 
     def __check_close(self):
         my_process_lock_file_path = pathlib.Path(self.__my_process_lock.lock_file)
-        for path in my_process_lock_file_path.parent.iterdir():
-            if path == my_process_lock_file_path:
-                lock = filelock.FileLock(path, timeout=0)
-                try:
-                    lock.acquire()
-                    if not lock.is_locked:
-                        return False
-                finally:
-                    lock.release()
+        if self.__processes_locks_dir_path.exists() and self.__processes_locks_dir_path.is_dir():
+            for path in self.__processes_locks_dir_path.iterdir():
+                if path == my_process_lock_file_path:
+                    lock = filelock.FileLock(path, timeout=0)
+                    try:
+                        lock.acquire()
+                        if not lock.is_locked:
+                            return False
+                    finally:
+                        lock.release()
         return True
+
+    def __my_process_acquire(self):
+        if not self.__my_process_lock.is_locked:
+            self.__my_process_lock.acquire()
+
+    def __my_process_release(self):
+        self.__my_process_lock.release()
+        shutil.rmtree(self.__processes_locks_dir_path, ignore_errors=True)
 
     def __get_my_process_lock_file_name(self):
         return f"{os.getpid()}.lock"
@@ -2844,6 +2951,7 @@ class NetworkBridge:
     def __init__(self, name, bridge_ip_address_and_mask,
                  dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None, block_internet_access=False,
                  dns_suffix=DnsDhcpProvider.DNS_SUFFIX_DEFAULT, my_host=DnsDhcpProvider.MY_HOST_DEFAULT):
+        self.__lock_decorator = IpcLockDecorator()
         self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__bridge_ip_address_and_mask = ipaddress.ip_interface(bridge_ip_address_and_mask)
 
@@ -2859,43 +2967,56 @@ class NetworkBridge:
         self.__block_internet_access = block_internet_access
         atexit.register(self.close)
 
+    @__lock
     def create(self):
-        with named_semaphores.NamedSemaphore(str(self.__interface),
-                                             handle_existence=named_semaphores.NamedSemaphore.Flags.LINK_OR_CREATE) as sem:
-            if self.__interface.exists():
-                return
+        if self.__interface.exists():
+            return
 
-            self.__set_ip_forwarding()
+        self.__set_ip_forwarding()
 
-            try:
-                subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
-                subprocess.check_call(
-                    "ip addr add {} dev {}".format(self.__get_ip_address_and_mask(), self.__interface),
-                    shell=True)
-                subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
+        try:
+            subprocess.check_call("ip link add {} type bridge".format(self.__interface), shell=True)
+            subprocess.check_call(
+                "ip addr add {} dev {}".format(self.__get_ip_address_and_mask(), self.__interface),
+                shell=True)
+            subprocess.check_call("ip link set {} up".format(self.__interface), shell=True)
 
-                self.__setup_firewall()
-                self.__setup_bridge_dns_dhcp()
-            except Exception as ex:
-                Logger.instance().error(f"[NetworkBridge] Create FAIL: {ex}")
-                # fixme utopia Семаофр не рекурсивный
-                self.close()
+            self.__setup_firewall()
+            self.__setup_bridge_dns_dhcp()
+        except Exception as ex:
+            Logger.instance().error(f"[NetworkBridge] Create FAIL: {ex}")
+            # fixme utopia Семаофр не рекурсивный
+            self.close()
 
+    @__close_lock
     def close(self):
-        with named_semaphores.NamedSemaphore(str(self.__interface),
-                                             handle_existence=named_semaphores.NamedSemaphore.Flags.LINK_OR_CREATE) as sem:
-            if not self.__interface.exists():
-                return
+        if not self.__interface.exists():
+            return
 
-            self.__clear_firewall()
-            self.__clear_bridge_dns_dhcp()
+        self.__clear_firewall()
+        self.__clear_bridge_dns_dhcp()
 
-            subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
-            subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
+        subprocess.check_call("ip link set {} down".format(self.__interface), shell=True)
+        subprocess.check_call("ip link delete {} type bridge".format(self.__interface), shell=True)
 
+    @__lock
     def add_and_configure_tap(self, tap_if, vm_meta_data):
         self.__dns_dhcp_provider.add_host(vm_meta_data)
         subprocess.check_call("ip link set {} master {}".format(tap_if, self.__interface), shell=True)
+
+    @staticmethod
+    def __lock(func):
+        def __decorate_func(self, *args, **kwargs):
+            self.__lock_decorator.lock(lambda: func(self, *args, **kwargs))
+
+        return __decorate_func
+
+    @staticmethod
+    def __close_lock(func):
+        def __decorate_func(self, *args, **kwargs):
+            self.__lock_decorator.close(lambda: func(self, *args, **kwargs))
+
+        return __decorate_func
 
     @staticmethod
     def __set_ip_forwarding():
@@ -2953,7 +3074,7 @@ class UnitTest_FileLock(unittest.TestCase):
     @staticmethod
     def __worker(name, queue):
         queue.put(f"{name} started")
-        lock = filelock.FileLock(str(Path("test_data/UnitTest_FileLocker/test_abandoned_behavior/test_lock.lock")))
+        lock = filelock.FileLock(str(Path("data/test/UnitTest_FileLocker/test_abandoned_behavior/test_lock.lock")))
         with lock:
             queue.put(f"{name} locked")
             time.sleep(10)
@@ -4198,7 +4319,7 @@ class UnitTest_Pci(unittest.TestCase):
     ENCODING = "UTF8"
 
     def test_lspci_output_parse(self):
-        for path in (pathlib.Path(str(Path("test_data"))) / "UnitTest_Pci" / "test_lspci_output_parse").iterdir():
+        for path in (pathlib.Path(str(Path("data"))) / "test" / "UnitTest_Pci" / "test_lspci_output_parse").iterdir():
             lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=UnitTest_Pci.ENCODING)
             expected_result = Pci.PciList.from_string(
                 (path / "expected_result.txt").read_text(encoding=UnitTest_Pci.ENCODING))
@@ -6083,7 +6204,7 @@ class UnitTest_AsyncRunner(unittest.TestCase):
 
     async def __run_success(self):
         async_script_runner = AsyncRunner()
-        script1 = TextConfigWriter("test_data/script1.sh")
+        script1 = TextConfigWriter("data/test/script1.sh")
 
         test_script = f"""echo "message 0"
 sleep 1
@@ -6500,6 +6621,7 @@ class QemuPciPassthrough:
         return self.__vfio_pci.check_platform(qemu_platform)
 
 
+# qemu-system-$(uname -m) -cpu help
 class QemuCpu:
     def __init__(self):
         pass
@@ -6509,7 +6631,11 @@ class QemuCpu:
         if not logical_cpu_count:
             logical_cpu_count = 1
             Logger.instance().warning(f"[Cpu] logic cores count undefined, use {logical_cpu_count} core")
-        return {"-cpu": "host", "-smp": {"cpus": logical_cpu_count, "maxcpus": logical_cpu_count}}
+        return {"-cpu": self.__get_cpu_parameter_value(),
+                "-smp": {"cpus": logical_cpu_count, "maxcpus": logical_cpu_count}}
+
+    def __get_cpu_parameter_value(self):
+        return "host" if Cpu.is_win11_support() else "Icelake-Server"
 
 
 class QemuRtc:
