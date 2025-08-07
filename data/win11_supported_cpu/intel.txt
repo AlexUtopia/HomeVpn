@@ -45,7 +45,6 @@ Intel®	Celeron®	N5100
 Intel®	Celeron®	N5105
 Intel®	Core™	3 processor 100HL
 Intel®	Core™	3 processor 100U
-Intel®	Core™	3 processor 100U with IPU
 Intel®	Core™	3 processor 100UL
 Intel®	Core™	3 Processor N350
 Intel®	Core™	3 Processor N355
@@ -733,19 +732,19 @@ Intel®	Xeon®	E-2468
 Intel®	Xeon®	E-2478
 Intel®	Xeon®	E-2486
 Intel®	Xeon®	E-2488
-Intel®	Xeon®	Gold 6405U
-Intel®	Xeon®	Gold G6400
-Intel®	Xeon®	Gold G6400E
-Intel®	Xeon®	Gold G6400T
-Intel®	Xeon®	Gold G6400TE
-Intel®	Xeon®	Gold G6405
-Intel®	Xeon®	Gold G6405T
-Intel®	Xeon®	Gold G6500
-Intel®	Xeon®	Gold G6500T
-Intel®	Xeon®	Gold G6505
-Intel®	Xeon®	Gold G6505T
-Intel®	Xeon®	Gold G6600
-Intel®	Xeon®	Gold G6605
+Intel®	Pentium®	Gold 6405U
+Intel®	Pentium®	Gold G6400
+Intel®	Pentium®	Gold G6400E
+Intel®	Pentium®	Gold G6400T
+Intel®	Pentium®	Gold G6400TE
+Intel®	Pentium®	Gold G6405
+Intel®	Pentium®	Gold G6405T
+Intel®	Pentium®	Gold G6500
+Intel®	Pentium®	Gold G6500T
+Intel®	Pentium®	Gold G6505
+Intel®	Pentium®	Gold G6505T
+Intel®	Pentium®	Gold G6600
+Intel®	Pentium®	Gold G6605
 Intel®	Xeon®	W-10855M
 Intel®	Xeon®	W-10885M
 Intel®	Xeon®	W-11155MLE

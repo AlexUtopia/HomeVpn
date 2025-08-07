@@ -1086,6 +1086,99 @@ class Platform:
             return None
 
 
+class Path:
+    def __init__(self, path):
+        self.__path = os.path.expanduser(os.path.expandvars(str(path)))
+
+    @staticmethod
+    def get_home_directory(user=getpass.getuser()):
+        if CurrentOs.is_termux():
+            user = ""
+
+        result = Path(os.path.expanduser(f"~{user}"))
+        if result.exists():
+            return result
+        return None
+
+    def get(self):
+        if os.path.isabs(self.__path):
+            return self.__path
+        this_script_dir = os.path.dirname(os.path.realpath(__file__))
+        result = os.path.abspath(os.path.join(this_script_dir, self.__path))
+        return result
+
+    def get_filename(self):
+        path = self.get()
+        if os.path.isfile(path):
+            return os.path.basename(path)
+        return ""
+
+    def get_dir_path(self):
+        path = self.get()
+        if os.path.isfile(path):
+            return Path(os.path.dirname(path))
+        return Path(path)
+
+    def exists(self):
+        return os.path.exists(self.get())
+
+    def file_exists(self):
+        return self.exists() and os.path.isfile(self.get())
+
+    def exists_by_wildcard(self, wildcard):
+        return bool(list(pathlib.Path(self.get()).glob(wildcard)))
+
+    def makedirs(self):
+        path = self.get()
+        if os.path.isfile(path):
+            raise Exception("Path \"{}\" is path to file, but should be a directory path".format(path))
+        if os.path.isdir(path):
+            # print("[WARNING] Path \"{}\" is path to exists directory".format(path))
+            return
+        os.makedirs(path)
+
+    def copy_from(self, path):
+        shutil.copy2(str(Path(path)), str(self))
+
+    # fixme utopia backup для файла и для директории
+    def create_backup(self, backup_file_path=None,
+                      backup_prefix=f"unused_since_{datetime.datetime.now():%Y-%m-%dT%H_%M_%S_%f%z}_"):
+        if not self.exists():
+            return None
+
+        if backup_file_path is None:
+            backup_file_path = self.get_dir_path().join(f"{backup_prefix}{self.get_filename()}")
+        else:
+            backup_file_path = Path(backup_file_path)
+        backup_file_path.copy_from(self.get())
+        return backup_file_path
+
+    # fixme utopia backup для файла и для директории
+    def restore_from_backup(self, backup_file_path, is_remove_backup=False):
+        backup_file_path_as_path = Path(backup_file_path)
+        if not backup_file_path_as_path.exists():
+            return False
+
+        self.copy_from(backup_file_path_as_path)
+        if bool(is_remove_backup):
+            os.remove(str(backup_file_path_as_path))
+        return True
+
+    def join(self, path):
+        return Path(os.path.join(self.get(), path))
+
+    def add_executable(self):
+        mode = os.stat(self.get()).st_mode
+        mode |= stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        os.chmod(self.get(), mode)
+
+    def __str__(self):
+        return self.get()
+
+    def __repr__(self):
+        return self.__str__()
+
+
 # fixme utopia Проверить на многопроцессорных системах (у меня есть)
 class Cpu(BaseParser):
     # https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=gcc/common/config/i386/cpuinfo.h;h=a6ede14a3ccb9f5e5eaa8866e2f29c35d3234285;hb=HEAD
@@ -1096,8 +1189,8 @@ class Cpu(BaseParser):
     # https://www.etallen.com/cpuid.html
 
     class Win11SupportedCpu:
-        __ENCODING = "utf8"
-        __DATA_DIR_PATH = pathlib.Path(Path("data")) / "win11_supported_cpu"
+        __ENCODING = "utf-8"
+        __DATA_DIR_PATH = pathlib.Path(str(Path("data"))) / "win11_supported_cpu"
 
         class CpuDescriptor:
             def __init__(self, cpu_descriptor_as_string):
@@ -1110,39 +1203,56 @@ class Cpu(BaseParser):
                 if other is self:
                     return True
                 elif isinstance(other, str):
-                    cpu_name = self.__remove_trade_mark(other.lower())
-                    if not self.__compare(cpu_name, self.get_vendor_variants()):
-                        return False
-                    if not self.__compare(cpu_name, self.get_brand_variants()):
-                        return False
-                    return self.__compare(cpu_name, self.get_model())
+                    cpu_name = other.lower()
+                    return self.__compare(cpu_name, self.get_cpu_name_variants())
                 elif isinstance(other, Cpu.Win11SupportedCpu.CpuDescriptor):
                     return (self.get_vendor() == other.get_vendor()) and (self.get_brand() == other.get_brand()) and (
                             self.get_model() == other.get_model())
                 else:
                     return False
 
+            def get_cpu_name_variants(self):
+                delimiter = " "
+                result = set()
+                for vendor in self.get_vendor_variants():
+                    for brand in self.get_brand_variants():
+                        for model in self.get_model_variants():
+                            if not model:
+                                continue
+                            cpu_name = []
+                            if vendor:
+                                cpu_name.append(vendor)
+                            if brand:
+                                cpu_name.append(brand)
+                            cpu_name.append(model)
+                            if cpu_name:
+                                result.add(delimiter.join(cpu_name))
+                                if vendor and brand and vendor == brand:
+                                    result.add(f"{vendor}{delimiter}{model}")
+                return result
+
             def get_vendor(self):
-                return self.__brand
+                return self.__vendor
 
             def get_vendor_variants(self):
-                vendor = self.get_brand()
-                return [vendor, self.__replace_trade_mark(vendor), self.__remove_trade_mark(vendor)]
+                vendor = self.get_vendor()
+                return {vendor, self.__replace_trade_mark(vendor), self.__remove_trade_mark(vendor)}
 
             def get_brand(self):
                 return self.__brand
 
             def get_brand_variants(self):
                 brand = self.get_brand()
-                return [brand, self.__replace_trade_mark(brand), self.__remove_trade_mark(brand),
-                        self.__remove_processor(brand)]
+                return {brand, self.__replace_trade_mark(brand), self.__remove_trade_mark(brand),
+                        self.__remove_processor(brand)}
 
             def get_model(self):
                 return self.__model
 
             def get_model_variants(self):
-                model = self.get_brand()
-                return [model, self.__remove_processor(model)]
+                model = self.get_model()
+                return {model, self.__remove_processor(model), self.__replace_processor(model, " "),
+                        self.__replace_processor(model, "-")}
 
             def __remove_trade_mark(self, value):
                 result = value
@@ -1165,6 +1275,11 @@ class Cpu(BaseParser):
                 result = result.replace("processor", "")
                 return result
 
+            def __replace_processor(self, value, new=" "):
+                result = value
+                result = result.replace(" processor ", new)
+                return result
+
             def __compare(self, test_string, value_variants):
                 for value_variant in value_variants:
                     if value_variant in test_string:
@@ -1179,9 +1294,10 @@ class Cpu(BaseParser):
                 if cpu_list_by_vendor_file_path.is_file() or cpu_list_by_vendor_file_path.resolve().is_file():
                     with open(cpu_list_by_vendor_file_path, mode="rt",
                               encoding=self.__ENCODING) as cpu_list_by_vendor_file:
-                        cpu_descriptor = Cpu.Win11SupportedCpu.CpuDescriptor(cpu_list_by_vendor_file.readline())
-                        if cpu_descriptor == cpu_name:
-                            return True
+                        for index, line in enumerate(cpu_list_by_vendor_file, 1):
+                            cpu_descriptor = Cpu.Win11SupportedCpu.CpuDescriptor(line.rstrip('\n'))
+                            if cpu_descriptor == cpu_name:
+                                return True
             return False
 
     __CPU_VENDOR = "vendor"
@@ -1393,6 +1509,7 @@ class Cpu(BaseParser):
 
 
 class UnitTest_Cpu(unittest.TestCase):
+    ENCODING = "utf-8"
 
     def test(self):
         ref_table = [
@@ -1464,98 +1581,31 @@ class UnitTest_Cpu(unittest.TestCase):
                 self.assertEqual(target.is_intel_above_broadwell(), test_data["is_intel_above_broadwell"])
                 self.assertEqual(target.is_intel_integrated_vga_iris_xe(), test_data["is_intel_integrated_vga_iris_xe"])
 
+    # "11th Gen Intel(R) Core(TM) i5-11445G7 @ 2.60GHz"
+    def test_cpu_name_variants(self):
+        for path in (pathlib.Path(str(Path("data"))) / "test" / "UnitTest_Cpu" / "test_cpu_name_variants").iterdir():
+            input_data = (path / "input.txt").read_text(encoding=self.ENCODING)
+            expected_result = set(json.loads(
+                (path / "expected_result.json").read_text(encoding=self.ENCODING)))
 
-class Path:
-    def __init__(self, path):
-        self.__path = os.path.expanduser(os.path.expandvars(str(path)))
+            result = Cpu.Win11SupportedCpu().CpuDescriptor(input_data).get_cpu_name_variants()
+            self.assertEqual(result, expected_result)
 
-    @staticmethod
-    def get_home_directory(user=getpass.getuser()):
-        if CurrentOs.is_termux():
-            user = ""
+    def test_win11_supported_cpu(self):
+        test_data = [
+            ("11th Gen Intel(R) Core(TM) i5-1145G7 @ 2.60GHz", True),
+            ("11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz", True),
+            ("Intel Core i5-1135G7", True),
+            ("Intel(R) Core(TM) i7-2640M CPU @ 2.80GHz", False),
+            ("", False),
+            ("qwertyuiop[]", False),
+            ("Intel Core ", False),
+            ("AMD", False)
+        ]
 
-        result = Path(os.path.expanduser(f"~{user}"))
-        if result.exists():
-            return result
-        return None
-
-    def get(self):
-        if os.path.isabs(self.__path):
-            return self.__path
-        this_script_dir = os.path.dirname(os.path.realpath(__file__))
-        result = os.path.abspath(os.path.join(this_script_dir, self.__path))
-        return result
-
-    def get_filename(self):
-        path = self.get()
-        if os.path.isfile(path):
-            return os.path.basename(path)
-        return ""
-
-    def get_dir_path(self):
-        path = self.get()
-        if os.path.isfile(path):
-            return Path(os.path.dirname(path))
-        return Path(path)
-
-    def exists(self):
-        return os.path.exists(self.get())
-
-    def file_exists(self):
-        return self.exists() and os.path.isfile(self.get())
-
-    def exists_by_wildcard(self, wildcard):
-        return bool(list(pathlib.Path(self.get()).glob(wildcard)))
-
-    def makedirs(self):
-        path = self.get()
-        if os.path.isfile(path):
-            raise Exception("Path \"{}\" is path to file, but should be a directory path".format(path))
-        if os.path.isdir(path):
-            # print("[WARNING] Path \"{}\" is path to exists directory".format(path))
-            return
-        os.makedirs(path)
-
-    def copy_from(self, path):
-        shutil.copy2(str(Path(path)), str(self))
-
-    # fixme utopia backup для файла и для директории
-    def create_backup(self, backup_file_path=None,
-                      backup_prefix=f"unused_since_{datetime.datetime.now():%Y-%m-%dT%H_%M_%S_%f%z}_"):
-        if not self.exists():
-            return None
-
-        if backup_file_path is None:
-            backup_file_path = self.get_dir_path().join(f"{backup_prefix}{self.get_filename()}")
-        else:
-            backup_file_path = Path(backup_file_path)
-        backup_file_path.copy_from(self.get())
-        return backup_file_path
-
-    # fixme utopia backup для файла и для директории
-    def restore_from_backup(self, backup_file_path, is_remove_backup=False):
-        backup_file_path_as_path = Path(backup_file_path)
-        if not backup_file_path_as_path.exists():
-            return False
-
-        self.copy_from(backup_file_path_as_path)
-        if bool(is_remove_backup):
-            os.remove(str(backup_file_path_as_path))
-        return True
-
-    def join(self, path):
-        return Path(os.path.join(self.get(), path))
-
-    def add_executable(self):
-        mode = os.stat(self.get()).st_mode
-        mode |= stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-        os.chmod(self.get(), mode)
-
-    def __str__(self):
-        return self.get()
-
-    def __repr__(self):
-        return self.__str__()
+        for cpu_name, expected_result in test_data:
+            result = Cpu.Win11SupportedCpu().is_support(cpu_name)
+            self.assertEqual(result, expected_result, msg=cpu_name)
 
 
 class TextConfigReader:
@@ -2967,6 +3017,20 @@ class NetworkBridge:
         self.__block_internet_access = block_internet_access
         atexit.register(self.close)
 
+    @staticmethod
+    def __lock(func):
+        def __decorate_func(self, *args, **kwargs):
+            self.__lock_decorator.lock(lambda: func(self, *args, **kwargs))
+
+        return __decorate_func
+
+    @staticmethod
+    def __close_lock(func):
+        def __decorate_func(self, *args, **kwargs):
+            self.__lock_decorator.close(lambda: func(self, *args, **kwargs))
+
+        return __decorate_func
+
     @__lock
     def create(self):
         if self.__interface.exists():
@@ -3003,20 +3067,6 @@ class NetworkBridge:
     def add_and_configure_tap(self, tap_if, vm_meta_data):
         self.__dns_dhcp_provider.add_host(vm_meta_data)
         subprocess.check_call("ip link set {} master {}".format(tap_if, self.__interface), shell=True)
-
-    @staticmethod
-    def __lock(func):
-        def __decorate_func(self, *args, **kwargs):
-            self.__lock_decorator.lock(lambda: func(self, *args, **kwargs))
-
-        return __decorate_func
-
-    @staticmethod
-    def __close_lock(func):
-        def __decorate_func(self, *args, **kwargs):
-            self.__lock_decorator.close(lambda: func(self, *args, **kwargs))
-
-        return __decorate_func
 
     @staticmethod
     def __set_ip_forwarding():
@@ -4316,13 +4366,13 @@ class Pci(BaseParser):
 
 
 class UnitTest_Pci(unittest.TestCase):
-    ENCODING = "UTF8"
+    ENCODING = "utf-8"
 
     def test_lspci_output_parse(self):
         for path in (pathlib.Path(str(Path("data"))) / "test" / "UnitTest_Pci" / "test_lspci_output_parse").iterdir():
-            lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=UnitTest_Pci.ENCODING)
+            lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=self.ENCODING)
             expected_result = Pci.PciList.from_string(
-                (path / "expected_result.txt").read_text(encoding=UnitTest_Pci.ENCODING))
+                (path / "expected_result.json").read_text(encoding=self.ENCODING))
 
             result = Pci.get_list(lspci_output_mock=lspci_output_mock)
             self.assertEqual(result, expected_result)
@@ -6678,10 +6728,6 @@ class QemuRam:
 # https://extralan.ru/?p=3060
 # secure-boot check win11
 # https://www.iobit.com/en/knowledge-how-to-enable-secure-boot-on-windows--355.php
-# - TPM (software)
-# - UEFI (OVMF) + secure boot
-# - 4 GB RAM
-# - CPU Icelake-Server-v5
 class VirtualMachine:
     def __init__(self, network_bridge,
                  vm_meta_data,
@@ -6738,6 +6784,7 @@ class VirtualMachine:
     @staticmethod
     def __qemu_command_line():
         # return str(Path(".").join("qemu").join("build").join(f"qemu-system-{platform.machine()}"))
+        # fixme utopia машину задать параметром командной строки, по умолчанию platform.machine()
         return "qemu-system-{}".format(platform.machine())
 
     @staticmethod
