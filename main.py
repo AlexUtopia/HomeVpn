@@ -1581,7 +1581,6 @@ class UnitTest_Cpu(unittest.TestCase):
                 self.assertEqual(target.is_intel_above_broadwell(), test_data["is_intel_above_broadwell"])
                 self.assertEqual(target.is_intel_integrated_vga_iris_xe(), test_data["is_intel_integrated_vga_iris_xe"])
 
-    # "11th Gen Intel(R) Core(TM) i5-11445G7 @ 2.60GHz"
     def test_cpu_name_variants(self):
         for path in (pathlib.Path(str(Path("data"))) / "test" / "UnitTest_Cpu" / "test_cpu_name_variants").iterdir():
             input_data = (path / "input.txt").read_text(encoding=self.ENCODING)
@@ -2952,9 +2951,11 @@ class DnsDhcpProvider(DaemonManagerBase):
 
 # https://builtin.com/software-engineering-perspectives/python-class-decorator
 class IpcLockDecorator:
-    def __init__(self, mutex_dir_path=Path(".tmp/network_bridge")):
+    PROCESSES_DIR_NAME = "processes"
+
+    def __init__(self, mutex_dir_path=Path(".tmp")):
         self.__interprocess_lock = filelock.FileLock(pathlib.Path(str(mutex_dir_path)) / "lock.lock")
-        self.__processes_locks_dir_path = pathlib.Path(str(mutex_dir_path)) / "processes"
+        self.__processes_locks_dir_path = pathlib.Path(str(mutex_dir_path)) / self.PROCESSES_DIR_NAME
         self.__my_process_lock = filelock.FileLock(
             self.__processes_locks_dir_path / self.__get_my_process_lock_file_name())
 
@@ -2968,7 +2969,10 @@ class IpcLockDecorator:
             if self.__check_close():
                 result = func()
                 self.__my_process_release()
+                self.__clear_processes_locks_dir()
                 return result
+            else:
+                self.__my_process_release()
         return None
 
     def __check_close(self):
@@ -2976,13 +2980,16 @@ class IpcLockDecorator:
         if self.__processes_locks_dir_path.exists() and self.__processes_locks_dir_path.is_dir():
             for path in self.__processes_locks_dir_path.iterdir():
                 if path == my_process_lock_file_path:
-                    lock = filelock.FileLock(path, timeout=0)
-                    try:
-                        lock.acquire()
-                        if not lock.is_locked:
-                            return False
-                    finally:
-                        lock.release()
+                    continue
+                lock = filelock.FileLock(path, timeout=0)
+                try:
+                    lock.acquire()
+                    if not lock.is_locked:
+                        return False
+                except:
+                    return False
+                finally:
+                    lock.release()
         return True
 
     def __my_process_acquire(self):
@@ -2991,10 +2998,136 @@ class IpcLockDecorator:
 
     def __my_process_release(self):
         self.__my_process_lock.release()
+
+    def __clear_processes_locks_dir(self):
         shutil.rmtree(self.__processes_locks_dir_path, ignore_errors=True)
 
     def __get_my_process_lock_file_name(self):
         return f"{os.getpid()}.lock"
+
+
+class UnitTest_IpcLockDecorator(unittest.TestCase):
+    TEST_DIR_PATH = pathlib.Path(str(Path("data"))) / "test" / "UnitTest_IpcLockDecorator"
+
+    def test_abandoned_behavior(self):
+        p1, p1_queue = self.__make_and_start_process("p1")
+        self.assertEqual(p1_queue.get(), "p1 locked")
+
+        p2, p2_queue = self.__make_and_start_process("p2")
+
+        p1.kill()
+        p1.join()
+
+        self.assertTrue((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+        self.assertEqual(p2_queue.get(), "p2 locked")
+        self.assertEqual(p2_queue.get(), "p2 unlocked")
+        self.assertEqual(p2_queue.get(), "p2 exit")
+        p2.join()
+
+        p1_queue.close()
+        p2_queue.close()
+
+        self.assertFalse((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+    def test_normal_close(self):
+        p1, p1_queue = self.__make_and_start_process("p1", sleep_in_lock_sec=0.1, sleep_sec=10)
+        self.assertEqual(p1_queue.get(), "p1 locked")
+
+        self.assertTrue((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+        p2, p2_queue = self.__make_and_start_process("p2", sleep_in_lock_sec=0.1, sleep_sec=10)
+        self.assertEqual(p2_queue.get(), "p2 locked")
+
+        p3, p3_queue = self.__make_and_start_process("p3", sleep_in_lock_sec=0.1, sleep_sec=10)
+        self.assertEqual(p3_queue.get(), "p3 locked")
+
+        self.assertEqual(p1_queue.get(), "p1 exit")
+        p1.join()
+
+        self.assertEqual(p2_queue.get(), "p2 exit")
+        p2.join()
+
+        # Управляемый раздельно ресурс закрывает второй процесс
+        self.assertEqual(p3_queue.get(), "p3 unlocked")
+        self.assertEqual(p3_queue.get(), "p3 exit")
+        p3.join()
+
+        p1_queue.close()
+        p2_queue.close()
+        p3_queue.close()
+
+        self.assertFalse((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+    def test_emergency_close(self):
+        p1, p1_queue = self.__make_and_start_process("p1", sleep_in_lock_sec=0.1, sleep_sec=10)
+        self.assertEqual(p1_queue.get(), "p1 locked")
+
+        self.assertTrue((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+        p2, p2_queue = self.__make_and_start_process("p2", sleep_in_lock_sec=0.1, sleep_sec=10)
+        self.assertEqual(p2_queue.get(), "p2 locked")
+
+        p1.kill()
+        p2.kill()
+        p1.join()
+        p2.join()
+
+        # Директория с файлами-локами процессов осталась, т.к. последний процесс был убит и не смог произвести очистку
+        self.assertTrue((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+        # Запускаем новый процесс который зачистит директорию с файлами-локами по завершении
+        p3, p3_queue = self.__make_and_start_process("p3", sleep_in_lock_sec=0, sleep_sec=0)
+        self.assertEqual(p3_queue.get(), "p3 locked")
+        self.assertEqual(p3_queue.get(), "p3 unlocked")
+        self.assertEqual(p3_queue.get(), "p3 exit")
+        p3.join()
+
+        self.assertFalse((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+        p1_queue.close()
+        p2_queue.close()
+        p3_queue.close()
+
+    def test_only_close(self):
+        self.assertFalse((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+        p1, p1_queue = self.__make_and_start_process("p1", sleep_in_lock_sec=0, sleep_sec=0, is_only_close=True)
+        self.assertEqual(p1_queue.get(), "p1 unlocked")
+        self.assertEqual(p1_queue.get(), "p1 exit")
+        p1.join()
+
+        self.assertFalse((self.TEST_DIR_PATH / IpcLockDecorator.PROCESSES_DIR_NAME).exists())
+
+        p1_queue.close()
+
+
+    def __make_and_start_process(self, name, sleep_in_lock_sec=10, sleep_sec=0, is_only_close=False):
+        queue = multiprocessing.Queue()
+        process = multiprocessing.Process(target=UnitTest_IpcLockDecorator.__worker,
+                                          args=(name, queue, sleep_in_lock_sec, sleep_sec, is_only_close))
+        process.start()
+        self.assertEqual(queue.get(), f"{name} started")
+        return process, queue
+
+    @staticmethod
+    def __worker(name, queue, sleep_in_lock_sec=10, sleep_sec=0, is_only_close=False):
+        locker = IpcLockDecorator(UnitTest_IpcLockDecorator.TEST_DIR_PATH)
+
+        queue.put(f"{name} started")
+
+        if not is_only_close:
+            locker.lock(lambda: (
+                queue.put(f"{name} locked"),
+                time.sleep(sleep_in_lock_sec)
+            ))
+
+        time.sleep(sleep_sec)
+
+        locker.close(lambda: (
+            queue.put(f"{name} unlocked"),
+        ))
+
+        queue.put(f"{name} exit")
 
 
 class NetworkBridge:
