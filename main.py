@@ -3134,7 +3134,7 @@ class NetworkBridge:
     def __init__(self, name, bridge_ip_address_and_mask,
                  dhcp_host_dir="./dhcp-hostsdir", internet_network_interface=None, block_internet_access=False,
                  dns_suffix=DnsDhcpProvider.DNS_SUFFIX_DEFAULT, my_host=DnsDhcpProvider.MY_HOST_DEFAULT):
-        self.__lock_decorator = IpcLockDecorator()
+        self.__lock_decorator = IpcLockDecorator(pathlib.Path(str(Path("data"))) / "network_bridge")
         self.__interface = NetworkInterface("{}-bridge".format(name))
         self.__bridge_ip_address_and_mask = ipaddress.ip_interface(bridge_ip_address_and_mask)
 
@@ -3182,7 +3182,6 @@ class NetworkBridge:
             self.__setup_bridge_dns_dhcp()
         except Exception as ex:
             Logger.instance().error(f"[NetworkBridge] Create FAIL: {ex}")
-            # fixme utopia Семаофр не рекурсивный
             self.close()
 
     @__close_lock
