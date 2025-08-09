@@ -1202,3 +1202,16 @@ https://drive.google.com/file/d/1qJcShkcYlMZdgdr5HVqTmpcYxUYuP-aE/view
 ### 7.4.1 Ожидание полноценной поддержки Rockchip RK3588/RK3588S в Vanilla Linux
 
 https://gitlab.collabora.com/hardware-enablement/rockchip-3588/notes-for-rockchip-3588/-/blob/main/mainline-status.md
+
+
+# 8 Известные проблемы
+
+## 8.1 vfio permission denied
+
+На Ubuntu 24.04 (Linux Mint 22.1) на ядре 6.14.0-24-generic есть проблема с vfio (проброс устройств PCI в виртуальную машину), выглядит примерно так:
+
+```
+qemu-system-x86_64: -device vfio-pci,host=0000:00:1f.0,multifunction=on: vfio 0000:00:1f.0: error getting device from group 12: Permission denied
+Verify all devices in group 12 are bound to vfio-<bus> or pci-stub and not already in use
+```
+Проблему исправили в ядре 6.14.0-27-generic ([ссылка](https://bugs.launchpad.net/ubuntu/+source/linux-hwe-6.14/+bug/2118821)).
