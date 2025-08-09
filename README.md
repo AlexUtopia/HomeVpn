@@ -409,15 +409,15 @@ fixme utopia Как настроить Port Forwarding на роутере со 
 
 ### 2.5.2 Настройка аппаратной виртуализации
 
-### 2.5.2.1 Платформа IBM/PC. Intel `VT-x` / `VT-d`
+#### 2.5.2.1 Платформа IBM/PC. Intel `VT-x` / `VT-d`
 
 fixme utopia Дописать
 
-### 2.5.2.2 Платформа IBM/PC. AMD `AMD-V`
+#### 2.5.2.2 Платформа IBM/PC. AMD `AMD-V`
 
 fixme utopia Дописать
 
-### 2.5.2.3 ARM платформы
+#### 2.5.2.3 ARM платформы
 
 У меня есть [Orange Pi 5 Plus (16GB)](http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5-plus.html).
 Необходимо провести эксперименты на Ubuntu и ArchLinux.
@@ -425,7 +425,7 @@ fixme utopia Дописать
 fixme utopia Дописать
 
 
-### 2.5.2.4 Android платформы
+#### 2.5.2.4 Android платформы
 
 Всё сложно. Пока нет однозначного масштабируемого не хакерского решения.
 
