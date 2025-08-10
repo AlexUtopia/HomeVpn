@@ -7171,13 +7171,15 @@ class VmRunner:
         # Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
         Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
 
+        is_normal_exit = False
         for i in range(1):
             try:
                 self.__run()
+                is_normal_exit = True
             except Exception as ex:
                 Logger.instance().exception(f"[Vm] {i} Run after reboot FAIL")
 
-        self.__exit()
+        self.__exit(is_normal_exit)
 
     def __get_pci_vga_list_for_passthrough(self, pci_list):
         if not self.__initiate_vga_passthrough:
@@ -7259,8 +7261,8 @@ class VmRunner:
         vm.run()
         tcp_forwarding_thread.join()
 
-    def __exit(self):
-        if self.__vm_host_mode:
+    def __exit(self, is_normal_exit):
+        if self.__vm_host_mode and is_normal_exit:
             Power.poweroff()
         else:
             self.__grub.restore_from_backup()
