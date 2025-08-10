@@ -6183,12 +6183,31 @@ class Power:
             Logger.instance().warning("[Power] reboot not supported")
 
     @staticmethod
+    def poweroff():
+        if CurrentOs.is_linux():
+            Logger.instance().warning("[Power] poweroff!!!")
+            Power.__poweroff_linux()
+        elif CurrentOs.is_windows():
+            Logger.instance().warning("[Power] poweroff!!!")
+            Power.__poweroff_windows()
+        else:
+            Logger.instance().warning("[Power] poweroff not supported")
+
+    @staticmethod
     def __reboot_linux():
         subprocess.check_call(["reboot"], shell=True)
 
     @staticmethod
+    def __poweroff_linux():
+        subprocess.check_call(["poweroff"], shell=True)
+
+    @staticmethod
     def __reboot_windows():
         subprocess.check_call(["shutdown", "/r", "/t", "0"], shell=True)
+
+    @staticmethod
+    def __poweroff_windows():
+        subprocess.check_call(["shutdown", "/s", "/t", "0"], shell=True)
 
 
 class Grub:
@@ -7029,7 +7048,7 @@ class VmRunner:
                  initiate_builtin_kbd_and_mouse_passthrough=False,
                  asc_override_patched_kernel=False,
                  qemu_pci_passthrough=None, grub_config_backup_path=None,
-                 vm_platform=None, ram=None, os_distr_path=None):
+                 vm_platform=None, ram=None, os_distr_path=None, vm_host_mode=False):
         self.__vm_name = vm_name
         self.__project_config = project_config
         self.__startup = startup
@@ -7044,6 +7063,7 @@ class VmRunner:
         self.__vm_platform = vm_platform
         self.__ram = ram
         self.__os_distr_path = os_distr_path
+        self.__vm_host_mode = bool(vm_host_mode)
         self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
         self.__serializer = ShellSerializer()
 
@@ -7134,18 +7154,19 @@ class VmRunner:
                  "--vga_audio_passthrough": self.__initiate_vga_audio_passthrough,
                  "--usb_host_passthrough": self.__initiate_usb_host_passthrough,
                  "--isa_bridge_passthrough": self.__initiate_isa_bridge_passthrough},
-                "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else ""]
+                "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else "",
+                "--vm_host_mode" if self.__vm_host_mode else ""]
 
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])} {Shell().suppress_stdout_stderr()}'
 
-        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=True)
+        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=not self.__vm_host_mode)
         Power.reboot()
 
     def after_reboot(self):
-        sleep_sec = 15
+        # sleep_sec = 15
         # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
-        Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
-        time.sleep(sleep_sec)
+        # Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
+        # time.sleep(sleep_sec)
         # dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
         # Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
         Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
@@ -7156,10 +7177,7 @@ class VmRunner:
             except Exception as ex:
                 Logger.instance().exception(f"[Vm] {i} Run after reboot FAIL")
 
-        # fixme utopia В отдельный метод
-        self.__grub.restore_from_backup()
-        self.__grub.update()
-        Power.reboot()
+        self.__exit()
 
     def __get_pci_vga_list_for_passthrough(self, pci_list):
         if not self.__initiate_vga_passthrough:
@@ -7240,6 +7258,14 @@ class VmRunner:
                             qemu_ram=self.__ram)
         vm.run()
         tcp_forwarding_thread.join()
+
+    def __exit(self):
+        if self.__vm_host_mode:
+            Power.poweroff()
+        else:
+            self.__grub.restore_from_backup()
+            self.__grub.update()
+            Power.reboot()
 
 
 class OsNameAndVersion:
@@ -7508,6 +7534,8 @@ def main():
     parser_vm_run.add_argument("-m", type=QemuRam,
                                help=f"Virtual machine RAM size in MibiBytes (default %(default)s MiB)",
                                default=QemuRam())
+    parser_vm_run.add_argument("--vm_host_mode", help="Virtual machine using as main OS for current PC",
+                               action='store_true')
     parser_vm_run.add_argument("--vga_passthrough", type=PciPassthroughMode.argparse, choices=list(PciPassthroughMode),
                                help=f"Initiate VGA PCI passthrough to virtual machine (default %(default)s)\n{PciPassthroughMode.get_help()}",
                                default=PciPassthroughMode.NONE)
@@ -7589,7 +7617,8 @@ def main():
                  grub_config_backup_path=args.grub_config_backup_path,
                  vm_platform=args.vm_platform,
                  ram=args.m,
-                 os_distr_path=args.os_distr_path).run()
+                 os_distr_path=args.os_distr_path,
+                 vm_host_mode=args.vm_host_mode).run()
 
     elif args.command == "vm_ssh_fwd":
         vm_registry = VmRegistry(project_config.get_vm_registry_dir_path())
