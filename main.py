@@ -109,10 +109,6 @@ class RegexConstants:
     ASCII_PRINTABLE = "\\x20-\\x7E"
     ASCII_PRINTABLE_CHARACTER_SET = f"[{ASCII_PRINTABLE}]"
 
-    ENCODE_TABLE_FOR_CHARACTER_SET = [("\\", "\\\\"), (".", r"\."), ("[", r"\["), ("]", r"\]"), ("(", r"\("),
-                                      (")", r"\)"), ("$", r"\$"), ("-", r"\-"), (">", r"\>"),
-                                      ("<", r"\<"), ("|", r"\|"), ("?", r"\?"), ("^", r"\^")]
-
     @staticmethod
     def atomic_group(value):
         return f"(?>{value})"
@@ -135,8 +131,7 @@ class RegexConstants:
 
     @staticmethod
     def character_set_escape(character_set, is_remove_duplicate=True):
-        return EscapeLiteral(encode_table=RegexConstants.ENCODE_TABLE_FOR_CHARACTER_SET).encode(
-            RegexConstants.to_character_set(character_set, is_remove_duplicate))
+        return re.escape(RegexConstants.to_character_set(character_set, is_remove_duplicate))
 
 
 class BitUtils:
@@ -2504,6 +2499,349 @@ class VmName:
         return self.__str__()
 
 
+# https://man7.org/linux/man-pages/man5/resolv.conf.5.html
+class ResolvConf:
+    __SPACE_SYMBOLS = "[\t ]"
+    __SPACE_SYMBOLS_ZERO_OR_MORE = f"{__SPACE_SYMBOLS}*"
+    __SPACE_SYMBOLS_ONE_OR_MORE = f"{__SPACE_SYMBOLS}+"
+    __IP_ADDRESS_REGEX = r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"
+    __NAMESERVER = "nameserver"
+
+    def __init__(self, resolv_conf_path="/etc/resolv.conf"):
+        self.__reader = TextConfigReader(resolv_conf_path)
+        self.__writer = TextConfigWriter(resolv_conf_path)
+        self.__content = str()
+
+    def add_nameserver(self, nameserver_ip_address):
+        target_ip_address = ipaddress.ip_address(nameserver_ip_address)
+
+        if target_ip_address in self.get_nameserver_list():
+            return
+
+        self.__content += f"\n{self.__NAMESERVER} {target_ip_address}"
+        self.__save()
+
+    def remove_nameserver(self, nameserver_ip_address):
+        target_ip_address = ipaddress.ip_address(nameserver_ip_address)
+
+        self.__load()
+        regex = re.compile(self.__build_nameserver_remover_regex(target_ip_address), re.MULTILINE)
+        empty_line = ""
+        self.__content = regex.sub(empty_line, self.__content)
+        self.__save()
+
+    def get_nameserver_list(self):
+        self.__load()
+        regex = re.compile(self.__build_nameserver_search_regex(), re.MULTILINE)
+        tmp = regex.findall(self.__content)
+
+        result = set()
+        for t in tmp:
+            result.add(ipaddress.ip_address(t))
+        return result
+
+    def __load(self):
+        self.__content = self.__reader.get()
+
+    def __save(self):
+        self.__writer.set(self.__content)
+
+    def __build_nameserver_search_regex(self):
+        return self.__build_basic_regex(f"({self.__IP_ADDRESS_REGEX})")
+
+    def __build_nameserver_remover_regex(self, target_nameserver_ip_address):
+        return f"({self.__build_basic_regex(str(target_nameserver_ip_address))})"
+
+    def __build_basic_regex(self, value, parameter=__NAMESERVER):
+        return f"^{self.__SPACE_SYMBOLS_ZERO_OR_MORE}{parameter}{self.__SPACE_SYMBOLS_ONE_OR_MORE}{value}{self.__SPACE_SYMBOLS_ZERO_OR_MORE}$"
+
+
+# https://wiki.archlinux.org/title/Systemd-resolved
+# https://manpages.debian.org/testing/resolvconf/resolvconf.8.en.html
+class ResolvConf2:
+    ENCODING = "utf-8"
+    EXTENSION = "conf"
+    RESOLV_CONF_PATH = pathlib.Path("/etc/resolv.conf")
+
+    # https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#Process%20Exit%20Codes
+    __SYSTEMD_EXIT_CODE_EXIT_FAILURE = 1
+
+    def __init__(self, project_name, config_dir_path=pathlib.Path("/etc/systemd/resolved.conf.d")):
+        self.__project_name = project_name
+        self.__config_dir_path = pathlib.Path(str(config_dir_path))
+        atexit.register(self.__clear_at_exit)
+
+    def add_nameserver(self, nameserver_ip_address):
+        nameserver_ip_address = self.__to_ip_address(nameserver_ip_address)
+        self.__config_dir_path.mkdir(parents=True, exist_ok=True)
+        nameserver_file_path = self.__get_nameserver_file_path(nameserver_ip_address)
+        nameserver_file_path.write_text(self.__make_content(nameserver_ip_address), encoding=self.ENCODING)
+        self.__restart_systemd_resolved()
+        return nameserver_file_path
+
+    def remove_nameserver(self, nameserver_ip_address):
+        nameserver_ip_address = self.__to_ip_address(nameserver_ip_address)
+        nameserver_file_path = self.__get_nameserver_file_path(nameserver_ip_address)
+        if nameserver_file_path.exists():
+            nameserver_file_path.unlink()
+            self.__restart_systemd_resolved()
+        return nameserver_file_path
+
+    def __clear_at_exit(self):
+        for nameserver_file_path in self.__config_dir_path.glob(f"{self.__project_name}_*.{self.EXTENSION}"):
+            nameserver_file_path.unlink()
+
+    def __to_ip_address(self, nameserver_ip_address):
+        return ipaddress.ip_address(str(nameserver_ip_address))
+
+    def __restart_systemd_resolved(self):
+        sleep_time_before_next_attempt_list = [2, 8, 12, 16]
+        number_of_attempts = len(sleep_time_before_next_attempt_list) + 1
+        for attempt in range(number_of_attempts):
+            try:
+                subprocess.check_call("systemctl restart systemd-resolved.service", shell=True)
+                return
+            except subprocess.CalledProcessError as ex:
+                if (ex.returncode == self.__SYSTEMD_EXIT_CODE_EXIT_FAILURE) and (attempt < number_of_attempts - 1):
+                    sleep_time_before_next_attempt = sleep_time_before_next_attempt_list[attempt]
+                    Logger.instance().warning(f"[ResolvConf] Restart systemd-resolved FAIL: {ex} (attempt = {attempt + 1}/{number_of_attempts}, sleep = {sleep_time_before_next_attempt} seconds)")
+                    time.sleep(sleep_time_before_next_attempt)
+                else:
+                    Logger.instance().error(
+                        f"[ResolvConf] Restart systemd-resolved FAIL: {ex}")
+                    raise ex
+
+    def __make_content(self, nameserver_ip_address):
+        return f"[Resolve]\nDNS={nameserver_ip_address}\nDomains=~."
+
+    def __get_nameserver_file_path(self, nameserver_ip_address):
+        return self.__config_dir_path / self.__get_nameserver_file_name(nameserver_ip_address)
+
+    def __get_nameserver_file_name(self, nameserver_ip_address):
+        return f"{self.__project_name}_{nameserver_ip_address}.{self.EXTENSION}"
+
+
+class UnitTest_ResolvConf2(unittest.TestCase):
+    PROJECT_NAME = "name"
+
+    def test_nameserver_ip_address_invalid(self):
+        nameserver_ip_address = "hello world!!!"
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            temp_dir_path = pathlib.Path(temp_dir_path)
+
+            resolv_conf = ResolvConf2(self.PROJECT_NAME, config_dir_path=temp_dir_path)
+            with self.assertRaises(ValueError):
+                resolv_conf.add_nameserver(nameserver_ip_address)
+
+    def test_config_dir_is_file(self):
+        nameserver_ip_address = "127.0.0.13"
+        with tempfile.NamedTemporaryFile() as temp_file:
+            resolv_conf = ResolvConf2(self.PROJECT_NAME, config_dir_path=temp_file.name)
+            with self.assertRaises(FileExistsError):
+                resolv_conf.add_nameserver(nameserver_ip_address)
+
+    def test_config_file_is_dir(self):
+        nameserver_ip_address = "127.0.0.13"
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            temp_dir_path = pathlib.Path(temp_dir_path)
+
+            resolv_conf = ResolvConf2(self.PROJECT_NAME, config_dir_path=temp_dir_path)
+            resolv_conf._ResolvConf2__get_nameserver_file_path(nameserver_ip_address).mkdir()
+            with self.assertRaises(IsADirectoryError):
+                resolv_conf.add_nameserver(nameserver_ip_address)
+
+    def test_void_remove_nameserver(self):
+        nameserver_ip_address = "127.0.0.13"
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            temp_dir_path = pathlib.Path(temp_dir_path)
+
+            resolv_conf = ResolvConf2(self.PROJECT_NAME, config_dir_path=temp_dir_path)
+            self.assertFalse(resolv_conf._ResolvConf2__get_nameserver_file_path(nameserver_ip_address).exists())
+            self.assertFalse(resolv_conf.remove_nameserver(nameserver_ip_address).exists())
+
+    def test_clear_at_exit(self):
+        nameserver_ip_address1 = "127.0.0.13"
+        nameserver_ip_address2 = "127.0.0.14"
+        with tempfile.TemporaryDirectory() as temp_dir_path:
+            temp_dir_path = pathlib.Path(temp_dir_path)
+
+            resolv_conf = ResolvConf2(self.PROJECT_NAME, config_dir_path=temp_dir_path)
+
+            nameserver_ip_address1_file_path = resolv_conf.add_nameserver(nameserver_ip_address1)
+            self.assertTrue(nameserver_ip_address1_file_path.exists() and nameserver_ip_address1_file_path.is_file())
+            self.__check_nameserver_file_content(nameserver_ip_address1, resolv_conf)
+
+            resolv_conf.add_nameserver(nameserver_ip_address2)
+            self.__check_nameserver_file_content(nameserver_ip_address2, resolv_conf)
+            nameserver_ip_address2_file_path = resolv_conf.add_nameserver(nameserver_ip_address2)
+            self.__check_nameserver_file_content(nameserver_ip_address2, resolv_conf)
+            self.assertTrue(nameserver_ip_address2_file_path.exists() and nameserver_ip_address2_file_path.is_file())
+
+            temp_file_path = temp_dir_path / "temp.file"
+            temp_file_path.touch()
+
+            resolv_conf._ResolvConf2__clear_at_exit()
+
+            for path in temp_dir_path.iterdir():
+                self.assertEqual(path, temp_file_path)
+
+    def test(self):
+        nameserver_ip_address1 = "127.128.129.130"
+        nameserver_ip_address2 = "127.128.129.131"
+        resolv_conf = ResolvConf2(self.PROJECT_NAME)
+        resolv_conf.add_nameserver(nameserver_ip_address1)
+        resolv_conf.add_nameserver(nameserver_ip_address2)
+
+        self.__check_nameserver_list([nameserver_ip_address1, nameserver_ip_address2])
+
+        self.assertFalse(resolv_conf.remove_nameserver(nameserver_ip_address2).exists())
+        self.__check_nameserver_list([nameserver_ip_address1])
+
+        self.assertFalse(resolv_conf.remove_nameserver(nameserver_ip_address1).exists())
+        self.__check_nameserver_list([])
+
+    def __check_nameserver_list(self, nameserver_ip_address_list):
+        cmd_result = subprocess.run("resolvectl dns", shell=True, capture_output=True, text=True)
+        self.assertFalse(bool(cmd_result.returncode), msg=str(cmd_result))
+
+        for nameserver_ip_address in nameserver_ip_address_list:
+            regex = re.compile(fr'^Global:.*{re.escape(nameserver_ip_address)}.*$', flags=re.MULTILINE)
+            find_result = regex.findall(cmd_result.stdout)
+            self.assertEqual(len(find_result), 1)
+
+    def __check_nameserver_file_content(self, nameserver_ip_address, resolv_conf):
+        self.assertEqual(resolv_conf._ResolvConf2__get_nameserver_file_path(nameserver_ip_address).read_text(
+            encoding=ResolvConf2.ENCODING),
+            resolv_conf._ResolvConf2__make_content(nameserver_ip_address))
+
+
+class DaemonManagerBase:
+    def __init__(self, label, action):
+        self.__label = label
+        self.__action = action
+        self.__command_line = None
+        atexit.register(self.clear_at_exit)
+
+    def start(self):
+        if self.__command_line:
+            return
+
+        self._start_impl()
+        self.__command_line = str(self._build_command_line())
+
+        Logger.instance().debug(f"[{self.__label}] {self.__action} cmd: {self.__command_line}")
+        subprocess.check_call(self.__command_line, shell=True)
+
+    def close(self):
+        if not self.__command_line:
+            return
+
+        self.__find_and_kill_target_processes()
+        self._close_impl()
+        self.__command_line = None
+
+    def clear_at_exit(self):
+        try:
+            self.close()
+        except Exception as ex:
+            Logger.instance().error(f"[{self.__label}] FAIL: {ex}")
+
+    def __find_and_kill_target_processes(self):
+        for process in psutil.process_iter():
+            try:
+                if self.__compare_cmd_line(process.cmdline()):
+                    Logger.instance().debug(f"[{self.__label}] KILL: {process}")
+                    process.kill()
+            except:
+                pass
+
+    def __compare_cmd_line(self, psutil_process_cmdline):
+        normalize_command_line = " ".join(shlex.split(self.__command_line))
+        psutil_command_line = " ".join(psutil_process_cmdline)
+        return psutil_command_line.endswith(normalize_command_line)
+
+
+# https://serverfault.com/questions/723292/dnsmasq-doesnt-automatically-reload-when-entry-is-added-to-etc-hosts
+# https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html --dhcp-hostsdir
+# https://psutil.readthedocs.io/en/latest/#psutil.net_if_addrs psutil.AF_LINK (17) - получить MAC адрес сетевого интерфейса
+# Сгенерировать MAC адрес
+# Внимательно посмотреть на опцию --dhcp-host - она позволяет биндить mac address на hostname
+# Генерируем рандомный mac адрес https://stackoverflow.com/questions/8484877/mac-address-generator-in-python
+class DnsDhcpProvider(DaemonManagerBase):
+    EXTENSION = "host"
+    DNS_SUFFIX_DEFAULT = "homevpn.org"
+
+    @staticmethod
+    def get_hostname(name, dns_suffix=DNS_SUFFIX_DEFAULT):
+        return f"{name}.{dns_suffix}"
+
+    MY_HOST_DEFAULT = get_hostname("myhost")
+
+    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf2("HomeVpn"),
+                 dns_suffix=DNS_SUFFIX_DEFAULT, my_host=MY_HOST_DEFAULT):
+        super().__init__(label="DnsDhcpProvider", action="Start")
+        self.__interface = interface
+        self.__dhcp_host_dir = Path(dhcp_host_dir)
+        self.__resolv_conf = resolv_conf
+        self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
+        self.__dns_suffix = dns_suffix
+        self.__my_host = my_host
+
+    def _start_impl(self):
+        self.__make_dhcp_host_dir()
+        self.__interface_ip_interface = self.__interface.get_ipv4_interface_if()
+        if self.__interface_ip_interface is None:
+            raise Exception("Target interface \"{}\" ipv4 address NOT ASSIGN".format(self.__interface))
+        self.__add_dnsmasq_to_system_dsn_servers_list()
+
+    def _close_impl(self):
+        self.__remove_dnsmasq_from_system_dsn_servers_list()
+
+    def add_host(self, vm_meta_data):
+        TextConfigWriter(self.__get_dhcp_host_file_path(vm_meta_data)).set(
+            self.__build_dhcp_host_file_content(vm_meta_data))
+
+    def _build_command_line(self):
+        return f'dnsmasq --interface={self.__interface} --bind-interfaces --dhcp-hostsdir="{self.__dhcp_host_dir}" {self.__get_dhcp_range_parameter()} --domain="{self.__dns_suffix}" --address=/{self.__my_host}/{self.__interface.get_ipv4_interface_if().ip}'
+
+    def __make_dhcp_host_dir(self):
+        self.__dhcp_host_dir.makedirs()
+
+    def __get_dhcp_host_file_path(self, vm_meta_data):
+        return os.path.join(str(self.__dhcp_host_dir), self.__get_dhcp_host_file_name(vm_meta_data.get_name()))
+
+    def __get_dhcp_host_file_name(self, name):
+        return f"{name}.{self.EXTENSION}"
+
+    @staticmethod
+    def __build_dhcp_host_file_content(vm_meta_data):
+        return "{},{}".format(vm_meta_data.get_mac_address_as_string(), vm_meta_data.get_name())
+
+    def __get_dhcp_range_parameter(self):
+        ip_address_start, ip_address_end = self.__get_dhcp_range()
+        return "--dhcp-range={},{}".format(ip_address_start, ip_address_end)
+
+    def __get_dhcp_range(self):
+        ip_interface = self.__interface_ip_interface
+        ip_address_start = ip_interface.ip + 1
+        ip_address_end = list(ip_interface.network.hosts())[-1]
+        if ip_address_start > ip_address_end:
+            raise Exception(
+                "DHCP server available ip addresses FAIL (start={}, end={}, {})".format(ip_address_start,
+                                                                                        ip_address_end,
+                                                                                        ip_interface))
+        return ip_address_start, ip_address_end
+
+    def __add_dnsmasq_to_system_dsn_servers_list(self):
+        self.__resolv_conf.add_nameserver(self.__get_target_interface_ip_address())
+
+    def __remove_dnsmasq_from_system_dsn_servers_list(self):
+        self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
+
+    def __get_target_interface_ip_address(self):
+        return self.__interface_ip_interface.ip
+
+
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
 class VmMetaData:
     class Parameter:
@@ -2547,7 +2885,7 @@ class VmMetaData:
 
     IMAGE_EXTENSION = "img"
 
-    def __init__(self, name, image_dir_path):
+    def __init__(self, name, image_dir_path, dns_suffix=DnsDhcpProvider.DNS_SUFFIX_DEFAULT):
         self.__image_path = VmMetaData.Parameter(VmName(name), image_dir_path, extension=self.IMAGE_EXTENSION)
         self.__mac_address = VmMetaData.Parameter("mac_address", image_dir_path,
                                                   value_default_handler=lambda: netaddr.EUI(str(randmac.RandMac())),
@@ -2559,6 +2897,7 @@ class VmMetaData:
         self.__rdp_forward_port = VmMetaData.Parameter("rdp_forward_port", image_dir_path,
                                                        deserialize_handler=lambda x: TcpPort(x),
                                                        serialize_handler=lambda x: TcpPort(x))
+        self.__dns_suffix = dns_suffix
         self.make_dirs()
 
     def __str__(self):
@@ -2609,13 +2948,16 @@ class VmMetaData:
         return str(result)
 
     def get_hostname(self):
-        return self.get_name()
+        return DnsDhcpProvider.get_hostname(self.get_name(), self.__dns_suffix)
 
     ## Получить IP адрес запущенной виртуальной машины
     # @warning IP адрес виртуальной машине раздаётся через DHCP, поэтому до запуска виртуальной машины понять её IP адрес нельзя
     # @return IP адрес запущенной виртуальной машины или исключение, если не удалось получить результат
     def get_ip_address_strong(self):
-        return ipaddress.ip_address(socket.gethostbyname(self.get_hostname()))
+        vm_hostname = self.get_hostname()
+        for family, type, proto, canonname, sockaddr in socket.getaddrinfo(vm_hostname, TcpPort.DNS_PORT_DEFAULT):
+            return ipaddress.ip_address(sockaddr[0])
+        raise Exception(f'[VmMetaData] Resolve vm hostname "{vm_hostname}" FAIL')
 
     def get_ip_address(self):
         try:
@@ -2658,7 +3000,7 @@ class UnitTest_VmMetaData(unittest.TestCase):
 
             self.assertEqual(vm_meta_data.get_name(), vm_name)
             self.assertIsInstance(vm_meta_data.get_name(), str)
-            self.assertEqual(vm_meta_data.get_hostname(), vm_name)
+            self.assertEqual(vm_meta_data.get_hostname(), DnsDhcpProvider.get_hostname(vm_name))
             self.assertIsInstance(vm_meta_data.get_hostname(), str)
 
             self.assertEqual(vm_meta_data.get_image_path(),
@@ -2771,182 +3113,6 @@ class VmRegistry:
 
     def __create_image_command_line(self, vm_meta_data, image_size_in_gib):
         return f'qemu-img create -f {self.__IMAGE_FORMAT} "{vm_meta_data.get_image_path()}" {image_size_in_gib}G'
-
-
-# https://man7.org/linux/man-pages/man5/resolv.conf.5.html
-class ResolvConf:
-    __SPACE_SYMBOLS = "[\t ]"
-    __SPACE_SYMBOLS_ZERO_OR_MORE = f"{__SPACE_SYMBOLS}*"
-    __SPACE_SYMBOLS_ONE_OR_MORE = f"{__SPACE_SYMBOLS}+"
-    __IP_ADDRESS_REGEX = r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"
-    __NAMESERVER = "nameserver"
-
-    def __init__(self, resolv_conf_path="/etc/resolv.conf"):
-        self.__reader = TextConfigReader(resolv_conf_path)
-        self.__writer = TextConfigWriter(resolv_conf_path)
-        self.__content = str()
-
-    def add_nameserver_if(self, nameserver_ip_address):
-        target_ip_address = ipaddress.ip_address(nameserver_ip_address)
-
-        if target_ip_address in self.get_nameserver_list():
-            return
-
-        self.__content += f"\n{self.__NAMESERVER} {target_ip_address}"
-        self.__save()
-
-    def remove_nameserver(self, nameserver_ip_address):
-        target_ip_address = ipaddress.ip_address(nameserver_ip_address)
-
-        self.__load()
-        regex = re.compile(self.__build_nameserver_remover_regex(target_ip_address), re.MULTILINE)
-        empty_line = ""
-        self.__content = regex.sub(empty_line, self.__content)
-        self.__save()
-
-    def get_nameserver_list(self):
-        self.__load()
-        regex = re.compile(self.__build_nameserver_search_regex(), re.MULTILINE)
-        tmp = regex.findall(self.__content)
-
-        result = set()
-        for t in tmp:
-            result.add(ipaddress.ip_address(t))
-        return result
-
-    def __load(self):
-        self.__content = self.__reader.get()
-
-    def __save(self):
-        self.__writer.set(self.__content)
-
-    def __build_nameserver_search_regex(self):
-        return self.__build_basic_regex(f"({self.__IP_ADDRESS_REGEX})")
-
-    def __build_nameserver_remover_regex(self, target_nameserver_ip_address):
-        return f"({self.__build_basic_regex(str(target_nameserver_ip_address))})"
-
-    def __build_basic_regex(self, value, parameter=__NAMESERVER):
-        return f"^{self.__SPACE_SYMBOLS_ZERO_OR_MORE}{parameter}{self.__SPACE_SYMBOLS_ONE_OR_MORE}{value}{self.__SPACE_SYMBOLS_ZERO_OR_MORE}$"
-
-
-class DaemonManagerBase:
-    def __init__(self, label, action):
-        self.__label = label
-        self.__action = action
-        self.__command_line = None
-        atexit.register(self.clear_at_exit)
-
-    def start(self):
-        if self.__command_line:
-            return
-
-        self._start_impl()
-        self.__command_line = str(self._build_command_line())
-
-        Logger.instance().debug(f"[{self.__label}] {self.__action} cmd: {self.__command_line}")
-        subprocess.check_call(self.__command_line, shell=True)
-
-    def close(self):
-        if not self.__command_line:
-            return
-
-        self.__find_and_kill_target_processes()
-        self._close_impl()
-        self.__command_line = None
-
-    def clear_at_exit(self):
-        try:
-            self.close()
-        except Exception as ex:
-            Logger.instance().error(f"[{self.__label}] FAIL: {ex}")
-
-    def __find_and_kill_target_processes(self):
-        for process in psutil.process_iter():
-            if self.__compare_cmd_line(process.cmdline()):
-                Logger.instance().debug(f"[{self.__label}] KILL: {process}")
-                process.kill()
-
-    def __compare_cmd_line(self, psutil_process_cmdline):
-        normalize_command_line = " ".join(shlex.split(self.__command_line))
-        psutil_command_line = " ".join(psutil_process_cmdline)
-        return psutil_command_line.endswith(normalize_command_line)
-
-
-# https://serverfault.com/questions/723292/dnsmasq-doesnt-automatically-reload-when-entry-is-added-to-etc-hosts
-# https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html --dhcp-hostsdir
-# https://psutil.readthedocs.io/en/latest/#psutil.net_if_addrs psutil.AF_LINK (17) - получить MAC адрес сетевого интерфейса
-# Сгенерировать MAC адрес
-# Внимательно посмотреть на опцию --dhcp-host - она позволяет биндить mac address на hostname
-# Генерируем рандомный mac адрес https://stackoverflow.com/questions/8484877/mac-address-generator-in-python
-class DnsDhcpProvider(DaemonManagerBase):
-    __HOST_EXTENSION = ".host"
-    DNS_SUFFIX_DEFAULT = "homevpn.org"
-    MY_HOST_DEFAULT = f"myhost.{DNS_SUFFIX_DEFAULT}"
-
-    def __init__(self, interface, dhcp_host_dir="./dhcp-hostsdir", resolv_conf=ResolvConf(),
-                 dns_suffix=DNS_SUFFIX_DEFAULT, my_host=MY_HOST_DEFAULT):
-        super().__init__(label="DnsDhcpProvider", action="Start")
-        self.__interface = interface
-        self.__dhcp_host_dir = Path(dhcp_host_dir)
-        self.__resolv_conf = resolv_conf
-        self.__interface_ip_interface = ipaddress.IPv4Interface("192.168.0.1/24")
-        self.__dns_suffix = dns_suffix
-        self.__my_host = my_host
-
-    def _start_impl(self):
-        self.__make_dhcp_host_dir()
-        self.__interface_ip_interface = self.__interface.get_ipv4_interface_if()
-        if self.__interface_ip_interface is None:
-            raise Exception("Target interface \"{}\" ipv4 address NOT ASSIGN".format(self.__interface))
-        self.__add_dnsmasq_to_system_dsn_servers_list()
-
-    def _close_impl(self):
-        self.__remove_dnsmasq_from_system_dsn_servers_list()
-
-    def add_host(self, vm_meta_data):
-        TextConfigWriter(self.__get_dhcp_host_file_path(vm_meta_data)).set(
-            self.__build_dhcp_host_file_content(vm_meta_data))
-
-    def _build_command_line(self):
-        return f'dnsmasq --interface={self.__interface} --bind-interfaces --dhcp-hostsdir="{self.__dhcp_host_dir}" {self.__get_dhcp_range_parameter()} --domain="{self.__dns_suffix}" --address=/{self.__my_host}/{self.__interface.get_ipv4_interface_if().ip}'
-
-    def __make_dhcp_host_dir(self):
-        self.__dhcp_host_dir.makedirs()
-
-    def __get_dhcp_host_file_path(self, vm_meta_data):
-        return os.path.join(str(self.__dhcp_host_dir), self.__get_dhcp_host_file_name(vm_meta_data.get_name()))
-
-    def __get_dhcp_host_file_name(self, name):
-        return "{}{}".format(name, self.__HOST_EXTENSION)
-
-    @staticmethod
-    def __build_dhcp_host_file_content(vm_meta_data):
-        return "{},{}".format(vm_meta_data.get_mac_address_as_string(), vm_meta_data.get_name())
-
-    def __get_dhcp_range_parameter(self):
-        ip_address_start, ip_address_end = self.__get_dhcp_range()
-        return "--dhcp-range={},{}".format(ip_address_start, ip_address_end)
-
-    def __get_dhcp_range(self):
-        ip_interface = self.__interface_ip_interface
-        ip_address_start = ip_interface.ip + 1
-        ip_address_end = list(ip_interface.network.hosts())[-1]
-        if ip_address_start > ip_address_end:
-            raise Exception(
-                "DHCP server available ip addresses FAIL (start={}, end={}, {})".format(ip_address_start,
-                                                                                        ip_address_end,
-                                                                                        ip_interface))
-        return ip_address_start, ip_address_end
-
-    def __add_dnsmasq_to_system_dsn_servers_list(self):
-        self.__resolv_conf.add_nameserver_if(self.__get_target_interface_ip_address())
-
-    def __remove_dnsmasq_from_system_dsn_servers_list(self):
-        self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
-
-    def __get_target_interface_ip_address(self):
-        return self.__interface_ip_interface.ip
 
 
 # https://builtin.com/software-engineering-perspectives/python-class-decorator
@@ -3100,7 +3266,6 @@ class UnitTest_IpcLockDecorator(unittest.TestCase):
 
         p1_queue.close()
 
-
     def __make_and_start_process(self, name, sleep_in_lock_sec=10, sleep_sec=0, is_only_close=False):
         queue = multiprocessing.Queue()
         process = multiprocessing.Process(target=UnitTest_IpcLockDecorator.__worker,
@@ -3146,7 +3311,7 @@ class NetworkBridge:
             self.__internet_network_interface = None
 
         self.__dns_dhcp_provider = DnsDhcpProvider(self.__interface, dhcp_host_dir, dns_suffix=dns_suffix,
-                                                   my_host=my_host)
+                                                   my_host=my_host, resolv_conf=ResolvConf2(name))
         self.__block_internet_access = block_internet_access
         atexit.register(self.close)
 
@@ -4944,6 +5109,7 @@ class TcpPort:
     TCP_PORT_MAX = 65535
 
     SSH_PORT_DEFAULT = 22
+    DNS_PORT_DEFAULT = 53
     RDP_PORT_DEFAULT = 3389
     VNC_BASE_PORT_NUMBER = 5900
 
@@ -5007,41 +5173,54 @@ class VmTcpForwarding:
         self.__local_network_if = NetworkInterface(local_network_if)
         self.__input_port = input_port
         self.__output_port = TcpPort(output_port)
-        atexit.register(self.clear_at_exit)
+        self.__is_port_forwarding_ok = False
+        atexit.register(self.__clear_at_exit)
 
     def add(self):
         if not self.__is_valid_input_port():
-            Logger.instance().debug(f"[VmTcpForwarding] TCP port forwarding DISCARDED")
+            Logger.instance().debug(f"[VmTcpForwarding:{self.__input_port}] PORT INVALID")
+            return
+        if self.__is_port_forwarding_ok:
+            Logger.instance().debug(f"[VmTcpForwarding:{self.__input_port}] ALREADY")
             return
         Logger.instance().debug(
-            f"[VmTcpForwarding] TCP port forwarding for vm \"{self.__vm_meta_data.get_name()}\": {self.__local_network_if}:{self.__input_port} --> {self.__get_vm_destination_ip_address_and_port()}")
+            f'[VmTcpForwarding:{self.__input_port}] "{self.__vm_meta_data.get_name()}": {self.__local_network_if}:{self.__input_port} --> {self.__get_vm_destination_ip_address_and_port()}')
         self.__iptables_rule()
+        self.__is_port_forwarding_ok = True
 
-    def add_with_retry(self):
+    def add_with_retry(self, stop_event=None):
         sleep_sec = 5
         for i in range(VmTcpForwarding.RETRY_COUNT):
             try:
-                Logger.instance().debug(f"[VmTcpForwarding] {i + 1} Try TCP port forwarding")
+                Logger.instance().debug(f"[VmTcpForwarding:{self.__input_port}] Try {i + 1}")
                 self.add()
-                Logger.instance().debug(f"[VmTcpForwarding] TCP port forwarding OK")
+                Logger.instance().debug(f"[VmTcpForwarding:{self.__input_port}] OK")
                 return
             except Exception as ex:
-                Logger.instance().warning(f"[VmTcpForwarding] FAIL: {ex}")
+                Logger.instance().warning(f"[VmTcpForwarding:{self.__input_port}] FAIL: {ex}")
                 if i == VmTcpForwarding.RETRY_COUNT - 1:
-                    Logger.instance().error(f"[VmTcpForwarding] TCP port forwarding ATTEMPTS OVER")
+                    Logger.instance().error(f"[VmTcpForwarding:{self.__input_port}] ATTEMPTS OVER")
                     return
-                time.sleep(sleep_sec)
+                if stop_event:
+                    if stop_event.wait(sleep_sec):
+                        Logger.instance().warning(f"[VmTcpForwarding:{self.__input_port}] INTERRUPT")
+                        return
+                else:
+                    time.sleep(sleep_sec)
 
     def clear(self):
         if not self.__is_valid_input_port():
             return
+        if not self.__is_port_forwarding_ok:
+            return
         self.__iptables_rule(clear=True)
+        self.__is_port_forwarding_ok = False
 
-    def clear_at_exit(self):
+    def __clear_at_exit(self):
         try:
             self.clear()
         except Exception as ex:
-            Logger.instance().error(f"[VmTcpForwarding] FAIL: {ex}")
+            Logger.instance().error(f"[VmTcpForwarding:{self.__input_port}] Clear FAIL: {ex}")
 
     def __is_valid_input_port(self):
         return TcpPort.is_valid(self.__input_port)
@@ -7159,7 +7338,8 @@ class VmRunner:
 
         command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])} {Shell().suppress_stdout_stderr()}'
 
-        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=not self.__vm_host_mode)
+        self.__startup.register_script(command_line, is_background_executing=True,
+                                       is_execute_once=not self.__vm_host_mode)
         Power.reboot()
 
     def after_reboot(self):
@@ -7239,8 +7419,9 @@ class VmRunner:
                                             vm_meta_data.get_ssh_forward_port())
         vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
                                             vm_meta_data.get_rdp_forward_port())
-        tcp_forwarding_thread = threading.Thread(target=lambda: (vm_ssh_forwarding.add_with_retry(),
-                                                                 vm_rdp_forwarding.add_with_retry()))
+        stop_event = threading.Event()
+        tcp_forwarding_thread = threading.Thread(target=lambda _stop_event: (vm_ssh_forwarding.add_with_retry(_stop_event),
+                                                                 vm_rdp_forwarding.add_with_retry(_stop_event)), args=(stop_event,))
         tcp_forwarding_thread.start()
 
         if self.__initiate_isa_bridge_passthrough and self.__initiate_builtin_kbd_and_mouse_passthrough:
@@ -7259,6 +7440,7 @@ class VmRunner:
                             qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough,
                             qemu_ram=self.__ram)
         vm.run()
+        stop_event.set()
         tcp_forwarding_thread.join()
 
     def __exit(self, is_normal_exit):
