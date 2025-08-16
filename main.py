@@ -2612,7 +2612,7 @@ class ResolvConf2:
                     raise ex
 
     def __make_content(self, nameserver_ip_address):
-        return f"[Resolve]\nDNS={nameserver_ip_address}\nDomains=~."
+        return f"[Resolve]\nDNS={nameserver_ip_address} {NetworkInterface.GOOGLE_PUBLIC_DNS_IPV4_1}\nDomains={DnsDhcpProvider.DNS_SUFFIX_DEFAULT}"
 
     def __get_nameserver_file_path(self, nameserver_ip_address):
         return self.__config_dir_path / self.__get_nameserver_file_name(nameserver_ip_address)
@@ -2833,10 +2833,12 @@ class DnsDhcpProvider(DaemonManagerBase):
         return ip_address_start, ip_address_end
 
     def __add_dnsmasq_to_system_dsn_servers_list(self):
-        self.__resolv_conf.add_nameserver(self.__get_target_interface_ip_address())
+        subprocess.check_call(f"resolvectl dns {self.__interface} {self.__interface.get_ipv4_interface_if().ip}", shell=True)
+        #self.__resolv_conf.add_nameserver(self.__get_target_interface_ip_address())
 
     def __remove_dnsmasq_from_system_dsn_servers_list(self):
-        self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
+        subprocess.check_call(f"resolvectl dns {self.__interface}", shell=True)
+        #self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
 
     def __get_target_interface_ip_address(self):
         return self.__interface_ip_interface.ip
