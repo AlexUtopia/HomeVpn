@@ -4974,6 +4974,7 @@ class VgaPciIntel(Pci):
         return pci.class_code.is_vga() and pci.device_id.is_intel()
 
     def __check_passthrough_in_legacy_mode(self):
+        return True
         if self.__cpu.is_intel_above_broadwell():
             return False  # UPT passthrough
         elif self.__cpu.is_intel_above_sandybridge():
@@ -5175,20 +5176,19 @@ class VmTcpForwarding:
         self.__local_network_if = NetworkInterface(local_network_if)
         self.__input_port = input_port
         self.__output_port = TcpPort(output_port)
-        self.__is_port_forwarding_ok = False
+        self.__vm_ip_address = None
         atexit.register(self.__clear_at_exit)
 
     def add(self):
         if not self.__is_valid_input_port():
             Logger.instance().debug(f"[VmTcpForwarding:{self.__input_port}] PORT INVALID")
             return
-        if self.__is_port_forwarding_ok:
+        if self.__vm_ip_address:
             Logger.instance().debug(f"[VmTcpForwarding:{self.__input_port}] ALREADY")
             return
         Logger.instance().debug(
             f'[VmTcpForwarding:{self.__input_port}] "{self.__vm_meta_data.get_name()}": {self.__local_network_if}:{self.__input_port} --> {self.__get_vm_destination_ip_address_and_port()}')
         self.__iptables_rule()
-        self.__is_port_forwarding_ok = True
 
     def add_with_retry(self, stop_event=None):
         sleep_sec = 5
@@ -5213,10 +5213,10 @@ class VmTcpForwarding:
     def clear(self):
         if not self.__is_valid_input_port():
             return
-        if not self.__is_port_forwarding_ok:
+        if not self.__vm_ip_address:
             return
         self.__iptables_rule(clear=True)
-        self.__is_port_forwarding_ok = False
+        self.__vm_ip_address = None
 
     def __clear_at_exit(self):
         try:
@@ -5257,7 +5257,11 @@ class VmTcpForwarding:
             f"[VmTcpForwarding] Table NAT after setup {iptc.easy.dump_table(iptc.Table.NAT, ipv6=False)}")
 
     def __get_vm_destination_ip_address_and_port(self):
-        return IpAddressAndPort(self.__vm_meta_data.get_ip_address_strong(), self.__output_port)
+        if self.__vm_ip_address:
+            return IpAddressAndPort(self.__vm_ip_address, self.__output_port)
+
+        self.__vm_ip_address = self.__vm_meta_data.get_ip_address_strong()
+        return IpAddressAndPort(self.__vm_ip_address, self.__output_port)
 
 
 class VmSshForwarding(VmTcpForwarding):
@@ -7345,10 +7349,10 @@ class VmRunner:
         Power.reboot()
 
     def after_reboot(self):
-        # sleep_sec = 15
+        sleep_sec = 20
         # Требуется для инициализации сетевой инфраструктуры (WiFi) иначе vm не стартанёт
         # Logger.instance().debug(f"[Vm] Sleep {sleep_sec} before vm run")
-        # time.sleep(sleep_sec)
+        time.sleep(sleep_sec)
         # dmesg_output = subprocess.run("dmesg", shell=True, capture_output=True, text=True)
         # Logger.instance().debug(f"[Vm] dmesg:\n{dmesg_output.stdout}\n")
         Logger.instance().debug(f"[Vm] PCI device list:\n{Pci.get_list()}\n")
