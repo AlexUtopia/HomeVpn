@@ -7193,7 +7193,7 @@ class VirtualMachine:
         return self.__serializer.serialize(self.__qemu_pci_passthrough.get_qemu_parameters(self.__vm_meta_data))
 
     def __get_qemu_serial_command_line(self):
-        return ""  # self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
+        return self.__serializer.serialize(self.__qemu_serial.get_qemu_parameters())
 
     def __get_qemu_logging_command_line(self):
         return ""  # self.__serializer.serialize(self.__qemu_logging.get_qemu_parameters())
