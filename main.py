@@ -4935,6 +4935,7 @@ class VgaPciIntel(Pci):
 
     def check_platform(self, qemu_platform):
         if self.__check_passthrough_in_legacy_mode():
+            return
             if CurrentOs.is_bios_boot() and qemu_platform.is_i440fx_bios_boot():
                 return
 
@@ -7455,7 +7456,7 @@ class VmRunner:
         else:
             self.__grub.restore_from_backup()
             self.__grub.update()
-            Power.reboot()
+            #Power.reboot()
 
 
 class OsNameAndVersion:
