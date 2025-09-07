@@ -7346,7 +7346,7 @@ class VmRunner:
 
         self.__startup.register_script(command_line, is_background_executing=True,
                                        is_execute_once=not self.__vm_host_mode)
-        Power.reboot()
+        #Power.reboot()
 
     def after_reboot(self):
         sleep_sec = 20
