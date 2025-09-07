@@ -7820,6 +7820,7 @@ def main():
 
     elif args.command == "test":
         pci_list = Pci.get_list()
+        print(pci_list)
         print(pci_list.get_vga_list()[0].get_rom("/home/galina"))
 
         print(Pci.get_list().get_pci_id_list())
