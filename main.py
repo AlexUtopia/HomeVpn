@@ -7821,7 +7821,7 @@ def main():
     elif args.command == "test":
         pci_list = Pci.get_list()
         print(pci_list.get_vga_list())
-        print(list(pci_list.get_vga_list())[0].get_rom("/home/galina"))
+        print(list(pci_list.get_vga_list())[0].get_rom(pathlib.Path("/home/galina")))
 
         print(Pci.get_list().get_pci_id_list())
         return
