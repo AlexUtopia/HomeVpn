@@ -4909,7 +4909,7 @@ class VgaPciIntel(Pci):
         result = super().get_vfio_pci_options_table(vm_meta_data)
 
         if self.__check_passthrough_in_legacy_mode():
-            result.update({"x-igd-gms": "9", "addr": "0x02", "rombar": 0, "x-vga": "on", "x-igd-opregion": "on"})
+            result.update({"addr": "0x02", "rombar": 1, "x-vga": "on", "x-igd-opregion": "on"})
 
             rom_file_path = self.get_rom(vm_meta_data.get_working_dir_path())
             if rom_file_path is not None:
