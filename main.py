@@ -7819,6 +7819,9 @@ def main():
         vm_registry.set_rdp_forward_port(args.vm_name, args.host_tcp_port)
 
     elif args.command == "test":
+        pci_list = Pci.get_list()
+        print(pci_list.get_vga_list()[0].get_rom("/home/galina"))
+
         print(Pci.get_list().get_pci_id_list())
         return
 
@@ -7834,8 +7837,7 @@ def main():
         Power().reboot()
         return
 
-        # pci_list = Pci.get_list()
-        # print(pci_list.get_vga_list()[0].get_rom("/home/utopia"))
+        #
         # print(pci_list.get_pci_list_by_capabilities(is_pci_express=True, is_sriov=False))
         # print(Cpu.get_cpu0().is_intel_above_sandybridge())
         # print(Cpu.get_cpu0().is_intel_above_broadwell())
