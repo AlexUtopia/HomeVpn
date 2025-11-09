@@ -48,7 +48,15 @@ function get_os_name() {
     return 0
 }
 
+function get_machine_name() {
+    local RESULT=""
+    RESULT=$(uname -m) || return $?
+    echo "${RESULT,,}"
+    return 0
+}
+
 OS_NAME=$(get_os_name)
+MACHINE_NAME=$(get_machine_name)
 
 function is_linux() {
    if [[ "${OS_NAME}" == *"linux"* ]]; then
@@ -176,9 +184,9 @@ elif is_msys; then
     DNSMASQ_PACKAGE=""
 fi
 
-QEMU_SYSTEM_PACKAGE="qemu-system qemu-kvm swtpm ovmf"
+QEMU_SYSTEM_PACKAGE="qemu-system qemu-kvm swtpm"
 if is_termux; then
-    QEMU_SYSTEM_PACKAGE="qemu-system-x86-64 swtpm ovmf"
+    QEMU_SYSTEM_PACKAGE="qemu-system-x86-64 swtpm"
 elif is_msys; then
     QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
 fi
@@ -1000,20 +1008,50 @@ function package_manager_is_package_available_from_repository() {
 
 ### System package manager end
 
-function pip_install_packages() {
-    PYTHON_EXECUTABLE="${1}"
+function python_venv_get_dir_path() {
+    PROJECT_DIR_PATH="${1}"
+    if [[ -z "${PROJECT_DIR_PATH}" ]]; then
+        PROJECT_DIR_PATH="${MY_DIR}"
+    fi
 
-    local CURRENT_USER=""
-    CURRENT_USER="$(logname)" || return $?
-    local VENV_DIR_PATH="${MY_DIR}/.venv"
-    local VENV_ACTIVATE_FILE_PATH="${VENV_DIR_PATH}/bin/activate"
-    local REQUIREMENTS_FILE_PATH="${MY_DIR}/requirements.txt"
-
-    sudo --user="${CURRENT_USER}" "${PYTHON_EXECUTABLE}" -m venv "${VENV_DIR_PATH}" && \
-        source "${VENV_ACTIVATE_FILE_PATH}" && \
-        pip install -r "${REQUIREMENTS_FILE_PATH}" --force-reinstall --ignore-installed && \
-        deactivate || return $?
+    echo "${PROJECT_DIR_PATH}/.venv"
     return 0
+}
+
+function python_venv_activate() {
+    local PROJECT_DIR_PATH="${1}"
+
+    local VENV_DIR_PATH=""
+    VENV_DIR_PATH=$(python_venv_get_dir_path "${PROJECT_DIR_PATH}") || return $?
+
+    source "${VENV_DIR_PATH}/bin/activate" || return $?
+    return 0
+}
+
+function python_venv_deactivate() {
+    deactivate || return $?
+    return 0
+}
+
+function pip_install_packages() {
+    local PROJECT_DIR_PATH="${1}"
+    local REQUIREMENTS_FILE_PATH="${2}"
+
+    if [[ -z "${REQUIREMENTS_FILE_PATH}" && -n "${PROJECT_DIR_PATH}" ]]; then
+        REQUIREMENTS_FILE_PATH="${PROJECT_DIR_PATH}/requirements.txt"
+    fi
+
+    local PYTHON_EXECUTABLE="python$(python_get_version)"
+
+    local VENV_DIR_PATH=""
+    VENV_DIR_PATH="$(python_venv_get_dir_path "${PROJECT_DIR_PATH}")" || return $?
+
+    "${PYTHON_EXECUTABLE}" -m venv "${VENV_DIR_PATH}" || return $?
+    python_venv_activate "${PROJECT_DIR_PATH}" || return $?
+    pip install -r "${REQUIREMENTS_FILE_PATH}" --force-reinstall --ignore-installed
+    local COMMAND_CHAIN_RESULT=$?
+    python_venv_deactivate
+    return ${COMMAND_CHAIN_RESULT}
 }
 
 ### termux specific API begin
@@ -1329,13 +1367,23 @@ function firewall_accept_udp_traffic_for_port() {
 
 ### System firewall end
 
+function python_get_version() {
+    if package_manager_is_apt; then
+        if ! is_termux; then
+            echo "3.13"
+            return 0
+        fi
+    fi
+    echo "3"
+    return 0
+}
 
 function python_install() {
-    local PYTHON_VERSION="3"
+    local PYTHON_VERSION=""
+    PYTHON_VERSION=$(python_get_version) || return $?
 
     if package_manager_is_apt; then
         if ! is_termux; then
-            PYTHON_VERSION="3.13"
             # https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
             add-apt-repository -y "ppa:deadsnakes/ppa" || return $?
             apt update || return $?
@@ -1351,8 +1399,7 @@ function python_install() {
 
     package_manager_install_packages "${PYTHON_PACKAGE_LIST}" || return $?
 
-    local PYTHON_EXECUTABLE="python${PYTHON_VERSION}"
-    pip_install_packages "${PYTHON_EXECUTABLE}" || return $?
+    pip_install_packages "${MY_DIR}" || return $?
     return 0
 }
 
@@ -1403,8 +1450,8 @@ function openjdk_install() {
 function pycharm_install() {
     local PYCHARM="pycharm-community-2025.1.3.1"
     local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
-    local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
-    local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIRECTORY}/${PYCHARM}"
+    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
+    local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIR_PATH}/${PYCHARM}"
 
     if [[ -d "${PYCHARM_INSTALL_DIRECTORY}" ]]; then
         echo "WARNING: Pycharm \"${PYCHARM}\" already installed"
@@ -1413,9 +1460,9 @@ function pycharm_install() {
 
     openjdk_install || return $?
 
-    make_dirs "${INSTALL_DIRECTORY}" || return $?
+    make_dirs "${INSTALL_DIR_PATH}" || return $?
 
-    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" || return $?
+    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIR_PATH}" || return $?
     return 0
 }
 
@@ -1463,15 +1510,15 @@ function rdp_client_install() {
 }
 
 function winetricks_install_default() {
-   local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20250102.tar.gz"
-   local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/winetricks"
+    local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20250102.tar.gz"
+    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/winetricks"
 
-   rm -rf "${INSTALL_DIRECTORY}" || return $?
-   make_dirs "${INSTALL_DIRECTORY}" || return $?
+    rm -rf "${INSTALL_DIR_PATH}" || return $?
+    make_dirs "${INSTALL_DIR_PATH}" || return $?
 
-   download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" --strip-components=1 || return $?
-   make -C "${INSTALL_DIRECTORY}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
-   return 0
+    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIR_PATH}" --strip-components=1 || return $?
+    make -C "${INSTALL_DIR_PATH}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
+    return 0
 }
 
 function wine_install_default() {
@@ -2041,19 +2088,196 @@ function waydroid_setup() {
 function cpuid_setup() {
     local CPUID_PACKAGE="cpuid"
     local CPUID_SOURCES_URL="https://www.etallen.com/cpuid/cpuid-20250513.src.tar.gz"
-    local MACHINE=""
-    MACHINE=$(uname -m) || return $?
-    if [[ "${MACHINE}" == "i386" || "${MACHINE}" == "i686" || "${MACHINE}" == "x86_64" || "${MACHINE}" == "ia64" ]]; then
-        local INSTALL_DIRECTORY="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/${CPUID_PACKAGE}"
-        rm -rf "${INSTALL_DIRECTORY}" || return $?
-        make_dirs "${INSTALL_DIRECTORY}" || return $?
+    if [[ "${MACHINE_NAME}" == "i386" || "${MACHINE_NAME}" == "i686" || "${MACHINE_NAME}" == "x86_64" || "${MACHINE_NAME}" == "ia64" ]]; then
+        local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/${CPUID_PACKAGE}"
+        rm -rf "${INSTALL_DIR_PATH}" || return $?
+        make_dirs "${INSTALL_DIR_PATH}" || return $?
 
-        download_file "${CPUID_SOURCES_URL}" "-" | tar -xz -C "${INSTALL_DIRECTORY}" --strip-components=1 || return $?
-        make -C "${INSTALL_DIRECTORY}" || return $?
-        make -C "${INSTALL_DIRECTORY}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
+        download_file "${CPUID_SOURCES_URL}" "-" | tar -xz -C "${INSTALL_DIR_PATH}" --strip-components=1 || return $?
+        make -C "${INSTALL_DIR_PATH}" || return $?
+        make -C "${INSTALL_DIR_PATH}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
         return 0
     fi
 }
+
+# PYTHONPATH=$PYTHONPATH:/opt/edk2/BaseTools/Source/Python python FMMT.py -e "/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP" 380B6B4F-1454-41F2-A6D3-61D1333E8CB4 /home/utopia/HomeVpn/data/gop.efi
+function uefiextract_setup() {
+    local UEFIEXTRACT_PACKAGE="uefiextract"
+    local UEFIEXTRACT_SOURCES_URL="https://github.com/LongSoft/UEFITool/releases/download/A72/UEFIExtract_NE_A72_x64_linux.zip"
+    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/${UEFIEXTRACT_PACKAGE}"
+    rm -rf "${INSTALL_DIR_PATH}" || return $?
+    make_dirs "${INSTALL_DIR_PATH}" || return $?
+
+    local TMP_FILE_PATH=""
+    TMP_FILE_PATH=$(mktemp) || return $?
+
+    download_file "${UEFIEXTRACT_SOURCES_URL}" "${TMP_FILE_PATH}" && \
+    7z x "${TMP_FILE_PATH}" -o"${INSTALL_DIR_PATH}"
+    local COMMAND_CHAIN_RESULT=$?
+    rm -f "${TMP_FILE_PATH}"
+    return ${COMMAND_CHAIN_RESULT}
+}
+
+function uefiextract_get_intel_gop_driver() {
+    local UEFI_IMAGE_PATH="${1}"
+    local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
+    local INTEL_GOP_DRIVER_UUID="380B6B4F-1454-41F2-A6D3-61D1333E8CB4"
+
+    local TMP_DIR_PATH=""
+    TMP_DIR_PATH=$(mktemp --directory --dry-run) || return $?
+
+    "/opt/uefiextract/uefiextract" "${UEFI_IMAGE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
+    make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
+    cp -f "${TMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}"
+    local COMMAND_CHAIN_RESULT=$?
+    rm -rf "${TMP_DIR_PATH}"
+    return ${COMMAND_CHAIN_RESULT}
+}
+
+function ovmf_get_arch() {
+    if [[ "${MACHINE_NAME}" == "i386" || "${MACHINE_NAME}" == "i686" ]]; then
+        echo "IA32"
+        return 0
+    elif [[ "${MACHINE_NAME}" == "x86_64" ]]; then
+        echo "X64"
+        return 0
+    elif [[ "${MACHINE_NAME}" == "armv8l" ]]; then # 64-ёх битный ARM поддерживающий 32-ух битные инструкции
+        echo "ARM"
+        return 0
+    elif [[ "${MACHINE_NAME}" == "aarch64" ]]; then
+        echo "AARCH64"
+        return 0
+    else
+        echo "UNKNOWN ARCH"
+        return 1
+    fi
+}
+
+function git_clone_or_fetch() {
+    local PROJECT_URL="${1}"
+    local PROJECT_DIR_PATH="${2}"
+    local PROJECT_BRANCH_OR_TAG="${3}"
+    local WORK_BRANCH_NAME=""
+    WORK_BRANCH_NAME=$(basename "${PROJECT_BRANCH_OR_TAG}") || return $?
+    if [[ -z "${WORK_BRANCH_NAME}" ]]; then
+        return 1
+    else
+        WORK_BRANCH_NAME="work-branch-${WORK_BRANCH_NAME}"
+    fi
+
+    if [[ -d "${PROJECT_DIR_PATH}" ]]; then
+        pushd "${PROJECT_DIR_PATH}" || return $?
+        git fetch && git checkout -f -B "${WORK_BRANCH_NAME}" "${PROJECT_BRANCH_OR_TAG}"
+        local COMMAND_CHAIN_RESULT=$?
+        popd
+        return ${COMMAND_CHAIN_RESULT}
+    else
+        local PROJECT_BASE_DIR_PATH=""
+        PROJECT_BASE_DIR_PATH="$(dirname "${PROJECT_DIR_PATH}")" || return $?
+        make_dirs "${PROJECT_BASE_DIR_PATH}" || return $?
+        git clone "${PROJECT_URL}" "${PROJECT_DIR_PATH}" || return $?
+        pushd "${PROJECT_DIR_PATH}" || return $?
+        git checkout -f -B "${WORK_BRANCH_NAME}" "${PROJECT_BRANCH_OR_TAG}"
+        local COMMAND_CHAIN_RESULT=$?
+        popd
+        return ${COMMAND_CHAIN_RESULT}
+    fi
+}
+
+function edk2_install_dependencies() {
+    # fixme utopia Зависимости только для Ubuntu/LinuxMint
+    package_manager_install_packages "build-essential uuid-dev nasm iasl" || return $?
+    return 0
+}
+
+
+function vfio_igd_pkg_setup() {
+    local EDK2_DIR_PATH="${1}"
+    local DOWNLOAD_URL="https://github.com/tomitamoeko/VfioIgdPkg.git"
+    local INSTALL_DIR_PATH="/opt/VfioIgdPkg"
+    local SYMLINK_DIR_PATH="${EDK2_DIR_PATH}/VfioIgdPkg"
+    local PROJECT_BRANCH="remotes/origin/master"
+    local OUT_BIN_DIR_PATH="${MY_DIR}/data/ovmf"
+    local OUT_BIN_PATH="${OUT_BIN_DIR_PATH}/vbios.rom"
+
+    git_clone_or_fetch "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "${PROJECT_BRANCH}" || return $?
+
+    make_dirs "${OUT_BIN_DIR_PATH}" || return $?
+
+    create_symlink "${INSTALL_DIR_PATH}" "${SYMLINK_DIR_PATH}" || return $?
+
+    pushd "${SYMLINK_DIR_PATH}" || return $?
+    ./build.sh --device_id 0x0126 --release --gop "/home/utopia/HomeVpn/data/IntelGopDriver.efi" "${OUT_BIN_PATH}"
+    local COMMAND_CHAIN_RESULT=$?
+    popd
+    return ${COMMAND_CHAIN_RESULT}
+}
+
+# https://launchpad.net/ubuntu/questing/+package/ovmf
+# https://launchpad.net/ubuntu/+source/edk2/2025.02-8ubuntu3
+# https://superuser.com/questions/1660806/how-to-install-a-windows-guest-in-qemu-kvm-with-secure-boot-enabled
+# https://github.com/rhuefi/qemu-ovmf-secureboot
+# https://forums.unraid.net/topic/128595-secure-boot-off-in-ovmf-tpm-bios-windows-11/
+# https://projectacrn.github.io/1.6/tutorials/waag-secure-boot.html#generate-platform-key-pk
+function edk2_ovmf_setup() {
+    local DOWNLOAD_URL="https://github.com/tianocore/edk2.git"
+    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/edk2"
+    local PROJECT_TAG="edk2-stable202508.01"
+
+    edk2_install_dependencies || return $?
+
+    git_clone_or_fetch "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "${PROJECT_TAG}" || return $?
+
+    pushd "${INSTALL_DIR_PATH}" || return $?
+
+    local TOOLCHAIN="GCC"
+    local BUILD_VARIANT="RELEASE"
+    local BUILD_DIR="Build/OvmfX64"
+    local BUILD_DIR_PATH="${INSTALL_DIR_PATH}/${BUILD_DIR}/${BUILD_VARIANT}_${TOOLCHAIN}"
+    local OVMF_CODE_PATH="${BUILD_DIR_PATH}/FV/OVMF_CODE.fd"
+    local OVMF_VARS_PATH="${BUILD_DIR_PATH}/FV/OVMF_VARS.fd"
+
+    git submodule update --init --recursive                                               && \
+    pip_install_packages "${INSTALL_DIR_PATH}" "${INSTALL_DIR_PATH}/pip-requirements.txt" && \
+    python_venv_activate "${INSTALL_DIR_PATH}"                                            && \
+    make -C "${INSTALL_DIR_PATH}/BaseTools"                                               && \
+    source edksetup.sh                                                                    && \
+    build \
+        -DSECURE_BOOT_ENABLE=TRUE \
+        --platform="${INSTALL_DIR_PATH}/OvmfPkg/OvmfPkgX64.dsc" \
+        --arch="$(ovmf_get_arch)" \
+        --tagname=GCC \
+        --buildtarget=RELEASE                                                             && \
+    cp -f "${OVMF_CODE_PATH}" "${MY_DIR}/data/ovmf/OVMF_CODE.fd"                          && \
+    cp -f "${OVMF_VARS_PATH}" "${MY_DIR}/data/ovmf/OVMF_VARS.fd"                          && \
+    vfio_igd_pkg_setup "${INSTALL_DIR_PATH}"                                              && \
+    python_venv_deactivate
+    local COMMAND_CHAIN_RESULT=$?
+    popd
+    return ${COMMAND_CHAIN_RESULT}
+}
+
+
+function extract_intel_gop_driver() {
+    local UEFI_IMAGE_PATH="/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP"
+    local EDK2_DIR_PATH="/opt/edk2"
+    local OUT_DIR_PATH="/home/utopia/HomeVpn/data"
+    local EDK2_PYTHON_PATH="${EDK2_DIR_PATH}/BaseTools/Source/Python"
+    local FMMT_SCRIPT_PATH="${EDK2_PYTHON_PATH}/FMMT/FMMT.py"
+    local OUT_INTEL_GOP_DRIVER_PATH="${OUT_DIR_PATH}/IntelGopDriver.efi"
+    local INTEL_GOP_DRIVER_UUID="A0327FE0-1FDA-4E5B-905D-B510C45A61D0"
+
+    pushd "${EDK2_DIR_PATH}" || return $?
+
+    python_venv_activate "${EDK2_DIR_PATH}" || return $?
+    source edksetup.sh || return $?
+    PYTHONPATH="$PYTHONPATH:${EDK2_PYTHON_PATH}" python "${FMMT_SCRIPT_PATH}" -e "${UEFI_IMAGE_PATH}" "${INTEL_GOP_DRIVER_UUID}" 380B6B4F-1454-41F2-A6D3-61D1333E8CB4 "${OUT_INTEL_GOP_DRIVER_PATH}" || return $?
+    python_venv_deactivate
+    local COMMAND_CHAIN_RESULT=$?
+    popd
+    return ${COMMAND_CHAIN_RESULT}
+}
+
 
 function main_install_min_packages() {
     local PACKAGE_LIST="${1}"
@@ -2129,4 +2353,11 @@ function main() {
 # https://bytexd.com/xrdp-ubuntu/
 # https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-main
+#uefiextract_setup
+# Узнать версию UEFI
+# sudo dmidecode --type=0
+#uefiextract_get_intel_gop_driver "/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP" "/home/utopia/HomeVpn/data/IntelGopDriver.efi"
+#extract_intel_gop_driver
+edk2_ovmf_setup
+
+#main
