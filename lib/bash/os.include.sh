@@ -17,7 +17,7 @@ function is_admin_rights_available() {
 ## @brief Получить название текущей ОС
 ## @details Результат - строка в нижнем регистре
 ## @return Название текущей ОС
-## @retval 0 - успешно, 1 - нет
+## @retval 0 - успешно
 function get_os_name() {
     local RESULT=""
     RESULT=$(uname -o) || return $?
@@ -25,16 +25,22 @@ function get_os_name() {
     return 0
 }
 
+## @brief Закэшированное имя текущей ОС
+OS_NAME=$(get_os_name)
+
 ## @brief Получить название архитектуры ОС
 ## @details Результат - строка в нижнем регистре
 ## @return Название архитектуры ОС
-## @retval 0 - успешно, 1 - нет
+## @retval 0 - успешно
 function get_machine_name() {
     local RESULT=""
     RESULT=$(uname -m) || return $?
     echo "${RESULT,,}"
     return 0
 }
+
+## @brief Закэшированная архитектура текущей ОС
+MACHINE_NAME=$(get_machine_name)
 
 ## @brief Проверить является ли текущая ОС Linux
 ## @retval 0 - текущая ОС Linux, 1 - нет
@@ -77,7 +83,7 @@ function is_cygwin() {
 ## @details https://www.freedesktop.org/software/systemd/man/latest/os-release.html
 ## @details Результат - строка в нижнем регистре
 ## @return Название дистрибутива Linux
-## @retval 0 - успешно, 1 - нет
+## @retval 0 - успешно
 function get_linux_distro_name() {
    source "/etc/os-release" || return $?
 
@@ -95,7 +101,7 @@ function get_linux_distro_name() {
 ## @details https://www.freedesktop.org/software/systemd/man/latest/os-release.html
 ## @details Результат - строка в нижнем регистре
 ## @return Название версии дистрибутива Linux
-## @retval 0 - успешно, 1 - нет
+## @retval 0 - успешно
 function get_linux_distro_codename_or_version() {
    source "/etc/os-release" || return $?
 
@@ -108,9 +114,3 @@ function get_linux_distro_codename_or_version() {
    fi
    return 0
 }
-
-## @brief Закэшированное имя текущей ОС
-OS_NAME=$(get_os_name)
-
-## @brief Закэшированная архитектура текущей ОС
-MACHINE_NAME=$(get_machine_name)

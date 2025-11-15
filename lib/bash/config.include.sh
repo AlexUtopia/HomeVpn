@@ -2,27 +2,31 @@
 
 ## @brief Переменные конфигурации разворота проекта
 
-source "${PROJECT_ROOT}/lib/bash/os.include.sh"
-
 ## @brief Конфигурация пакетов
 GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
 
 ## @brief Конфигурация пути до корня файловой системы
-GLOBAL_CONFIG_ROOT_PREFIX=""
+GLOBAL_CONFIG_ROOT_PATH=""
 if is_termux; then
-    GLOBAL_CONFIG_ROOT_PREFIX="${PREFIX}/.."
+    GLOBAL_CONFIG_ROOT_PATH="${PREFIX}/.."
 fi
 
 ## @brief Конфигурация пути до директории usr
-GLOBAL_CONFIG_USR_PREFIX="/usr"
+GLOBAL_CONFIG_USR_DIR_PATH="/usr"
 if is_termux; then
-    GLOBAL_CONFIG_USR_PREFIX="${PREFIX}"
+    GLOBAL_CONFIG_USR_DIR_PATH="${PREFIX}"
 fi
 
 ## @brief Конфигурация пути до директории etc
-GLOBAL_CONFIG_ETC_PREFIX="/etc"
+GLOBAL_CONFIG_ETC_DIR_PATH="/etc"
 if is_termux; then
-    GLOBAL_CONFIG_ETC_PREFIX="${GLOBAL_CONFIG_USR_PREFIX}/etc"
+    GLOBAL_CONFIG_ETC_DIR_PATH="${GLOBAL_CONFIG_USR_DIR_PATH}/etc"
+fi
+
+## @brief Конфигурация пути до директории opt
+GLOBAL_CONFIG_OPT_DIR_PATH="/opt"
+if is_termux; then
+    GLOBAL_CONFIG_OPT_DIR_PATH="${GLOBAL_CONFIG_USR_DIR_PATH}/opt"
 fi
 
 ## @brief Имя пользователя от которого будет работать VNC сервер
@@ -54,3 +58,6 @@ GLOBAL_CONFIG_SMB_SERVER_TCP_PORTS="139 445"
 if is_termux; then
     GLOBAL_CONFIG_SMB_SERVER_TCP_PORTS="1139 4445"
 fi
+
+## @brief Путь до директории данных проекта
+GLOBAL_CONFIG_DATA_DIR_PATH="${HOME_VPN_PROJECT_ROOT}/data"
