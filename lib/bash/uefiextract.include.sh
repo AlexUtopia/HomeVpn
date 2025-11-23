@@ -52,18 +52,22 @@ function uefiextract_setup() {
 }
 
 ## @brief Извлечь IntelGopDriver из UEFI образа
-## @param [in] Путь до UEFI образа
+## @param [in] Путь до UEFI образа материнской платы
 ## @param [in] Путь до конечного файла куда извлечь IntelGopDriver из UEFI
 ## @retval 0 - успешно
 function uefiextract_get_intel_gop_driver() {
-    local UEFI_IMAGE_PATH="${1}"
+    local UEFI_IMAGE_FILE_PATH="${1}"
     local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
     local INTEL_GOP_DRIVER_UUID="380B6B4F-1454-41F2-A6D3-61D1333E8CB4"
+
+    if ! [[ -e "${UEFI_IMAGE_FILE_PATH}" ]]; then
+        return 1
+    fi
 
     local TMP_DIR_PATH=""
     TMP_DIR_PATH=$(mktemp --directory --dry-run) || return $?
 
-    "$(uefiextract_executable_path)" "${UEFI_IMAGE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
+    "$(uefiextract_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
     make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
     cp -f "${TMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}"
     local COMMAND_CHAIN_RESULT=$?

@@ -1,6 +1,8 @@
 #!/bin/bash
 
 ## @brief Функции работы с VfioIgdPkg
+## @details Осуществляется сборка для архитектуры X64, так заложено в оригинальном проекте https://github.com/tomitamoeko/VfioIgdPkg/blob/master/build.sh#L16
+##          Т.е. запуск 32-ух битных ОС будет недоступна
 ## https://github.com/tomitamoeko/VfioIgdPkg
 
 
@@ -8,12 +10,12 @@
 ## @return Путь до видеобиоса для виртуальный машины qemu + uefi (ovmf)
 ## @retval 0 - успешно
 function vfio_igd_get_vbios_path() {
-   echo "${GLOBAL_CONFIG_DATA_DIR_PATH}/ovmf/vbios.rom"
+   echo "${GLOBAL_CONFIG_DATA_DIR_PATH}/ovmf/x64/vbios.rom"
    return 0
 }
 
-## @brief Установить VfioIgdPkg
-## @details Конечный продукт - видеобиос для виртуальный машины qemu, путь:
+## @brief Собрать и установить VfioIgdPkg
+## @details Конечный продукт - видеобиос для виртуальный машины qemu
 ## @param [in] Путь до директории проекта EDK2
 ## @param [in] PCI ProductId целевой видеокарты (VGA) Intel
 ## @param [in] Путь до файла IntelGopDriver, необязательный аргумент
@@ -38,10 +40,10 @@ function vfio_igd_setup() {
     create_symlink "${INSTALL_DIR_PATH}" "${SYMLINK_DIR_PATH}" || return $?
 
     pushd "${INSTALL_DIR_PATH}" || return $?
-    if [[ -n "${INTEL_GOP_DRIVER_FILE_PATH}" ]]; then
-        ./build.sh --device_id "${VGA_PID}" --release --gop "${INTEL_GOP_DRIVER_FILE_PATH}" "${OUT_BIN_PATH}"
+    if [[ -e "${INTEL_GOP_DRIVER_FILE_PATH}" ]]; then
+        ./build.sh --device_id "${VGA_PID}" --release --gop "${INTEL_GOP_DRIVER_FILE_PATH}" "${OUT_VBIOS_FILE_PATH}"
     else
-        ./build.sh --device_id "${VGA_PID}" --release "${OUT_BIN_PATH}"
+        ./build.sh --device_id "${VGA_PID}" --release "${OUT_VBIOS_FILE_PATH}"
     fi
     local COMMAND_CHAIN_RESULT=$?
     popd
