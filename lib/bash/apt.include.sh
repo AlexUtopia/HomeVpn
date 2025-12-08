@@ -13,6 +13,8 @@ function dpkg_get_main_architecture() {
    return 0
 }
 
+APT_MAIN_ARCH=$(dpkg_get_main_architecture)
+
 ## @brief Обновить установленные пакеты
 ## @retval 0 - успешно
 function apt_update_and_upgrade() {

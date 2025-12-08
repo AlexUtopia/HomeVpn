@@ -2,7 +2,7 @@
 
 ## @brief Функции работы с VfioIgdPkg
 ## @details Осуществляется сборка для архитектуры X64, так заложено в оригинальном проекте https://github.com/tomitamoeko/VfioIgdPkg/blob/master/build.sh#L16
-##          Т.е. запуск 32-ух битных ОС будет недоступна
+##          Т.е. запуск 32-ух битных ОС будет недоступен
 ## https://github.com/tomitamoeko/VfioIgdPkg
 
 
