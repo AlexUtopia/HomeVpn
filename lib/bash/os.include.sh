@@ -40,7 +40,7 @@ function get_machine_name() {
 }
 
 ## @brief Закэшированная архитектура текущей ОС
-MACHINE_NAME=$(get_machine_name)
+OS_MACHINE_NAME=$(get_machine_name)
 
 ## @brief Проверить является ли текущая ОС Linux
 ## @retval 0 - текущая ОС Linux, 1 - нет

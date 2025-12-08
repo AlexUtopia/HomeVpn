@@ -35,9 +35,9 @@ function vfio_igd_setup() {
 
     git_clone_or_fetch "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "${PROJECT_BRANCH}" || return $?
 
-    make_dirs "$(dirname "${OUT_VBIOS_FILE_PATH}")" || return $?
+    fs_make_dirs "$(dirname "${OUT_VBIOS_FILE_PATH}")" || return $?
 
-    create_symlink "${INSTALL_DIR_PATH}" "${SYMLINK_DIR_PATH}" || return $?
+    fs_create_symlink "${INSTALL_DIR_PATH}" "${SYMLINK_DIR_PATH}" || return $?
 
     pushd "${INSTALL_DIR_PATH}" || return $?
     if [[ -e "${INTEL_GOP_DRIVER_FILE_PATH}" ]]; then

@@ -85,8 +85,7 @@ function python_setup() {
     if package_manager_is_apt; then
         if ! is_termux; then
             # https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
-            add-apt-repository -y "ppa:deadsnakes/ppa" || return $?
-            apt update || return $?
+            apt_add_ppa "deadsnakes/ppa" || return $?
         fi
     fi
 

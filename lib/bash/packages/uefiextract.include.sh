@@ -3,20 +3,21 @@
 ## @brief Функции работы с uefiextract
 ## https://github.com/LongSoft/UEFITool
 
+
 ## @brief Получить платформу для uefiextract
 ## @return Платформа для uefiextract
 ## @retval 0 - успешно
 function uefiextract_get_platform() {
     if is_linux; then
-        if [[ "${MACHINE_NAME}" == "x86_64" ]]; then
+        if [[ "${OS_MACHINE_NAME}" == "x86_64" ]]; then
             echo "x64_linux"
             return 0
         fi
     elif is_msys; then
-        if [[ "${MACHINE_NAME}" == "x86_64" ]]; then
+        if [[ "${OS_MACHINE_NAME}" == "x86_64" ]]; then
             echo "win64"
             return 0
-        elif [[ "${MACHINE_NAME}" == "i386" || "${MACHINE_NAME}" == "i686" ]]; then
+        elif [[ "${OS_MACHINE_NAME}" == "i386" || "${OS_MACHINE_NAME}" == "i686" ]]; then
             echo "win32"
             return 0
         fi
@@ -68,7 +69,7 @@ function uefiextract_get_intel_gop_driver() {
     TMP_DIR_PATH=$(mktemp --directory --dry-run) || return $?
 
     "$(uefiextract_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
-    make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
+    fs_make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
     cp -f "${TMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}"
     local COMMAND_CHAIN_RESULT=$?
     rm -rf "${TMP_DIR_PATH}"

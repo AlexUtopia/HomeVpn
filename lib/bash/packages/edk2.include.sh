@@ -43,7 +43,7 @@ function edk2_install_dependencies() {
 ## @param [in] Путь до проекта edk2
 ## @param [in] Уникальное название сборочной директории
 ## @param [in] Путь до файла проекта (dsc файл)
-## @param [in] Архитектуры для сборки
+## @param [in] Список архитектур для сборки
 ## @param [in] Итоговая архитектура
 ## @retval 0 - успешно
 function edk2_ovmf_build_for_ibm_pc() {
@@ -115,7 +115,7 @@ function edk2_ovmf_build_x86_64() {
 
 ## @brief Собрать и установить edk2/ovmf
 ## @param [in] PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter)
-## @param [in] Путь до UEFI образа материнской платы, необязательный аргумент. Если не задан то видеобиос будет собран без поддержки вывода на изображения на монитор
+## @param [in] Путь до UEFI образа материнской платы, необязательный аргумент. Если не задан то видеобиос будет собран без поддержки вывода изображения на монитор
 ## @retval 0 - успешно
 function edk2_ovmf_setup() {
     local VGA_PID="${1}"
