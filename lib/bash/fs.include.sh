@@ -127,3 +127,23 @@ function fs_create_file() {
     fi
     return 0
 }
+
+## @brief Подождать создания директории
+## @param [in] Путь до отслеживаемой директории
+## @param [in] Время ожидания в секундах, необязательный аргумент (если не задано, = 10 секунд)
+## @retval 0 - успешно
+function fs_wait_for_dir_creation() {
+    local TARGET_DIR_PATH="${1}"
+    local WAIT_SECONDS_COUNT=${2}
+    if [[ -z "${WAIT_SECONDS_COUNT}" ]]; then
+         WAIT_SECONDS_COUNT=10
+    fi
+
+    for (( i = 0; i < WAIT_SECONDS_COUNT; i++ )); do
+        if [[ -d "${TARGET_DIR_PATH}" ]]; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}

@@ -20,8 +20,7 @@ function openvpn_setup() {
         local URIS="https://build.openvpn.net/debian/openvpn/stable"
         local SUITES="${OS_DISTRO_VERSION_CODENAME}"
         local COMPONENTS="main"
-        local ARCHITECTURES="${APT_MAIN_ARCH}"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" || return $?
         package_manager_install_packages "${PACKAGE_NAME}" || return $?
         echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run ${PACKAGE_NAME}"
         return 0

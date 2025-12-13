@@ -7,13 +7,22 @@
 ## @return Главная архитектура пакетов, например, amd64 или aarch64
 ## @retval 0 - успешно
 function dpkg_get_main_architecture() {
-   local RESULT=""
-   RESULT=$(dpkg --print-architecture) || return $?
-   echo "${RESULT}"
-   return 0
+    local RESULT=""
+    RESULT=$(dpkg --print-architecture) || return $?
+    echo "${RESULT}"
+    return 0
 }
 
-APT_MAIN_ARCH=$(dpkg_get_main_architecture)
+## @brief Установить список пакетов
+## @details Список может состоять из одного пакета
+## @param [in] Список пакетов
+## @retval 0 - успешно
+function apt_install_packages() {
+    local PACKAGE_NAME_LIST="${1}"
+
+    apt -y install ${PACKAGE_NAME_LIST} || return $?
+    return 0
+}
 
 ## @brief Обновить установленные пакеты
 ## @retval 0 - успешно
@@ -31,17 +40,7 @@ function apt_update_and_upgrade() {
         apt update || return $?
     fi
 
-    return 0
-}
-
-## @brief Установить список пакетов
-## @details Список может состоять из одного пакета
-## @param [in] Список пакетов
-## @retval 0 - успешно
-function apt_install_packages() {
-    local PACKAGE_NAME_LIST="${1}"
-
-    apt -y install ${PACKAGE_NAME_LIST} || return $?
+    apt_install_packages "gnupg" || return $? # Используется для функции apt_download_key()
     return 0
 }
 
@@ -51,17 +50,18 @@ function apt_install_packages() {
 function apt_is_package_installed() {
     local PACKAGE_NAME="${1}"
 
-    apt -L "${PACKAGE_NAME}" &> "/dev/null"
-    return $?
+    apt -L "${PACKAGE_NAME}" &> "/dev/null" || return $?
+    return 0
 }
 
-## @brief Проверить доступен ли пакет в репозитории пакетов
+## @brief Проверить существует (доступен) ли пакет в репозитории пакетов
 ## @param [in] Имя пакета
-## @retval 0 - пакет доступен в репозитории пакетов, 1 - нет
-function apt_is_package_available_from_repository() {
+## @retval 0 - пакет существует (доступен) в репозитории пакетов, 1 - нет
+function apt_is_package_exists_from_repository() {
     local PACKAGE_NAME="${1}"
-    apt-cache show "${PACKAGE_NAME}" &> "/dev/null"
-    return $?
+
+    apt-cache show "${PACKAGE_NAME}" &> "/dev/null" || return $?
+    return 0
 }
 
 ## @brief Создать source файл в формате deb822 для apt
@@ -76,28 +76,28 @@ function apt_is_package_available_from_repository() {
 ## @param [in] Types параметр (не обязательный, будет "deb")
 ## @retval 0 - успешно
 function apt_create_sources() {
-   local SOURCES_FILE_PATH="${1}"
-   local URIS="${2}"
-   local SUITES="${3}"
-   local COMPONENTS="${4}"
+    local SOURCES_FILE_PATH="${1}"
+    local URIS="${2}"
+    local SUITES="${3}"
+    local COMPONENTS="${4}"
 
-   local SIGNED_BY="${5}"
-   local SIGNED_BY_PATH=""
-   if [[ -n "${SIGNED_BY}" ]]; then
-       SIGNED_BY_PATH="Signed-By: ${SIGNED_BY}"
-   fi
+    local SIGNED_BY="${5}"
+    local SIGNED_BY_PATH=""
+    if [[ -n "${SIGNED_BY}" ]]; then
+        SIGNED_BY_PATH="Signed-By: ${SIGNED_BY}"
+    fi
 
-   local ARCHITECTURES="${6}"
-   if [[ -z "${ARCHITECTURES}" ]]; then
-       ARCHITECTURES=$(dpkg_get_main_architecture) || return $?
-   fi
+    local ARCHITECTURES="${6}"
+    if [[ -z "${ARCHITECTURES}" ]]; then
+        ARCHITECTURES=$(dpkg_get_main_architecture) || return $?
+    fi
 
-   local TYPES="${7}"
-   if [[ -z "${TYPES}" ]]; then
-       TYPES="deb"
-   fi
+    local TYPES="${7}"
+    if [[ -z "${TYPES}" ]]; then
+        TYPES="deb"
+    fi
 
-   fs_create_file "Types: ${TYPES}
+    fs_create_file "Types: ${TYPES}
 URIs: ${URIS}
 Suites: ${SUITES}
 Components: ${COMPONENTS}

@@ -6,9 +6,9 @@
 
 ## @brief Установить waydroid
 ## @details https://docs.waydro.id/usage/install-on-desktops#ubuntu-debian-and-derivatives
+## @details https://learn.microsoft.com/en-us/windows/android/wsa/
 ## @retval 0 - успешно
 function waydroid_setup() {
-    # https://learn.microsoft.com/en-us/windows/android/wsa/
     if is_termux || is_msys; then
         return 0
     fi
@@ -22,8 +22,7 @@ function waydroid_setup() {
         local URIS="https://repo.waydro.id"
         local SUITES="${OS_DISTRO_VERSION_CODENAME}"
         local COMPONENTS="main"
-        local ARCHITECTURES="${APT_MAIN_ARCH}"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" || return $?
         package_manager_install_packages "${PACKAGE_NAME}" || return $?
         echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run ${PACKAGE_NAME}"
         return 0

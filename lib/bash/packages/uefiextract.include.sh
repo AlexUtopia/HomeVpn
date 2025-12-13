@@ -29,7 +29,7 @@ function uefiextract_get_platform() {
 ## @brief Получить путь до исполняемого файла uefiextract
 ## @return Путь до исполняемого файла uefiextract
 ## @retval 0 - успешно
-function uefiextract_executable_path() {
+function uefiextract_get_executable_path() {
    echo "${GLOBAL_CONFIG_OPT_DIR_PATH}/uefiextract/uefiextract"
    return 0
 }
@@ -43,12 +43,11 @@ function uefiextract_setup() {
     local UEFIEXTRACT_PLATFORM=""
     UEFIEXTRACT_PLATFORM=$(uefiextract_get_platform) || return $?
 
-    local UEFIEXTRACT_PACKAGE="uefiextract"
-    local UEFIEXTRACT_SOURCES_URL="https://github.com/LongSoft/UEFITool/releases/download/A72/UEFIExtract_NE_A72_${UEFIEXTRACT_PLATFORM}.zip"
+    local DOWNLOAD_URL="https://github.com/LongSoft/UEFITool/releases/download/A72/UEFIExtract_NE_A72_${UEFIEXTRACT_PLATFORM}.zip"
     local INSTALL_DIR_PATH=""
-    INSTALL_DIR_PATH=$(dirname "$(uefiextract_executable_path)") || return $?
+    INSTALL_DIR_PATH=$(dirname "$(uefiextract_get_executable_path)") || return $?
 
-    download_zip_and_unpack "${UEFIEXTRACT_SOURCES_URL}" "${INSTALL_DIR_PATH}" "remake_dirs" || return $?
+    download_zip_and_unpack "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "remake_dirs" || return $?
     return 0
 }
 
@@ -68,7 +67,7 @@ function uefiextract_get_intel_gop_driver() {
     local TMP_DIR_PATH=""
     TMP_DIR_PATH=$(mktemp --directory --dry-run) || return $?
 
-    "$(uefiextract_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
+    "$(uefiextract_get_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
     fs_make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
     cp -f "${TMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}"
     local COMMAND_CHAIN_RESULT=$?

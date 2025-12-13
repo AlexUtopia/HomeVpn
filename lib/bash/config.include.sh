@@ -61,3 +61,6 @@ fi
 
 ## @brief Путь до директории данных проекта
 GLOBAL_CONFIG_DATA_DIR_PATH="${HOME_VPN_PROJECT_ROOT}/data"
+
+## @brief Префикс пакета для разворота проекта в среде MSYS2
+GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX="${MINGW_PACKAGE_PREFIX}-"

@@ -3,6 +3,13 @@
 ## @brief Функции работы с git
 
 
+## @brief Установить git
+## @retval 0 - успешно
+function git_packages_setup() {
+    package_manager_install_packages "git" || return $?
+    return 0
+}
+
 ## @brief Клонировать проект (clone) или подтянуть (fetch) последние изменения с перезаписью
 ## @param [in] URL проекта
 ## @param [in] Путь до директории проекта

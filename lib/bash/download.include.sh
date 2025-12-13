@@ -3,6 +3,13 @@
 ## @brief Функции работы с загрузкой/распаковкой файлов
 
 
+## @brief Установить пакеты загрузки/распаковки файлов
+## @retval 0 - успешно
+function download_packages_setup() {
+    package_manager_install_packages "${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}curl tar ${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}7zip" || return $?
+    return 0
+}
+
 ## @brief Скачать файл
 ## @details Директория для скачиваемого файла будет создана, если требуется
 ## @param [in] URL для скачивания
