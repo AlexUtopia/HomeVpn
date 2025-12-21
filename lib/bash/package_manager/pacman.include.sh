@@ -34,7 +34,7 @@ function pacman_is_package_installed() {
 ## @brief Проверить существует (доступен) ли пакет в репозитории пакетов
 ## @param [in] Имя пакета
 ## @retval 0 - пакет существует (доступен) в репозитории пакетов, 1 - нет
-function pacman_is_package_exists_from_repository() {\
+function pacman_is_package_exists_in_repository() {
     # fixme utopia команду уточнить https://stackoverflow.com/a/67907522
     local PACKAGE_NAME="${1}"
 

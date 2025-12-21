@@ -116,13 +116,13 @@ function package_manager_is_package_installed() {
     return 0
 }
 
-function package_manager_is_package_exists_from_repository() {
+function package_manager_is_package_exists_in_repository() {
     local PACKAGE_NAME="${1}"
 
     if package_manager_is_apt; then
-        apt_is_package_exists_from_repository "${PACKAGE_NAME}" || return $?
+        apt_is_package_exists_in_repository "${PACKAGE_NAME}" || return $?
     elif package_manager_is_pacman; then
-        pacman_is_package_exists_from_repository "${PACKAGE_NAME}" || return $?
+        pacman_is_package_exists_in_repository "${PACKAGE_NAME}" || return $?
     elif package_manager_is_yum; then
         # fixme utopia Дописать
         return 1

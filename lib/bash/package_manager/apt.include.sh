@@ -36,8 +36,7 @@ function apt_update_and_upgrade() {
     apt upgrade -o Dpkg::Options::="--force-confnew" -y || return $?
 
     if is_termux; then
-        apt -y install x11-repo root-repo || return $?
-        apt update || return $?
+        termux_apt_repo_packages_setup || return $?
     fi
 
     apt_install_packages "gnupg" || return $? # Используется для функции apt_download_key()
@@ -57,7 +56,7 @@ function apt_is_package_installed() {
 ## @brief Проверить существует (доступен) ли пакет в репозитории пакетов
 ## @param [in] Имя пакета
 ## @retval 0 - пакет существует (доступен) в репозитории пакетов, 1 - нет
-function apt_is_package_exists_from_repository() {
+function apt_is_package_exists_in_repository() {
     local PACKAGE_NAME="${1}"
 
     apt-cache show "${PACKAGE_NAME}" &> "/dev/null" || return $?
@@ -216,8 +215,7 @@ function apt_add_ppa() {
     # local URIS="https://ppa.launchpadcontent.net/${PPA_NAME}/ubuntu"
     # local SUITES="${OS_DISTRO_VERSION_CODENAME}"
     # local COMPONENTS="main"
-    # local ARCHITECTURES="amd64"
-    # apt_add_sources "${PPA_NAME//\//-}-${SUITES}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
+    # apt_add_sources "${PPA_NAME//\//-}-${SUITES}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" || return $?
 
     add-apt-repository -y "ppa:${PPA_NAME}" || return $?
     apt update || return $?

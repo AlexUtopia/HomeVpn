@@ -6,6 +6,18 @@
 ## https://wiki.termux.dev/wiki/Main_Page
 
 
+## @brief Установить репозитории пакетов
+##        x11  : https://github.com/termux/termux-packages/tree/master/x11-packages
+##               https://packages.termux.dev/apt/termux-x11/
+##        root : https://github.com/termux/termux-packages/tree/master/root-packages
+##               https://packages.termux.dev/apt/termux-root/
+## @retval 0 - успешно
+function termux_apt_repo_packages_setup() {
+    package_manager_install_packages "x11-repo root-repo" || return $?
+    apt update || return $?
+    return 0
+}
+
 ## @brief Установить пакеты работы с пользователями
 ## @retval 0 - успешно
 function termux_user_packages_setup() {
@@ -17,6 +29,13 @@ function termux_user_packages_setup() {
 ## @retval 0 - успешно
 function termux_service_packages_setup() {
     package_manager_install_packages "termux-services" || return $?
+    return 0
+}
+
+## @brief Установить Android/termux специфичные пакеты
+## @retval 0 - успешно
+function termux_specific_packages_setup() {
+    package_manager_install_packages "termux-tools termux-api proot" || return $?
     return 0
 }
 

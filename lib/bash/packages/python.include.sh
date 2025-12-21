@@ -1,11 +1,13 @@
 #!/bin/bash
 
 ## @brief Функции работы с python
+## https://www.python.org/
 ## https://docs.python.org/3/library/venv.html
 
 
 ## @brief Получить целевую версию python для данной платформы
-## @details Для проекта требуется версия python >= 3.11
+## @details Для проекта требуется версия python >= 3.11 из-за использования atomic group
+##          https://docs.python.org/3/library/re.html#regular-expression-syntax
 ## @return Целевая версия python для данной платформы
 ## @retval 0 - успешно
 function python_get_version() {

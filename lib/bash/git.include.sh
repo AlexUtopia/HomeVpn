@@ -5,7 +5,7 @@
 
 ## @brief Установить git
 ## @retval 0 - успешно
-function git_packages_setup() {
+function git_setup() {
     package_manager_install_packages "git" || return $?
     return 0
 }

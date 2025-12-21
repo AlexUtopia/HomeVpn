@@ -30,14 +30,46 @@
 
 MY_DIR="$(dirname "$(readlink -f "${0}")")"
 
-set -x # Раскомментировать для отладки
+
+#HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")"
+#
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/os.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/config.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/bash.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/fs.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/user.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/pacman.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/git.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/systemd.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/runit.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service.include.sh"
+#
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
+#
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/cpuid.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openjdk.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn3.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/pycharm.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/qemu.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/rdp_client.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/ssh_server.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waidroid.include.sh"
+#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/wine.include.sh"
+#
+
+# set -x # Раскомментировать для отладки
 
 
 # su: termux-tools / util-linux
 # sudo: tsu / sudo
 # https://github.com/termux/termux-tools/blob/master/scripts/su.in
 function is_admin_rights_available() {
-    su --version || return $?
+    su --version &> "/dev/null" || return $?
     return 0
 }
 
@@ -504,18 +536,6 @@ function create_file() {
 
 ### Download API begin
 
-## @fn get_file_name_from_url()
-## @brief Получить имя файла из URL
-## @param URL для скачивания
-## @retval 0 если успешно
-## @return Имя файла из URL
-function get_file_name_from_url() {
-    local RESULT=""
-    RESULT=$(basename "${1}") || return $?
-    echo "${RESULT}"
-    return 0
-}
-
 ## @fn download_file()
 ## @brief Скачать файл в директорию
 ## @param URL для скачивания
@@ -621,7 +641,7 @@ function user_check_and_correct() {
 }
 
 # https://unix.stackexchange.com/a/758316
-function user_get_home_directory_path() {
+function user_get_home_dir_path() {
     if is_termux; then # В termux возможен только один пользователь https://wiki.termux.com/wiki/Differences_from_Linux
         echo ~
         return 0
@@ -641,7 +661,7 @@ function user_is_set_password() {
 
     if is_termux; then
         local USER_HOME_DIR_PATH=""
-        USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USER_NAME}") || return $?
+        USER_HOME_DIR_PATH=$(user_get_home_dir_path "${USER_NAME}") || return $?
         # https://github.com/termux/termux-auth/blob/master/termux-auth.h#L13C30-L13C41
         local USER_PASSWORD_FILE_PATH="${USER_HOME_DIR_PATH}/.termux_authinfo"
         if [[ -f "$USER_PASSWORD_FILE_PATH" ]]; then
@@ -743,6 +763,8 @@ function apt_update_and_upgrade() {
     # https://wiki.debian.org/Multiarch/HOWTO
     # https://wiki.ubuntu.com/MultiarchCross
     dpkg --add-architecture i386 || return $? # Для установки wine требуется добавить i386 архитектуру
+                                              # https://wiki.archlinux.org/title/Wine#32-bit_Windows_applications
+                                              # https://gitlab.winehq.org/wine/wine/-/wikis/Debian-Ubuntu
     apt update || return $?
     apt upgrade -o Dpkg::Options::="--force-confnew" -y || return $?
     apt update || return $?
@@ -1057,7 +1079,7 @@ function pip_install_packages() {
 ### termux specific API begin
 
 function termux_autorun_serves_at_boot() {
-    local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_directory_path)/.termux/boot"
+    local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_dir_path)/.termux/boot"
     local AUTORUN_SERVICES_SCRIPT="autorun_services_at_boot.sh"
 
     local AUTORUN_SERVICES_SCRIPT_PATH="${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}"
@@ -1080,7 +1102,7 @@ function termux_set_symlinks_to_storage() {
    # Вылезет запрос доступа к накопителю (Android).
    # Как только будет получено разрешение, в домашней директории появится директория storage
    termux-setup-storage || return $?
-   local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_directory_path)/storage"
+   local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_dir_path)/storage"
    wait_for_dir_creation "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}" || return $?
 
    local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
@@ -1119,7 +1141,7 @@ function systemd_get_user_service_base_dir_path() {
     local USER_NAME="${1}"
 
     local USER_HOME_DIR_PATH=""
-    USER_HOME_DIR_PATH=$(user_get_home_directory_path "${USER_NAME}") || return $?
+    USER_HOME_DIR_PATH=$(user_get_home_dir_path "${USER_NAME}") || return $?
     echo "${USER_HOME_DIR_PATH}/.config/systemd/user"
     return 0
 }
@@ -1385,6 +1407,7 @@ function python_install() {
     if package_manager_is_apt; then
         if ! is_termux; then
             # https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
+            # https://askubuntu.com/a/1458126
             add-apt-repository -y "ppa:deadsnakes/ppa" || return $?
             apt update || return $?
         fi
@@ -1853,7 +1876,7 @@ function vnc_server_get_config_info() {
     local VNCD_INSTANCE_NAME_REGEX="${VNCD_BASENAME}@(.+)-([0-9]+).service$"
 
     local VNC_USER_HOME_DIRECTORY_PATH=""
-    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_directory_path "${VNC_USER}") || return $?
+    VNC_USER_HOME_DIRECTORY_PATH=$(user_get_home_dir_path "${VNC_USER}") || return $?
     local VNC_XSTARTUP_FILE_PATH="${VNC_USER_HOME_DIRECTORY_PATH}/.vnc/xstartup"
 
     local VNC_SERVER_EXECUTABLE_PATH=""
@@ -2153,36 +2176,7 @@ function ovmf_get_arch() {
     fi
 }
 
-function git_clone_or_fetch() {
-    local PROJECT_URL="${1}"
-    local PROJECT_DIR_PATH="${2}"
-    local PROJECT_BRANCH_OR_TAG="${3}"
-    local WORK_BRANCH_NAME=""
-    WORK_BRANCH_NAME=$(basename "${PROJECT_BRANCH_OR_TAG}") || return $?
-    if [[ -z "${WORK_BRANCH_NAME}" ]]; then
-        return 1
-    else
-        WORK_BRANCH_NAME="work-branch-${WORK_BRANCH_NAME}"
-    fi
 
-    if [[ -d "${PROJECT_DIR_PATH}" ]]; then
-        pushd "${PROJECT_DIR_PATH}" || return $?
-        git fetch && git checkout -f -B "${WORK_BRANCH_NAME}" "${PROJECT_BRANCH_OR_TAG}"
-        local COMMAND_CHAIN_RESULT=$?
-        popd
-        return ${COMMAND_CHAIN_RESULT}
-    else
-        local PROJECT_BASE_DIR_PATH=""
-        PROJECT_BASE_DIR_PATH="$(dirname "${PROJECT_DIR_PATH}")" || return $?
-        make_dirs "${PROJECT_BASE_DIR_PATH}" || return $?
-        git clone "${PROJECT_URL}" "${PROJECT_DIR_PATH}" || return $?
-        pushd "${PROJECT_DIR_PATH}" || return $?
-        git checkout -f -B "${WORK_BRANCH_NAME}" "${PROJECT_BRANCH_OR_TAG}"
-        local COMMAND_CHAIN_RESULT=$?
-        popd
-        return ${COMMAND_CHAIN_RESULT}
-    fi
-}
 
 function edk2_install_dependencies() {
     # fixme utopia Зависимости только для Ubuntu/LinuxMint
@@ -2330,6 +2324,22 @@ function main() {
     return 0
 }
 
+function smb_server_get_config_file_path() {
+    local SMB_SERVER_BUILD_OPTIONS=""
+    SMB_SERVER_BUILD_OPTIONS=$(smbd -b) || return $?
+
+    local REGEX=""
+    REGEX=$(printf "CONFIGFILE:[[:blank:]]+([^\n\r]+)") || return $?
+
+    #echo "${REGEX}"
+
+    if [[ "${SMB_SERVER_BUILD_OPTIONS}" =~ ${REGEX} ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    return 1
+}
 
 # https://ostechnix.com/bash-variables-shell-scripting/
 # https://linuxopsys.com/topics/bash-readarray-with-examples
@@ -2358,6 +2368,6 @@ function main() {
 # sudo dmidecode --type=0
 #uefiextract_get_intel_gop_driver "/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP" "/home/utopia/HomeVpn/data/IntelGopDriver.efi"
 #extract_intel_gop_driver
-edk2_ovmf_setup
+smb_server_get_config_file_path
 
 #main

@@ -5,7 +5,7 @@
 
 ## @brief Установить пакеты загрузки/распаковки файлов
 ## @retval 0 - успешно
-function download_packages_setup() {
+function download_setup() {
     package_manager_install_packages "${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}curl tar ${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}7zip" || return $?
     return 0
 }
