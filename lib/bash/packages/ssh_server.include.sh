@@ -26,6 +26,7 @@ function ssh_packages_setup() {
     fi
 
     package_manager_install_packages "${SSH_CLIENT_PACKAGE} ${SSH_SERVER_PACKAGE}" || return $?
+    return 0
 }
 
 ## @brief Установить и настроить SSH сервер
@@ -39,7 +40,6 @@ function ssh_server_setup() {
     ssh_packages_setup || return $?
 
     local SSH_SERVER="ssh" # https://tokmakov.msk.ru/blog/item/441
-
     if is_termux; then
         SSH_SERVER="sshd"
     fi

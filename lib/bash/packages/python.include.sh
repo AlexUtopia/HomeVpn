@@ -6,7 +6,7 @@
 
 
 ## @brief Получить целевую версию python для данной платформы
-## @details Для проекта требуется версия python >= 3.11 из-за использования atomic group
+## @details Для проекта требуется версия python >= 3.11 из-за использования regex atomic group
 ##          https://docs.python.org/3/library/re.html#regular-expression-syntax
 ## @return Целевая версия python для данной платформы
 ## @retval 0 - успешно

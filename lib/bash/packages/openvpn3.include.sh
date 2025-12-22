@@ -7,7 +7,7 @@
 ## @details https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
 ## @retval 0 - успешно
 function openvpn3_setup() {
-    if is_termux; then
+    if is_termux || is_msys; then
         return 0
     fi
 

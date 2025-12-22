@@ -46,7 +46,7 @@ if [[ -z "${GLOBAL_CONFIG_SMB_SERVER_USER}" ]]; then
 fi
 
 ## @brief Путь до shared директории SMB сервера
-GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
+GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH="${GLOBAL_CONFIG_ROOT_PATH}/smb_share_public"
 if is_msys; then
     GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH="${SYSTEMDRIVE}/smb_share_public"
 fi

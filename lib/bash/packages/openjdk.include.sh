@@ -7,7 +7,7 @@
 
 ## @brief Установить openjdk
 ## @retval 0 - успешно
-function openjdk_install() {
+function openjdk_setup() {
     if is_msys; then # Скачаем и установим приложение вручную
         return 0
     fi

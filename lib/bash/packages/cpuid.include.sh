@@ -20,4 +20,5 @@ function cpuid_setup() {
         make -C "${INSTALL_DIR_PATH}" DESTDIR="${GLOBAL_CONFIG_ROOT_PATH}" install || return $?
         return 0
     fi
+    return 0
 }

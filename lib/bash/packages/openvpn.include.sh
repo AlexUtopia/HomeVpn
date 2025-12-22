@@ -7,7 +7,7 @@
 ## @details https://community.openvpn.net/openvpn/wiki/OpenvpnSoftwareRepos#DebianUbuntu:UsingOpenVPNaptrepositories
 ## @retval 0 - успешно
 function openvpn_setup() {
-    if is_termux; then
+    if is_termux || is_msys; then
         return 0
     fi
 
