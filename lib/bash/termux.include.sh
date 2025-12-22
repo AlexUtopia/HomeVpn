@@ -39,6 +39,14 @@ function termux_specific_packages_setup() {
     return 0
 }
 
+## @brief Установить графическое окружение для Android/termux
+## @details https://wiki.termux.com/wiki/Graphical_Environment
+## @retval 0 - успешно
+function termux_gui_packages_setup() {
+    package_manager_install_packages "xfce4 xfce4-terminal" || return $?
+    return 0
+}
+
 ## @brief Получить домашнюю директорию пользователя
 ## @details В Android/termux возможен только один пользователь, поэтому имя пользователя игнорируется
 ##          https://wiki.termux.com/wiki/Differences_from_Linux
