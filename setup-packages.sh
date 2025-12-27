@@ -194,7 +194,7 @@ function firewall_accept_udp_traffic_for_port() {
 
 function desktop_environment_get_desktop_file_path() {
     local DESKTOP_ENVIRONMENT_PRIORITY_LIST="xfce cinnamon"
-    local DESKTOP_ENVIRONMENT_DIR_PATH="${GLOBAL_CONFIG_USR_PREFIX}/share/xsessions"
+    local DESKTOP_ENVIRONMENT_DIR_PATH="${GLOBAL_CONFIG_USR_DIR_PATH}/share/xsessions"
 
     local DESKTOP_ENVIRONMENT_FILE_PATH_LIST=()
     get_directory_paths DESKTOP_ENVIRONMENT_FILE_PATH_LIST "${DESKTOP_ENVIRONMENT_DIR_PATH}" || return $?
@@ -311,7 +311,7 @@ function vnc_server_get_config_info() {
         INIT_SYSTEM_CONFIG_SEARCH_DIR_MAXDEPTH=1
     else
         INIT_SYSTEM_BASE_DIR_PATH="$(systemd_get_user_service_base_dir_path "${VNC_USER}")"
-        INIT_SYSTEM_CONFIG_SEARCH_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/home"
+        INIT_SYSTEM_CONFIG_SEARCH_DIR_PATH="${GLOBAL_CONFIG_ROOT_PATH}/home"
         INIT_SYSTEM_BASE_DIR_PATH_FILTER_TYPE="f"
     fi
 
