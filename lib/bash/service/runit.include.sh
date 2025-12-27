@@ -104,10 +104,10 @@ function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
     sv-enable "${SERVICE_NAME}" > "/dev/null"
-    if ! $?; then
+    if [[ ! $? ]]; then
         sleep 5
         sv-enable "${SERVICE_NAME}" > "/dev/null"
-        if ! $?; then
+        if [[ ! $? ]]; then
             # Иногда почему-то случается вылет runit и далее служба не может запуститься,
             # поэтому запустим runit заново
             . "${GLOBAL_CONFIG_ETC_DIR_PATH}/profile.d/start-services.sh" > "/dev/null" || return $?

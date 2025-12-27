@@ -59,21 +59,20 @@ function edk2_ovmf_build_for_ibm_pc() {
     # Опции выбраны как в сборочном скрипте пакета ovmf Ubuntu
     # https://launchpad.net/ubuntu/questing/+package/ovmf
     # https://launchpad.net/ubuntu/+source/edk2/2025.02-8ubuntu3
-    local EDK2_BUILD_FLAGS=-DNETWORK_HTTP_BOOT_ENABLE=TRUE \
-                           -DNETWORK_IP6_ENABLE=TRUE \
-                           -DNETWORK_TLS_ENABLE \
-                           -DSECURE_BOOT_ENABLE=TRUE \
-                           -DTPM2_ENABLE=TRUE
+    local EDK2_BUILD_FLAGS="-DNETWORK_HTTP_BOOT_ENABLE=TRUE -DNETWORK_IP6_ENABLE=TRUE -DNETWORK_TLS_ENABLE -DSECURE_BOOT_ENABLE=TRUE -DTPM2_ENABLE=TRUE"
 
     local OUT_OVMF_CODE_FILE_PATH="${GLOBAL_CONFIG_DATA_DIR_PATH}/ovmf/${OUTPUT_ARCH}/OVMF_CODE.fd"
     local OUT_OVMF_VARS_FILE_PATH="${GLOBAL_CONFIG_DATA_DIR_PATH}/ovmf/${OUTPUT_ARCH}/OVMF_VARS.fd"
 
     fs_make_dirs "$(dirname "${OUT_OVMF_CODE_FILE_PATH}")" || return $?
 
+    local ARCH_LIST=""
+    ARCH_LIST=$(printf " --arch=%s" ${INPUT_ARCH_LIST}) || return $?
+
     build \
         ${EDK2_BUILD_FLAGS} \
         --platform="${PLATFORM_FILE_PATH}" \
-        printf " --arch=%s" ${INPUT_ARCH_LIST} \
+        ${ARCH_LIST} \
         --tagname="${EDK2_TOOLCHAIN}" \
         --buildtarget="${EDK2_BUILD_VARIANT}" || return $?
 
@@ -115,6 +114,7 @@ function edk2_ovmf_build_x86_64() {
 
 ## @brief Собрать и установить edk2/ovmf
 ## @param [in] PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter)
+##             Пример: 0x0126
 ## @param [in] Путь до UEFI образа материнской платы, необязательный аргумент. Если не задан то видеобиос будет собран без поддержки вывода изображения на монитор
 ## @retval 0 - успешно
 function edk2_ovmf_setup() {
@@ -142,11 +142,12 @@ function edk2_ovmf_setup() {
     pip_install_packages "${INSTALL_DIR_PATH}" "${INSTALL_DIR_PATH}/pip-requirements.txt" &&
     python_venv_activate "${INSTALL_DIR_PATH}"                                            &&
     make -C "${INSTALL_DIR_PATH}/BaseTools"                                               &&
-    source edksetup.sh                                                                    &&
+    set --                                                                                &&
+    source "edksetup.sh"                                                                  &&
     edk2_ovmf_build_x64 "${INSTALL_DIR_PATH}"                                             &&
-    vfio_igd_pkg_setup "${INSTALL_DIR_PATH}" "${VGA_PID}" "${INTEL_GOP_DRIVER_FILE_PATH}" &&
-    python_venv_deactivate
+    vfio_igd_setup "${INSTALL_DIR_PATH}" "${VGA_PID}" "${INTEL_GOP_DRIVER_FILE_PATH}"
     local COMMAND_CHAIN_RESULT=$?
-    popd
+
+    python_venv_deactivate
     return ${COMMAND_CHAIN_RESULT}
 }

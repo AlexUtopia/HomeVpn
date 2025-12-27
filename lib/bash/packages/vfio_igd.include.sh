@@ -17,7 +17,8 @@ function vfio_igd_get_vbios_path() {
 ## @brief Собрать и установить VfioIgdPkg
 ## @details Конечный продукт - видеобиос для виртуальный машины qemu
 ## @param [in] Путь до директории проекта EDK2
-## @param [in] PCI ProductId целевой видеокарты (VGA) Intel
+## @param [in] PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter)
+##             Пример: 0x0126
 ## @param [in] Путь до файла IntelGopDriver, необязательный аргумент
 ## @retval 0 - успешно
 function vfio_igd_setup() {

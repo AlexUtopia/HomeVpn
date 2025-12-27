@@ -14,7 +14,7 @@ function winetricks_setup_latest() {
     local INSTALL_DIR_PATH="${GLOBAL_CONFIG_OPT_DIR_PATH}/${PACKAGE_NAME}"
 
     local STRIP_COMPONENTS=1
-    download_targz_and_unpack "${CPUID_SOURCES_URL}" "${INSTALL_DIR_PATH}" "remake_dirs" "${STRIP_COMPONENTS}" || return $?
+    download_targz_and_unpack "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "remake_dirs" "${STRIP_COMPONENTS}" || return $?
 
     make -C "${INSTALL_DIR_PATH}" DESTDIR="${GLOBAL_CONFIG_ROOT_PATH}" install || return $?
     return 0
@@ -39,10 +39,10 @@ function wine_setup_default() {
 function wine_setup_nightly() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
+        OS_DISTRO_VERSION_CODENAME=$(get_linux_distro_codename_or_version) || return $?
 
         local OS_DISTRO_NAME=""
-        OS_DISTRO_NAME=$(get_os_distro_name) || return $?
+        OS_DISTRO_NAME=$(get_linux_distro_name) || return $?
 
         local APT_MAIN_ARCH=""
         APT_MAIN_ARCH=$(dpkg_get_main_architecture) || return $?

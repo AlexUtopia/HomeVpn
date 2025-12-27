@@ -6,17 +6,13 @@
 # Узнать зависимости pip пакетов
 # https://stackoverflow.com/a/67111193
 
-# ВНИМАНИЕ!!! Пакет coreutils должен быть предустановлен
-
 # fixme utopia VNC сервер для Windows (для tigervnc пишут что сервер не поддерживается)
 # fixme utopia RDP сервер для Linux / Android/termux
-# fixme utopia Проверка минимальной версии питона
 # fixme utopia Установка дополнений гостевой ОС?? требуется ли
 # fixme utopia Настройка nmbd
 # fixme utopia gvfs для Android/termux
 # fixme utopia Инструкция по scp
 # fixme utopia [Windows/MSYS2] Настройка шареной папки + настройка RDP сервера (RDPWrapper)
-# fixme utopia 7zip заместо tar? Но у 7zip нет опции --strip-components
 # fixme utopia Делать ли upgrade pip? И как его правильно делать? https://stackoverflow.com/a/8550546
 
 # fixme utopia Настройка микрофона в браузере
@@ -506,7 +502,7 @@ function main_install_dev_packages() {
     main_install_min_packages || return $?
 
     dev_packages_setup || return $?
-    rdp_client_install || return $?
+    rdp_client_setup || return $?
     smb_server_setup || return $?
     vnc_client_setup || return $?
     vnc_server_setup || return $?

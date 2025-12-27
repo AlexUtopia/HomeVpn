@@ -14,7 +14,7 @@ function get_executable_path() {
     local EXECUTABLE_OR_PATH="${1}"
 
     command -v "${EXECUTABLE_OR_PATH}" || return $?
-    return 1
+    return 0
 }
 
 ## @brief Проверить существует ли целевой исполняемый файл

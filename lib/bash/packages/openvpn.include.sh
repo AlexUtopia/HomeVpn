@@ -13,7 +13,7 @@ function openvpn_setup() {
 
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
+        OS_DISTRO_VERSION_CODENAME=$(get_linux_distro_codename_or_version) || return $?
 
         local PACKAGE_NAME="openvpn"
         local KEY_FILE_URL="https://swupdate.openvpn.net/repos/repo-public.gpg"

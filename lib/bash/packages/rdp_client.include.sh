@@ -25,7 +25,7 @@ function rdp_client_setup_default() {
 function rdp_client_setup_nightly() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
+        OS_DISTRO_VERSION_CODENAME=$(get_linux_distro_codename_or_version) || return $?
 
         local PACKAGE_NAME="freerdp-nightly"
         local KEY_FILE_URL="http://pub.freerdp.com/repositories/ADD6BF6D97CE5D8D.asc"
