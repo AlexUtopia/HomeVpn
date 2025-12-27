@@ -6,7 +6,7 @@
 ## @brief Установить утилиты работы с PCI
 ## @details https://github.com/pciutils/pciutils
 ## @retval 0 - успешно
-function startup_setup() {
+function pci_setup() {
     if is_msys; then
         return 0 # fixme utopia Скачать или собрать пакет
     fi

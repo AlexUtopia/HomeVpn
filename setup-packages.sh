@@ -31,286 +31,52 @@
 MY_DIR="$(dirname "$(readlink -f "${0}")")"
 
 
-#HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")"
-#
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/os.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/config.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/bash.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/fs.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/user.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/pacman.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/git.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/systemd.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/runit.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service.include.sh"
-#
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
-#
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/cpuid.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openjdk.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn3.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/pycharm.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/qemu.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/rdp_client.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/ssh_server.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waidroid.include.sh"
-#source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/wine.include.sh"
-#
+HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")"
 
-# set -x # Раскомментировать для отладки
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/os.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/config.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/bash.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/fs.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/user.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/git.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/pacman.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager.include.sh"
 
-# su: termux-tools / util-linux
-# sudo: tsu / sudo
-# https://github.com/termux/termux-tools/blob/master/scripts/su.in
-function is_admin_rights_available() {
-    su --version &> "/dev/null" || return $?
-    return 0
-}
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/systemd.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/runit.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service.include.sh"
 
-function get_os_name() {
-    local RESULT=""
-    RESULT=$(uname -o) || return $?
-    echo "${RESULT,,}"
-    return 0
-}
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
 
-function get_machine_name() {
-    local RESULT=""
-    RESULT=$(uname -m) || return $?
-    echo "${RESULT,,}"
-    return 0
-}
-
-OS_NAME=$(get_os_name)
-MACHINE_NAME=$(get_machine_name)
-
-function is_linux() {
-   if [[ "${OS_NAME}" == *"linux"* ]]; then
-       return 0
-   fi
-   return 1
-}
-
-function is_termux() {
-   if [[ "${OS_NAME}" == *"android"* ]]; then
-       return 0
-   fi
-   return 1
-}
-
-function is_msys() {
-   if [[ "${OS_NAME}" == *"msys"* ]]; then
-       return 0
-   fi
-   return 1
-}
-
-function is_cygwin() {
-   if [[ "${OS_NAME}" == *"cygwin"* ]]; then
-       return 0
-   fi
-   return 1
-}
-
-### Global config begin
-
-GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
-
-GLOBAL_CONFIG_ROOT_PREFIX=""
-if is_termux; then
-    GLOBAL_CONFIG_ROOT_PREFIX="${PREFIX}/.."
-fi
-
-GLOBAL_CONFIG_USR_PREFIX="/usr"
-if is_termux; then
-    GLOBAL_CONFIG_USR_PREFIX="${PREFIX}"
-fi
-
-GLOBAL_CONFIG_ETC_PREFIX="/etc"
-if is_termux; then
-    GLOBAL_CONFIG_ETC_PREFIX="${GLOBAL_CONFIG_USR_PREFIX}/etc"
-fi
-
-GLOBAL_CONFIG_VNC_USER=$(logname) # в termux переменная окружения USER не установлена
-GLOBAL_CONFIG_SAMBA_USER=$(logname) # в termux переменная окружения USER не установлена
-
-if [[ -z "${GLOBAL_CONFIG_VNC_USER}" ]]; then
-    echo "[FATAL] GLOBAL_CONFIG_VNC_USER parameter IS NOT SET"
-    exit 1
-fi
-
-if [[ -z "${GLOBAL_CONFIG_SAMBA_USER}" ]]; then
-    echo "[FATAL] GLOBAL_CONFIG_SAMBA_USER parameter IS NOT SET"
-    exit 1
-fi
-
-GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/smb_share_public"
-if is_msys; then
-    GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH="${SYSTEMDRIVE}/smb_share_public"
-fi
-GLOBAL_CONFIG_SMBD_TCP_PORTS="139 445" # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
-if is_termux; then
-    GLOBAL_CONFIG_SMBD_TCP_PORTS="1139 4445" # Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
-fi
-
-### Global config end
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/cpuid.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/dev_packages.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/dns_dhcp_server.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/firewall.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/make.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/network.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openjdk.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn3.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/pci.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/pycharm.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/qemu.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/rdp_client.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/smb_server.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/ssh_client.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/ssh_server.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/startup.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/telnet_client.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_client.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_server.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waidroid.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/wine.include.sh"
 
 
-### termux specific packages begin
-
-TERMUX_SPECIFIC_PACKAGES="termux-tools termux-api proot"
-
-### termux specific packages end
-
-
-### Minimal packages begin
-
-GIT_PACKAGE="git"
-CURL_PACKAGE="curl"
-TAR_PACKAGE="tar"
-PROCPS_PACKAGE="procps" # Утилита sysctl для записи параметров ядра linux
-if is_msys; then
-    PROCPS_PACKAGE="procps-ng" # fixme utopia Для Windows это бесполезный пакет?
-fi
-IPTABLES_PACKAGE="iptables" # Настройки фaйервола
-if is_msys; then
-    IPTABLES_PACKAGE=""
-fi
-IPROUTE2_PACKAGE="iproute2" # Утилита ip управления сетевыми интерфейсами
-if is_msys; then
-    IPROUTE2_PACKAGE=""
-fi
-GPG_PACKAGE="gnupg" # Используется для добавления новых репозиториев для пакетного менеджера apt
-FINDUTILS_PACKAGE="findutils" # Утилита find
-
-# fixme utopia Надо уходить от этого пакета в пользу универсального парсера конфигов на питоне
-PCREGREP_PACKAGE="pcregrep" # https://packages.msys2.org/package/mingw-w64-x86_64-pcre
-if is_msys; then
-    PCREGREP_PACKAGE="pcre"
-fi
-WHICH_PACKAGE="debianutils"
-if is_termux; then
-    WHICH_PACKAGE="which"
-elif is_msys; then
-    WHICH_PACKAGE="which"
-fi
-MAKE_PACKAGE="make"
-
-SSH_CLIENT_PACKAGE="openssh-client"
-if is_termux; then
-    SSH_CLIENT_PACKAGE="openssh"
-elif is_msys; then
-    SSH_CLIENT_PACKAGE="openssh"
-fi
-
-DNSMASQ_PACKAGE="dnsmasq-base" # DNS/DHCP сервер для сетевых адаптеров виртуальных машин qemu
-if is_termux; then
-    DNSMASQ_PACKAGE=""
-elif is_msys; then
-    DNSMASQ_PACKAGE=""
-fi
-
-QEMU_SYSTEM_PACKAGE="qemu-system qemu-kvm swtpm"
-if is_termux; then
-    QEMU_SYSTEM_PACKAGE="qemu-system-x86-64 swtpm"
-elif is_msys; then
-    QEMU_SYSTEM_PACKAGE="${MINGW_PACKAGE_PREFIX}-qemu"
-fi
-
-CRON_PACKAGE="cron"
-if is_termux; then
-    CRON_PACKAGE=""
-elif is_msys; then
-    CRON_PACKAGE=""
-fi
-
-MINIMAL_PACKAGES="${GIT_PACKAGE} ${CURL_PACKAGE} ${TAR_PACKAGE} ${PROCPS_PACKAGE} ${IPTABLES_PACKAGE} ${IPROUTE2_PACKAGE} ${GPG_PACKAGE} ${FINDUTILS_PACKAGE} ${PCREGREP_PACKAGE} ${SSH_CLIENT_PACKAGE} ${DNSMASQ_PACKAGE} ${QEMU_SYSTEM_PACKAGE} ${WHICH_PACKAGE} ${MAKE_PACKAGE} ${CRON_PACKAGE}"
-if is_termux; then
-    MINIMAL_PACKAGES="${MINIMAL_PACKAGES} ${TERMUX_SPECIFIC_PACKAGES}"
-fi
-
-### Minimal packages end
-
-
-### Development packages begin
-
-AUTOCUTSEL_PACKAGE="autocutsel" # Используется для организации буфера обмена для VNC сессии, см. https://superuser.com/a/1524282
-if is_termux; then
-    AUTOCUTSEL_PACKAGE=""
-elif is_msys; then
-    AUTOCUTSEL_PACKAGE=""
-fi
-
-NANO_PACKAGE="nano" # Консольный текстовый редактор
-
-XFCE4_PACKAGE=""
-if is_termux; then
-    XFCE4_PACKAGE="xfce4 xfce4-terminal" # https://wiki.termux.com/wiki/Graphical_Environment
-fi
-
-RDP_SERVER_PACKAGE="" # "xrdp"
-if is_msys; then
-    RDP_SERVER_PACKAGE=""
-fi
-
-SSH_SERVER_PACKAGE="openssh-server"
-if is_termux; then
-    SSH_SERVER_PACKAGE="openssh"
-elif is_msys; then
-    SSH_SERVER_PACKAGE="openssh"
-fi
-
-VNC_CLIENT_PACKAGE="tigervnc-viewer"
-if is_msys; then
-    VNC_CLIENT_PACKAGE="" # Пакет надо компилировать из исходников
-fi
-
-VNC_SERVER_PACKAGE="tigervnc-standalone-server tigervnc-xorg-extension x11-xserver-utils" # x11-xserver-utils - Debian/Ubuntu only https://pkgs.org/search/?q=x11-xserver-utils
-if is_termux; then
-    VNC_SERVER_PACKAGE="tigervnc xorg-xhost"
-elif is_msys; then
-    VNC_SERVER_PACKAGE="" # Под Windows tigervnc server больше не поддерживается, см. https://github.com/TigerVNC/tigervnc?tab=readme-ov-file#windows-specific
-fi
-
-AUXILIARY_UTILITIES="htop cpu-checker util-linux pciutils usbutils lshw" # Утилиты htop kvm-ok, lscpu, lspci, lsusb, lshw
-if is_termux; then
-    AUXILIARY_UTILITIES="htop util-linux pciutils"
-elif is_msys; then
-    AUXILIARY_UTILITIES=""
-fi
-
-TELNET_CLIENT_PACKAGE="putty" # Для подключения к qemu monitor
-if is_msys; then
-    TELNET_CLIENT_PACKAGE="${MINGW_PACKAGE_PREFIX}-putty"
-fi
-
-SAMBA_PACKAGE="samba"
-if is_msys; then
-    SAMBA_PACKAGE="" # Настроим сетевую директорию средствами Windows
-fi
-
-SERVICES_SUPERVISOR_PACKAGE= # "systemd" # Утилита systemctl
-if is_termux; then
-    SERVICES_SUPERVISOR_PACKAGE="termux-services"
-elif is_msys; then
-    SERVICES_SUPERVISOR_PACKAGE="" # fixme utopia cygrunsrv?
-fi
-
-PASSWD_PACKAGE="passwd" # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
-if is_termux; then      # passwd для настройки доступа к ssh серверу по паролю
-    PASSWD_PACKAGE="termux-auth"
-elif is_msys; then
-    PASSWD_PACKAGE=""
-fi
-
-DEV_PACKAGES="${MINIMAL_PACKAGES} ${AUTOCUTSEL_PACKAGE} ${NANO_PACKAGE} ${XFCE4_PACKAGE} ${RDP_SERVER_PACKAGE} ${SSH_SERVER_PACKAGE} ${PASSWD} ${VNC_CLIENT_PACKAGE} ${VNC_SERVER_PACKAGE} ${AUXILIARY_UTILITIES} ${TELNET_CLIENT_PACKAGE} ${SAMBA_PACKAGE} ${SERVICES_SUPERVISOR_PACKAGE} ${PASSWD_PACKAGE}"
-### Development packages end
+set -x # Раскомментировать для отладки
 
 
 ### Full packages begin
@@ -333,7 +99,7 @@ QT_CREATOR_PACKAGE="qtcreator"
 if is_termux; then
     QT_CREATOR_PACKAGE="qt-creator"
 elif is_msys; then
-    QT_CREATOR_PACKAGE="${MINGW_PACKAGE_PREFIX}-qt-creator"
+    QT_CREATOR_PACKAGE="${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}qt-creator"
 fi
 
 LIBREOFFICE_PACKAGE="libreoffice"
@@ -345,85 +111,14 @@ fi
 
 TRANSMISSION_PACKAGE="transmission"
 if is_msys; then
-    TRANSMISSION_PACKAGE="${MINGW_PACKAGE_PREFIX}-transmission-qt"
+    TRANSMISSION_PACKAGE="${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}transmission-qt"
 fi
 
-FULL_PACKAGES="${DEV_PACKAGES} ${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE} ${TRANSMISSION_PACKAGE}"
+FULL_PACKAGES="${DOUBLE_COMMANDER_PACKAGE} ${MIDNIGHT_COMMANDER_PACKAGE} ${FIREFOX_PACKAGE} ${QT_CREATOR_PACKAGE} ${LIBREOFFICE_PACKAGE} ${TRANSMISSION_PACKAGE}"
 ### Full packages end
 
 
-### System API begin
 
-function get_os_distro_name() {
-   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/os-release"
-
-   . "${OS_RELEASE_PATH}" || return $?
-
-   if [[ -n "${UBUNTU_CODENAME}" ]]; then
-       # Для Ubuntu-based дистрибутивов linux (типа Linix Mint) всегда используются ubuntu PPA
-       echo "ubuntu"
-   else
-       echo "${ID}"
-   fi
-   return 0
-}
-
-function get_os_distro_codename_or_version() {
-   local OS_RELEASE_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/os-release"
-
-   . "${OS_RELEASE_PATH}" || return $?
-
-   if [[ -n "${UBUNTU_CODENAME}" ]]; then
-       echo "${UBUNTU_CODENAME}"
-   elif [[ -n "${VERSION_CODENAME}" ]]; then
-       echo "${VERSION_CODENAME}"
-   else
-       echo "${VERSION_ID}"
-   fi
-   return 0
-}
-
-function make_dirs() {
-    local DIR_PATH="${1}"
-    local USER_NAME="${2}"
-
-    if [[ -n "${USER_NAME}" ]]; then
-        sudo --user="${USER_NAME}" mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
-    else
-        mkdir -p "${DIR_PATH}" > "/dev/null" || return $?
-    fi
-    return 0
-}
-
-function wait_for_dir_creation() {
-   local TARGET_DIR_PATH="${1}"
-   local WAIT_SECONDS_COUNT=${2}
-   if [[ -z "${WAIT_SECONDS_COUNT}" ]]; then
-        WAIT_SECONDS_COUNT=10
-    fi
-
-   for (( i = 0; i < WAIT_SECONDS_COUNT; i++ )); do
-       if [[ -d "${TARGET_DIR_PATH}" ]]; then
-           return 0
-       fi
-       sleep 1
-   done
-   return 1
-}
-
-function create_symlink() {
-    local SOURCE_PATH="${1}"
-    local TARGET_PATH="${2}"
-
-    # В termux почему-то опция -f у ln не всегда срабатывает, поэтому удалим символическую ссылку вручную
-    rm -rf "${TARGET_PATH}" > "/dev/null" || return $?
-    ln -s "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
-    return 0
-}
-
-function check_result_code() {
-    return ${1}
-}
 
 # https://www.baeldung.com/linux/find-default-sorting-order
 # fixme utopia что будет если в результирующем пути встретится пробел?
@@ -460,12 +155,6 @@ function get_directory_paths() {
     return 0
 }
 
-function set_file_as_executable() {
-    local FILE_PATH="${1}"
-    chmod +x "${FILE_PATH}" > "/dev/null" || return $?
-    return 0
-}
-
 function change_rights_on_directory_recursively_or_file() {
     local TARGET_USER="${1}"
     local DIR_OR_FILE_PATH="${2}"
@@ -474,893 +163,6 @@ function change_rights_on_directory_recursively_or_file() {
     chown -R "${TARGET_USER}:${TARGET_GROUP}" "${DIR_OR_FILE_PATH}" > "/dev/null" || return $?
     return 0
 }
-
-### System API end
-
-
-### Misc API begin
-
-function deactivate_file_if_exists() {
-    local FILE_PATH="${1}"
-
-    if [[ -f "${FILE_PATH}" ]]; then
-        local CURRENT_DATE_TIME=""
-        CURRENT_DATE_TIME=$(date "+%Y-%m-%dT%H_%M_%S_%N%z") || return $?
-
-        local FILE_NAME=""
-        FILE_NAME=$(basename "${FILE_PATH}") || return $?
-
-        local FILE_DIR_PATH=""
-        FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
-
-        local DEACTIVATE_FILE_PATH="${FILE_DIR_PATH}/unused_since_${CURRENT_DATE_TIME}_${FILE_NAME}"
-        echo "File exist (\"${FILE_PATH}\"), rename to \"${DEACTIVATE_FILE_PATH}\""
-        mv "${FILE_PATH}" "${DEACTIVATE_FILE_PATH}" || return $?
-    fi
-}
-
-function prepare_for_create_file() {
-    local FILE_PATH="${1}"
-    local USER_NAME="${2}"
-    local REWRITE_IF_EXIST="${3}"
-
-    local FILE_DIR_PATH=""
-    FILE_DIR_PATH=$(dirname "${FILE_PATH}") || return $?
-
-    make_dirs "${FILE_DIR_PATH}" "${USER_NAME}" || return $?
-
-    if [[ -z "${REWRITE_IF_EXIST}" ]]; then
-        deactivate_file_if_exists "${FILE_PATH}" || return $?
-    fi
-    return 0
-}
-
-function create_file() {
-    local CONTENT="${1}"
-    local FILE_PATH="${2}"
-    local USER_NAME="${3}"
-    local REWRITE_IF_EXIST="${4}"
-
-    prepare_for_create_file "${FILE_PATH}" "${USER_NAME}" "${REWRITE_IF_EXIST}" || return $?
-
-    if [[ -n "${USER_NAME}" ]]; then
-        sudo --user="${USER_NAME}" "${SHELL}" -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
-    else
-        "${SHELL}" -c "echo '${CONTENT}' > \"${FILE_PATH}\"" || return $?
-    fi
-    return 0
-}
-
-### Misc API end
-
-
-### Download API begin
-
-## @fn download_file()
-## @brief Скачать файл в директорию
-## @param URL для скачивания
-## @param Директория куда будет скачан файл по URL
-## @retval 0 если успешно
-function download_file_to_directory() {
-    local URL="${1}"
-    local DIRECTORY_PATH="${2}"
-
-    make_dirs "${DIRECTORY_PATH}" || return $?
-    pushd "${DIRECTORY_PATH}" || return $?
-
-    curl -L "${URL}"
-    local CURL_RESULT=$?
-    if !check_result_code ${CURL_RESULT}; then
-        popd
-        return ${CURL_RESULT}
-    fi
-
-    return 0
-}
-
-## @fn download_file()
-## @brief Скачать файл
-## @param URL для скачивания
-## @param Путь до скачанного файла по URL; можно передать "-" - записать результат в stdout
-## @retval 0 если успешно
-function download_file() {
-    local URL="${1}"
-    local FILE_PATH="${2}"
-
-    if [[ "${FILE_PATH}" == "-" ]]; then
-        curl -L "${URL}" || return $?
-    else
-        local FILE_DIRECTORY_PATH=""
-        FILE_DIRECTORY_PATH=$(dirname "${FILE_PATH}") || return $?
-        make_dirs "${FILE_DIRECTORY_PATH}" || return $?
-        curl -L --output "${FILE_PATH}" "${URL}" || return $?
-    fi
-    return 0
-}
-
-### Download API end
-
-
-
-### User API begin
-
-function user_get_current() {
-   local RESULT=""
-   RESULT=$(whoami) || return $?
-   echo "${RESULT}"
-   return 0
-}
-
-function user_add() {
-    useradd "${1}" > "/dev/null" || return $?
-    return 0
-}
-
-function user_is_available() {
-    local USER_NAME="${1}"
-
-    id "${USER_NAME}" &> "/dev/null" || return $?
-    return 0
-}
-
-function user_add_to_group() {
-    local USER_NAME="${1}"
-    local GROUP_NAME="${2}"
-
-    usermod -a -G "${GROUP_NAME}" "${USER_NAME}" > "/dev/null" || return $?
-    return 0
-}
-
-function user_is_added_to_group() {
-    local USER_NAME="${1}"
-    local GROUP_NAME="${2}"
-
-    local USER_GROUP_NAME_LIST=""
-    USER_GROUP_NAME_LIST=$(id "${USER_NAME}" -G -n 2> "/dev/null") || return $? # https://www.geeksforgeeks.org/how-to-check-the-groups-a-user-belongs-to-in-linux/
-    for USER_GROUP_NAME in USER_GROUP_NAME_LIST; do
-        if [[ "${USER_GROUP_NAME,,}" == "${GROUP_NAME,,}" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-function user_check_and_correct() {
-   local USER_NAME="${1}"
-
-    if [[ -z "${USER_NAME}" ]]; then
-        USER_NAME=$(user_get_current) || return $?
-    fi
-
-    if ! user_is_available "${USER_NAME}"; then
-        return 1
-    fi
-
-    echo "${USER_NAME}"
-    return 0
-}
-
-# https://unix.stackexchange.com/a/758316
-function user_get_home_dir_path() {
-    if is_termux; then # В termux возможен только один пользователь https://wiki.termux.com/wiki/Differences_from_Linux
-        echo ~
-        return 0
-    fi
-
-    local USER_NAME="${1}"
-    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
-
-    eval echo "~${USER_NAME}"
-    return 0
-}
-
-function user_is_set_password() {
-    local USER_NAME="${1}"
-
-    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
-
-    if is_termux; then
-        local USER_HOME_DIR_PATH=""
-        USER_HOME_DIR_PATH=$(user_get_home_dir_path "${USER_NAME}") || return $?
-        # https://github.com/termux/termux-auth/blob/master/termux-auth.h#L13C30-L13C41
-        local USER_PASSWORD_FILE_PATH="${USER_HOME_DIR_PATH}/.termux_authinfo"
-        if [[ -f "$USER_PASSWORD_FILE_PATH" ]]; then
-            return 0
-        fi
-        return 1
-    fi
-
-    passwd --status "${USER_NAME}" &> "/dev/null" || return $?
-    return 0
-}
-
-function user_create_password_if() {
-    local USER_NAME="${1}"
-
-    USER_NAME=$(user_check_and_correct "${USER_NAME}") || return $?
-
-    if ! user_is_set_password "${USER_NAME}"; then
-        echo "Set password for \"${USER_NAME}\""
-        passwd "${USER_NAME}" || return $?
-        return 0
-    fi
-
-    return 0
-}
-
-### User API end
-
-
-### System package manager begin
-
-## @fn is_executable_available()
-## @brief Проверить существует ли целевой исполняемый файл
-## @details https://stackoverflow.com/a/26759734
-## @param Имя исполняемого файла, можно с полный путь до исполняемого файла
-## @retval 0 если целевой исполняемый файл существует; 1 - не существует
-function is_executable_available() {
-    local TARGET_EXECUTABLE_PATH
-    TARGET_EXECUTABLE_PATH=$(command -v "${1}") || return $?
-    if [[ -x "${TARGET_EXECUTABLE_PATH}" ]]; then
-        return 0
-    fi
-    return 1
-}
-
-## @fn package_manager_is_apt()
-## @brief Проверить существует ли пакетный менеджер apt
-## @details Debian, Ubuntu, Linux Mint, termux
-## @retval 0 пакетный менеджер apt существует; 1 - не существует
-function package_manager_is_apt() {
-    is_executable_available "apt" || return $?
-    return 0
-}
-
-## @fn package_manager_is_pacman()
-## @brief Проверить существует ли пакетный менеджер pacman
-## @details Arch Linux, MSYS2
-## @retval 0 пакетный менеджер pacman существует; 1 - не существует
-function package_manager_is_pacman() {
-    is_executable_available "pacman" || return $?
-    return 0
-}
-
-## @fn package_manager_is_yum()
-## @brief Проверить существует ли пакетный менеджер yum
-## @details RHEL, Fedora, CentOS
-## @retval 0 пакетный менеджер yum существует; 1 - не существует
-function package_manager_is_yum() {
-    is_executable_available "yum" || return $?
-    return 0
-}
-
-## @fn package_manager_is_dnf()
-## @brief Проверить существует ли пакетный менеджер dnf
-## @details Fedora
-## @retval 0 пакетный менеджер dnf существует; 1 - не существует
-function package_manager_is_dnf() {
-    is_executable_available "dnf" || return $?
-    return 0
-}
-
-## @fn package_manager_is_zypper()
-## @brief Проверить существует ли пакетный менеджер zypper
-## @details openSUSE
-## @retval 0 пакетный менеджер zypper существует; 1 - не существует
-function package_manager_is_zypper() {
-    is_executable_available "zypper" || return $?
-    return 0
-}
-
-function dpkg_get_main_architecture() {
-   local RESULT=""
-   RESULT=$(dpkg --print-architecture) || return $?
-   echo "${RESULT}"
-   return 0
-}
-
-function apt_update_and_upgrade() {
-    # https://wiki.debian.org/Multiarch/HOWTO
-    # https://wiki.ubuntu.com/MultiarchCross
-    dpkg --add-architecture i386 || return $? # Для установки wine требуется добавить i386 архитектуру
-                                              # https://wiki.archlinux.org/title/Wine#32-bit_Windows_applications
-                                              # https://gitlab.winehq.org/wine/wine/-/wikis/Debian-Ubuntu
-    apt update || return $?
-    apt upgrade -o Dpkg::Options::="--force-confnew" -y || return $?
-    apt update || return $?
-
-    if is_termux; then
-        apt -y install x11-repo root-repo || return $?
-        apt update || return $?
-    fi
-
-    return 0
-}
-
-function apt_install_packages() {
-    apt -y install ${1} || return $?
-    return 0
-}
-
-function apt_is_package_installed() {
-    apt -L ${1}
-    return $?
-}
-
-function apt_is_package_available_from_repository() {
-    local PACKAGE="${1}"
-    apt-cache show "${PACKAGE}" 2> "/dev/null" || 1
-    return 0
-}
-
-
-
-## @fn apt_create_sources()
-## @brief Добавить source файл в формате deb822 для apt
-## @details https://wiki.debian.org/ArchitectureSpecificsMemo
-## @details https://manpages.ubuntu.com/manpages/xenial/man5/sources.list.5.html
-## @param Путь куда сформировать *.source файл
-## @param URIs параметр (обязательный)
-## @param Suites параметр (обязательный)
-## @param Components параметр (обязательный)
-## @param Signed-By параметр (не обязательный)
-## @param Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
-## @param Types параметр (не обязательный, будет "deb")
-## @retval 0 - успешное выполнение
-function apt_create_sources() {
-   local SOURCES_FILE_PATH="${1}"
-   local URIS="${2}"
-   local SUITES="${3}"
-   local COMPONENTS="${4}"
-
-   local SIGNED_BY="${5}"
-   local SIGNED_BY_PATH=""
-   if [[ -n "${SIGNED_BY}" ]]; then
-       SIGNED_BY_PATH="Signed-By: ${SIGNED_BY}"
-   fi
-
-   local ARCHITECTURES="${6}"
-   if [[ -z "${ARCHITECTURES}" ]]; then
-       ARCHITECTURES=$(dpkg_get_main_architecture) || return $?
-   fi
-
-   local TYPES="${7}"
-   if [[ -z "${TYPES}" ]]; then
-       TYPES="deb"
-   fi
-
-   create_file "Types: ${TYPES}
-URIs: ${URIS}
-Suites: ${SUITES}
-Components: ${COMPONENTS}
-Architectures: ${ARCHITECTURES}
-${SIGNED_BY_PATH}" "${SOURCES_FILE_PATH}" || return $?
-    return 0
-}
-
-
-function apt_get_key_file_path() {
-   local KEYRINGS_DIR_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/apt/keyrings"
-
-   local NAME="${1}"
-
-   echo "${KEYRINGS_DIR_PATH}/${NAME}.gpg"
-   return 0
-}
-
-function apt_get_source_file_path() {
-   local APT_SOURCES_LIST_DIR_PATH="${GLOBAL_CONFIG_ETC_PREFIX}/apt/sources.list.d"
-
-   local NAME="${1}"
-
-   echo "${APT_SOURCES_LIST_DIR_PATH}/${NAME}.sources"
-   return 0
-}
-
-function apt_download_key() {
-    local NAME="${1}"
-    local KEY_FILE_URL="${2}"
-
-    if [[ -z "${KEY_FILE_URL}" ]]; then
-        echo ""
-        return 0
-    fi
-
-    local KEY_FILE_PATH
-    KEY_FILE_PATH=$(apt_get_key_file_path "${NAME}") || return $?
-
-    if [[ -f "${KEY_FILE_PATH}" ]]; then
-        echo "${KEY_FILE_PATH}"
-        return 0
-    fi
-
-    download_file "${KEY_FILE_URL}" "-" | gpg --dearmor > "${KEY_FILE_PATH}" || return $?
-    echo "${KEY_FILE_PATH}"
-    return 0
-}
-
-function apt_add_sources() {
-    local NAME="${1}"
-    local KEY_FILE_URL="${2}"
-    local URIS="${3}"
-    local SUITES="${4}"
-    local COMPONENTS="${5}"
-    local ARCHITECTURES="${6}"
-    local TYPES="${7}"
-
-    local SOURCE_FILE_PATH
-    SOURCE_FILE_PATH=$(apt_get_source_file_path "${NAME}") || return $?
-    if [[ -f "${SOURCE_FILE_PATH}" ]]; then
-        echo "WARNING: \"${SOURCE_FILE_PATH}\" already exists"
-        return 0
-    fi
-
-    local KEY_FILE_PATH
-    KEY_FILE_PATH=$(apt_download_key "${NAME}" "${KEY_FILE_URL}") || return $?
-
-    apt_create_sources "${SOURCE_FILE_PATH}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${KEY_FILE_PATH}" "${ARCHITECTURES}" "${TYPES}" || return $?
-
-    apt update
-    local APT_UPDATE_RESULT=$?
-    if !check_result_code ${APT_UPDATE_RESULT}; then
-        rm -f "${SOURCE_FILE_PATH}" "${KEY_FILE_PATH}"
-        return ${APT_UPDATE_RESULT}
-    fi
-    return 0
-}
-
-# https://dev.to/henrybarreto/pacman-s-simple-guide-for-apt-s-users-5hc4
-
-
-
-function pacman_update_and_upgrade() {
-    pacman -Syu --noconfirm || return $?
-    return 0
-}
-
-function pacman_install_packages() {
-    pacman -S --noconfirm  ${1} || return $?
-    return 0
-}
-
-function pacman_is_package_installed() {
-    pacman -Q "${1}"
-    return $?
-}
-
-function pacman_is_package_available_from_repository() {
-    # fixme utopia команду уточнить https://stackoverflow.com/a/67907522
-    pacman -Ss "${1}" 2> "/dev/null" || 1
-    return 0
-}
-
-function package_manager_update_and_upgrade() {
-    if package_manager_is_apt; then
-        apt_update_and_upgrade || return $?
-    elif package_manager_is_pacman; then
-        pacman_update_and_upgrade || return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_dnf; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_zypper; then
-        # fixme utopia Дописать
-        return 1
-    else
-        echo "FATAL: unknown package manager"
-        return 1
-    fi
-    return 0
-}
-
-function package_manager_install_packages() {
-    local PACKAGE_LIST="${1}"
-
-    if package_manager_is_apt; then
-        apt_install_packages "${PACKAGE_LIST}" || return $?
-    elif package_manager_is_pacman; then
-        pacman_install_packages "${PACKAGE_LIST}" || return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_dnf; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_zypper; then
-        # fixme utopia Дописать
-        return 1
-    else
-        echo "FATAL: unknown package manager"
-        return 1
-    fi
-    return 0
-}
-
-function package_manager_is_package_installed() {
-    local PACKAGE="${1}"
-
-    if package_manager_is_apt; then
-        apt_is_package_installed "${PACKAGE}"
-        return $?
-    elif package_manager_is_pacman; then
-        pacman_is_package_installed "${PACKAGE}"
-        return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_dnf; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_zypper; then
-        # fixme utopia Дописать
-        return 1
-    else
-        echo "FATAL: unknown package manager"
-        return 1
-    fi
-    return 0
-}
-
-function package_manager_is_package_available_from_repository() {
-    local PACKAGE="${1}"
-
-    if package_manager_is_apt; then
-        apt_is_package_available_from_repository "${PACKAGE}"
-        return $?
-    elif package_manager_is_pacman; then
-        pacman_is_package_available_from_repository "${PACKAGE}"
-        return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_dnf; then
-        # fixme utopia Дописать
-        return 1
-    elif package_manager_is_zypper; then
-        # fixme utopia Дописать
-        return 1
-    else
-        echo "FATAL: unknown package manager"
-        return 1
-    fi
-    return 0
-}
-
-### System package manager end
-
-function python_venv_get_dir_path() {
-    PROJECT_DIR_PATH="${1}"
-    if [[ -z "${PROJECT_DIR_PATH}" ]]; then
-        PROJECT_DIR_PATH="${MY_DIR}"
-    fi
-
-    echo "${PROJECT_DIR_PATH}/.venv"
-    return 0
-}
-
-function python_venv_activate() {
-    local PROJECT_DIR_PATH="${1}"
-
-    local VENV_DIR_PATH=""
-    VENV_DIR_PATH=$(python_venv_get_dir_path "${PROJECT_DIR_PATH}") || return $?
-
-    source "${VENV_DIR_PATH}/bin/activate" || return $?
-    return 0
-}
-
-function python_venv_deactivate() {
-    deactivate || return $?
-    return 0
-}
-
-function pip_install_packages() {
-    local PROJECT_DIR_PATH="${1}"
-    local REQUIREMENTS_FILE_PATH="${2}"
-
-    if [[ -z "${REQUIREMENTS_FILE_PATH}" && -n "${PROJECT_DIR_PATH}" ]]; then
-        REQUIREMENTS_FILE_PATH="${PROJECT_DIR_PATH}/requirements.txt"
-    fi
-
-    local PYTHON_EXECUTABLE="python$(python_get_version)"
-
-    local VENV_DIR_PATH=""
-    VENV_DIR_PATH="$(python_venv_get_dir_path "${PROJECT_DIR_PATH}")" || return $?
-
-    "${PYTHON_EXECUTABLE}" -m venv "${VENV_DIR_PATH}" || return $?
-    python_venv_activate "${PROJECT_DIR_PATH}" || return $?
-    pip install -r "${REQUIREMENTS_FILE_PATH}" --force-reinstall --ignore-installed
-    local COMMAND_CHAIN_RESULT=$?
-    python_venv_deactivate
-    return ${COMMAND_CHAIN_RESULT}
-}
-
-### termux specific API begin
-
-function termux_autorun_serves_at_boot() {
-    local AUTORUN_SERVICES_DIR_PATH="$(user_get_home_dir_path)/.termux/boot"
-    local AUTORUN_SERVICES_SCRIPT="autorun_services_at_boot.sh"
-
-    local AUTORUN_SERVICES_SCRIPT_PATH="${AUTORUN_SERVICES_DIR_PATH}/${AUTORUN_SERVICES_SCRIPT}"
-
-    create_file "#!${SHELL}
-termux-wake-lock
-. \"${GLOBAL_CONFIG_ETC_PREFIX}/profile\"" "${AUTORUN_SERVICES_SCRIPT_PATH}" "" "rewrite_if_exist" || return $?
-    set_file_as_executable "${AUTORUN_SERVICES_SCRIPT_PATH}" || return $?
-    return 0
-}
-
-# https://wiki.termux.com/wiki/Internal_and_external_storage
-# https://stackoverflow.com/questions/29789204/bash-how-to-get-real-path-of-a-symlink
-function termux_set_symlinks_to_storage() {
-   local TARGET_DIRECTORY_PATH="${1}"
-   if [[ -z "${TARGET_DIRECTORY_PATH}" ]]; then
-       TARGET_DIRECTORY_PATH="."
-   fi
-
-   # Вылезет запрос доступа к накопителю (Android).
-   # Как только будет получено разрешение, в домашней директории появится директория storage
-   termux-setup-storage || return $?
-   local TERMUX_STORAGE_SYMLINKS_DIR_PATH="$(user_get_home_dir_path)/storage"
-   wait_for_dir_creation "${TERMUX_STORAGE_SYMLINKS_DIR_PATH}" || return $?
-
-   local ANDROID_INTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/shared"
-   if wait_for_dir_creation "${ANDROID_INTERNAL_STORAGE_DIR_PATH}"; then
-       ANDROID_INTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_INTERNAL_STORAGE_DIR_PATH}") || return $?
-       if [[ -d "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" ]]; then
-           create_symlink "${ANDROID_INTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-internal-storage" || return $?
-       fi
-   fi
-
-   # external-1 -> /storage/9C33-6BBD/Android/data/com.termux/files
-   # В итоге хотим получить /storage/9C33-6BBD
-   sleep 1
-   local ANDROID_EXTERNAL_STORAGE_DIR_PATH="${TERMUX_STORAGE_SYMLINKS_DIR_PATH}/external-1"
-   if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
-       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}") || return $?
-       ANDROID_EXTERNAL_STORAGE_DIR_PATH=$(realpath "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}/../../../../") || return $?
-       if [[ -d "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" ]]; then
-           create_symlink "${ANDROID_EXTERNAL_STORAGE_DIR_PATH}" "${TARGET_DIRECTORY_PATH}/android-external-storage" || return $?
-       fi
-   fi
-
-   return 0
-}
-
-### termux specific API end
-
-### System services begin
-
-function systemd_get_system_service_base_dir_path() {
-   echo "${GLOBAL_CONFIG_ETC_PREFIX}/systemd/system"
-   return 0
-}
-
-function systemd_get_user_service_base_dir_path() {
-    local USER_NAME="${1}"
-
-    local USER_HOME_DIR_PATH=""
-    USER_HOME_DIR_PATH=$(user_get_home_dir_path "${USER_NAME}") || return $?
-    echo "${USER_HOME_DIR_PATH}/.config/systemd/user"
-    return 0
-}
-
-function systemd_init() {
-    return 0
-}
-
-function systemd_is_service_active() {
-    local SERVICE_NAME="${1}"
-    local USER_NAME="${2}"
-
-    local SERVICE_STATUS=""
-    if [[ -z "${USER_NAME}" ]]; then
-        SERVICE_STATUS=$(systemctl is-active "${SERVICE_NAME}" 2> "/dev/null") || return $?
-    else
-        # https://unix.stackexchange.com/a/685029
-        # https://www.opennet.ru/opennews/art.shtml?num=54871
-        # Опция --machine доступна начиная с 248 версии systemd. Сделан fallback на systemd-run
-        # https://manpages.debian.org/testing/systemd/systemd-run.1.en.html
-        SERVICE_STATUS=$(systemctl --machine="${USER_NAME}@" --user is-active "${SERVICE_NAME}" 2> "/dev/null") ||
-            SERVICE_STATUS=$(systemd-run --machine="${USER_NAME}@" --user --pipe systemctl --user is-active "${SERVICE_NAME}" 2> "/dev/null") || return $?
-    fi
-
-    if [[ "${SERVICE_STATUS,,}" == "active" ]]; then
-        return 0
-    fi
-    return 1
-}
-
-function systemd_service_enable() {
-    local SERVICE_NAME="${1}"
-    local USER_NAME="${2}"
-
-    if [[ -z "${USER_NAME}" ]]; then
-        systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
-        systemctl start "${SERVICE_NAME}" > "/dev/null" || return $?
-    else
-        systemctl --machine="${USER_NAME}@" --user enable "${SERVICE_NAME}" > "/dev/null" ||
-            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl enable "${SERVICE_NAME}" > "/dev/null" || return $?
-        systemctl --machine="${USER_NAME}@" --user start "${SERVICE_NAME}" > "/dev/null" ||
-            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl start "${SERVICE_NAME}" > "/dev/null" || return $?
-    fi
-    return 0
-}
-
-function systemd_service_disable() {
-    local SERVICE_NAME="${1}"
-    local USER_NAME="${2}"
-
-    if [[ -z "${USER_NAME}" ]]; then
-        systemctl stop "${SERVICE_NAME}" > "/dev/null" || return $?
-        systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
-    else
-        systemctl --machine="${USER_NAME}@" --user stop "${SERVICE_NAME}" > "/dev/null" ||
-            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl stop "${SERVICE_NAME}" > "/dev/null" || return $?
-        systemctl --machine="${USER_NAME}@" --user disable "${SERVICE_NAME}" > "/dev/null" ||
-            systemd-run --machine="${USER_NAME}@" --user --pipe systemctl disable "${SERVICE_NAME}" > "/dev/null" || return $?
-    fi
-    return 0
-}
-
-function runit_is_service_active() {
-    local SERVICE_NAME="${1}"
-
-    # https://manpages.ubuntu.com/manpages/trusty/en/man8/sv.8.html
-    local SERVICE_STATUS=""
-    SERVICE_STATUS=$(sv -w 5 status "${SERVICE_NAME}" 2> "/dev/null") || return $?
-
-    if [[ "${SERVICE_STATUS,,}" == "run: "* ]]; then # https://stackoverflow.com/a/229606
-        return 0
-    fi
-    return 1
-}
-
-
-function runit_get_base_dir_path() {
-    echo "${SVDIR}"
-    return 0
-}
-
-# https://wiki.termux.com/wiki/Termux-services
-# https://smarden.org/runit/
-# https://wiki.termux.com/wiki/Termux:Boot
-
-function runit_init() {
-    if is_termux; then
-        # Если не удалось запустить service-daemon то перезагружаем bash и запускаем скрипт setup-packages.sh вновь.
-        # После установки termux-services рекомендовано перезапустить termux чтобы bash подхватил новые переменные окружения (нас интересует SVDIR)
-        # https://github.com/termux/termux-services/tree/master
-        # "Restart your shell so that the service-daemon is started"
-
-        if [[ -z "$(runit_get_base_dir_path)" ]]; then # После установки пакета termux-services в /etc/profile.d/ добавляется скрипт start-services.sh
-                                     # который устанавливает требуемые переменные окружения. Перезагрузим (команда exec) bash с полной
-                                     # инициализацией и запустим текущий скрипт заново
-            echo "RESTART BASH"
-            exec ${SHELL} --login -c "${0}" # fixme utopia Надо расследовать циклические перезагрузки скрипта на Android/termux
-            # После exec ${SHELL} управление не возвращается
-            echo "NEVER"
-        fi
-        termux_autorun_serves_at_boot || return $?
-        return 0
-    fi
-    return 0
-}
-
-function runit_service_enable() {
-    local SERVICE_NAME="${1}"
-
-    sv-enable "${SERVICE_NAME}" > "/dev/null"
-    if !check_result_code $?; then
-        sleep 5
-        sv-enable "${SERVICE_NAME}" > "/dev/null"
-        if !check_result_code $?; then
-            # Иногда почему-то случается вылет runit и далее служба не может запуститься,
-            # поэтому запустим runit заново
-            . "${GLOBAL_CONFIG_ETC_PREFIX}/profile.d/start-services.sh" > "/dev/null" || return $?
-            sleep 5
-            sv-enable "${SERVICE_NAME}" > "/dev/null" || return $?
-        fi
-    fi
-    return 0
-}
-
-function runit_service_disable() {
-    local SERVICE_NAME="${1}"
-
-    sv-disable "${SERVICE_NAME}" > "/dev/null" || return $?
-    return 0
-}
-
-# https://wiki.termux.com/wiki/Termux-services
-function runit_create_log_run_file() {
-    local SERVICE_NAME="${1}"
-
-    local RUN_FILE_DIRECTOR_PATH="$(runit_get_base_dir_path)/${SERVICE_NAME}/log"
-    local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
-
-    make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
-
-    create_symlink "${PREFIX}/share/termux-services/svlogger" "${RUN_FILE_PATH}" || return $?
-    return 0
-}
-
-function runit_create_run_file() {
-    local SERVICE_NAME="${1}"
-    local RUN_FILE_CONTENT="${2}"
-    local FINISH_FILE_CONTENT="${3}"
-
-    local RUN_FILE_DIRECTOR_PATH="$(runit_get_base_dir_path)/${SERVICE_NAME}"
-    local RUN_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/run"
-    local FINISH_FILE_PATH="${RUN_FILE_DIRECTOR_PATH}/finish"
-
-    make_dirs "${RUN_FILE_DIRECTOR_PATH}" || return $?
-
-    create_file "${RUN_FILE_CONTENT}" "${RUN_FILE_PATH}" || return $?
-    set_file_as_executable "${RUN_FILE_PATH}" || return $?
-
-    if [[ -n "${FINISH_FILE_CONTENT}" ]]; then
-        create_file "${FINISH_FILE_CONTENT}" "${FINISH_FILE_PATH}" || return $?
-        set_file_as_executable "${FINISH_FILE_PATH}" || return $?
-    fi
-
-    runit_create_log_run_file "${SERVICE_NAME}" || return $?
-    return 0
-}
-
-function service_init() {
-    if is_termux; then
-        runit_init || return $?
-        return 0
-    elif is_msys; then
-        return 0
-    fi
-
-    systemd_init || return $?
-    return 0
-}
-
-function is_service_active() {
-    local SERVICE_NAME="${1}"
-    local USER_NAME="${2}"
-
-    if is_termux; then
-        runit_is_service_active "${SERVICE_NAME}" || return $?
-        return 0
-    fi
-
-    systemd_is_service_active "${SERVICE_NAME}" "${USER_NAME}" || return $?
-    return 0
-}
-
-function service_enable() {
-    local SERVICE_NAME="${1}"
-    local USER_NAME="${2}"
-
-    if is_termux; then
-        runit_service_enable "${SERVICE_NAME}" || return $?
-        return 0
-    fi
-
-    systemd_service_enable "${SERVICE_NAME}" "${USER_NAME}" || return $?
-    return 0
-}
-
-function service_disable() {
-    local SERVICE_NAME="${1}"
-    local USER_NAME="${2}"
-
-    if is_termux; then
-        runit_service_disable "${SERVICE_NAME}" || return $?
-        return 0
-    fi
-
-    systemd_service_disable "${SERVICE_NAME}" "${USER_NAME}" || return $?
-    return 0
-}
-
-### System services end
 
 
 ### System firewall begin
@@ -1389,362 +191,6 @@ function firewall_accept_udp_traffic_for_port() {
 
 ### System firewall end
 
-function python_get_version() {
-    if package_manager_is_apt; then
-        if ! is_termux; then
-            echo "3.13"
-            return 0
-        fi
-    fi
-    echo "3"
-    return 0
-}
-
-function python_install() {
-    local PYTHON_VERSION=""
-    PYTHON_VERSION=$(python_get_version) || return $?
-
-    if package_manager_is_apt; then
-        if ! is_termux; then
-            # https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
-            # https://askubuntu.com/a/1458126
-            add-apt-repository -y "ppa:deadsnakes/ppa" || return $?
-            apt update || return $?
-        fi
-    fi
-
-    local PYTHON_PACKAGE_LIST="python${PYTHON_VERSION} python3-pip python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev"
-    if is_termux; then
-        PYTHON_PACKAGE_LIST="python python-pip"
-    elif is_msys; then
-        PYTHON_PACKAGE_LIST="python python-pip"
-    fi
-
-    package_manager_install_packages "${PYTHON_PACKAGE_LIST}" || return $?
-
-    pip_install_packages "${MY_DIR}" || return $?
-    return 0
-}
-
-
-# fixme utopia Добавим поддержку "X11Forwarding yes" в "$PREFIX/etc/ssh/sshd_config" (termux)
-# https://www.reddit.com/r/termux/comments/bd5kz4/x_windows_remote_display/
-function sshd_setup() {
-    if [[ -n "${SSH_CONNECTION}" ]]; then
-        echo "SSH server is not installed because execution takes place in a SSH session"
-        return 0
-    fi
-
-    local SSHD="ssh" # https://tokmakov.msk.ru/blog/item/441
-
-    if is_termux; then
-        SSHD="sshd"
-    fi
-
-    service_disable "${SSHD}"
-
-    user_create_password_if || return $?
-
-    service_enable "${SSHD}" || return $?
-
-    if ! is_service_active "${SSHD}"; then
-        echo "FATAL: ${SSHD} not started"
-        return 1
-    fi
-    return 0
-}
-
-function openjdk_install() {
-    if is_msys; then # Скачаем и установим приложение вручную
-        return 0
-    fi
-
-    local OPEN_JDK_PACKAGE_SUFFIX="-jdk"
-    if is_termux; then
-        OPEN_JDK_PACKAGE_SUFFIX=""
-    fi
-
-    package_manager_install_packages "openjdk-21${OPEN_JDK_PACKAGE_SUFFIX}" || \
-    package_manager_install_packages "openjdk-19${OPEN_JDK_PACKAGE_SUFFIX}" || \
-    package_manager_install_packages "openjdk-17${OPEN_JDK_PACKAGE_SUFFIX}" || return $?
-    return 0
-}
-
-function pycharm_install() {
-    local PYCHARM="pycharm-community-2025.1.3.1"
-    local DOWNLOAD_URL="https://download.jetbrains.com/python/${PYCHARM}.tar.gz"
-    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt"
-    local PYCHARM_INSTALL_DIRECTORY="${INSTALL_DIR_PATH}/${PYCHARM}"
-
-    if [[ -d "${PYCHARM_INSTALL_DIRECTORY}" ]]; then
-        echo "WARNING: Pycharm \"${PYCHARM}\" already installed"
-        return 0
-    fi
-
-    openjdk_install || return $?
-
-    make_dirs "${INSTALL_DIR_PATH}" || return $?
-
-    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIR_PATH}" || return $?
-    return 0
-}
-
-function rdp_client_install_default() {
-    local RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
-    if is_termux; then
-        RDP_CLIENT_PACKAGE="freerdp"
-    elif is_msys; then
-        RDP_CLIENT_PACKAGE="${MINGW_PACKAGE_PREFIX}-freerdp"
-    fi
-
-    package_manager_install_packages "${RDP_CLIENT_PACKAGE}" || return $?
-    return 0
-}
-
-function rdp_client_install_nightly() {
-    if package_manager_is_apt; then
-        local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
-
-        local PACKAGE_NAME="freerdp-nightly"
-        local KEY_FILE_URL="http://pub.freerdp.com/repositories/ADD6BF6D97CE5D8D.asc"
-        local URIS="http://pub.freerdp.com/repositories/deb/${OS_DISTRO_VERSION_CODENAME}"
-        local SUITES="${PACKAGE_NAME}"
-        local COMPONENTS="main"
-        local ARCHITECTURES="amd64"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
-        package_manager_install_packages "${PACKAGE_NAME}" || return $?
-        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run /opt/freerdp-nightly/bin/xfreerdp"
-        return 0
-    fi
-    return 1
-}
-
-function rdp_client_install() {
-    if is_termux || is_msys; then
-        rdp_client_install_default || return $?
-    else
-        rdp_client_install_nightly || rdp_client_install_default || return $? # fixme utopia Чтобы будем делать с Linux ARM?
-    fi
-
-    # https://interface31.ru/tech_it/2022/09/apt-key-is-deprecated-ili-upravlenie-klyuchami-v-sovremennyh-vypuskah-debian-i-ubunt.html
-    # https://habr.com/en/articles/683716/
-    return 0
-}
-
-function winetricks_install_default() {
-    local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20250102.tar.gz"
-    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/winetricks"
-
-    rm -rf "${INSTALL_DIR_PATH}" || return $?
-    make_dirs "${INSTALL_DIR_PATH}" || return $?
-
-    download_file "${DOWNLOAD_URL}" "-" | tar -xz -C "${INSTALL_DIR_PATH}" --strip-components=1 || return $?
-    make -C "${INSTALL_DIR_PATH}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
-    return 0
-}
-
-function wine_install_default() {
-    if is_termux; then
-        package_manager_install_packages "wine-stable" || return $?
-        return 0
-    fi
-
-    package_manager_install_packages "wine" || return $?
-    return 0
-}
-
-# https://wiki.winehq.org/Ubuntu
-function wine_install_nightly() {
-    if package_manager_is_apt; then
-        local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
-
-        local OS_DISTRO_NAME=""
-        OS_DISTRO_NAME=$(get_os_distro_name) || return $?
-
-        local NAME="winehq"
-        local PACKAGE_NAME="${NAME}-stable"
-        local KEY_FILE_URL="https://dl.winehq.org/wine-builds/winehq.key"
-        local URIS="https://dl.winehq.org/wine-builds/${OS_DISTRO_NAME}"
-        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
-        local COMPONENTS="main"
-        local ARCHITECTURES="amd64 i386"
-        apt_add_sources "${NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
-        package_manager_install_packages "--install-recommends ${PACKAGE_NAME}" || return $?
-        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\""
-        return 0
-    fi
-    return 1
-}
-
-function wine_install_32bit_dependencies() {
-    # Зависимости для wine32 fixme utopia Это Ubuntu специфичные пакеты?
-    # https://pkgs.org/search/?q=libgl1
-    # https://pkgs.org/search/?q=mesa-vulkan-drivers
-    package_manager_install_packages "libgl1:i386 mesa-vulkan-drivers:i386" || return $?
-    return 0
-}
-
-function wine_install() {
-    if is_msys; then
-        return 0
-    fi
-
-    if is_termux; then
-        # fixme utopia Будем устанавливать в termux для архитектуры amd64/i386? Проверить в termux
-        # fixme utopia Запуск из под box86/box64
-        # fixme utopia Запуск ARM программ под ARM/wine?
-        # https://github.com/termux/termux-packages/blob/master/x11-packages/wine-stable/build.sh
-        wine_install_default || return $?
-    else
-        wine_install_32bit_dependencies || return $?
-        wine_install_nightly || wine_install_default || return $?
-    fi
-
-    winetricks_install_default || return $?
-
-    # fixme utopia Install Mono and Gecko automatically
-    # откуда версию Mono то взять? Курить внимательно appwiz.cpl
-    # https://source.winehq.org/winemono.php?arch=x86_64&v=8.1.0&winev=8.19
-    # https://gitlab.winehq.org/wine/wine/-/blob/master/dlls/appwiz.cpl/addons.c
-    # https://www.winehq.org/pipermail/wine-bugs/2014-January/373915.html
-
-    # https://gist.github.com/RobinCPC/9f42be23a1343600507aabdfecc5061d
-    # https://wiki.winehq.org/Mono
-    # https://wiki.winehq.org/Gecko
-    # https://forum.winehq.org/viewtopic.php?t=37344
-    # https://source.winehq.org/
-
-    return 0
-}
-
-function smbd_get_config_file_path() {
-    local SMBD_BUILD_OPTIONS
-    SMBD_BUILD_OPTIONS=$(smbd -b) || return $?
-
-    local SMBD_CONFIG_FILE_PATH
-    SMBD_CONFIG_FILE_PATH=$(echo "${SMBD_BUILD_OPTIONS}" | sed -En 's/^[\t ]*CONFIGFILE:[\t ]+(.*)$/\1/p') || return $? # https://stackoverflow.com/a/43997253
-
-    echo "${SMBD_CONFIG_FILE_PATH}"
-    return 0
-}
-
-function samba_make_user_and_assign_rights() {
-    # https://askubuntu.com/questions/97669/i-cant-get-samba-to-set-proper-permissions-on-created-directories
-    local SAMBA_USER="${1}"
-    local SAMBASHARE_GROUP="sambashare"
-
-    if ! user_is_available "${SAMBA_USER}"; then
-        user_add "${SAMBA_USER}" || return $?
-    fi
-
-    if ! user_is_added_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}"; then
-        user_add_to_group "${SAMBA_USER}" "${SAMBASHARE_GROUP}" || return $?
-    fi
-    return 0
-}
-
-function samba_make_public_directory() {
-    make_dirs "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
-    chmod 0777 "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}" || return $?
-    return 0
-}
-
-function smbd_make_config() {
-    # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
-
-    local SMBD_CONFIG_FILE_PATH=""
-    SMBD_CONFIG_FILE_PATH=$(smbd_get_config_file_path) || return $?
-
-    # fixme utopia Задать обнаружение NetBios
-    # https://www.linux.org.ru/forum/admin/13225419
-    # https://en.wikipedia.org/wiki/NetBIOS#NetBIOS_name
-    # getprop ro.product.model
-    # getprop ro.product.manufacturer
-
-    # https://learn.microsoft.com/en-us/answers/questions/1280211/symbolic-links-created-by-linux-are-not-displayed
-    # fixme utopia Переписать?
-    # https://www.samba.org/samba/docs/using_samba/ch08.html#samba2-CHP-8-TABLE-2
-    create_file "[global]
-workgroup = WORKGROUP
-security = user
-map to guest = bad user
-wins support = no
-dns proxy = no
-smb ports = ${GLOBAL_CONFIG_SMBD_TCP_PORTS}
-inherit permissions = yes
-follow symlinks = yes
-wide links = yes
-allow insecure wide links = yes
-
-[public]
-path = \"${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}\"
-guest ok = yes
-force user = ${GLOBAL_CONFIG_SAMBA_USER}
-browsable = yes
-writable = yes
-" "${SMBD_CONFIG_FILE_PATH}" || return $?
-    return 0
-}
-
-# fixme utopia Дописать для windows https://stackoverflow.com/questions/1537065/how-can-i-create-a-shared-folder-from-the-windows-command-line
-# https://habr.com/ru/companies/varonis/articles/281691/
-# https://stackoverflow.com/a/9422811
-# https://stackoverflow.com/questions/5944180/how-do-you-run-a-command-as-an-administrator-from-the-windows-command-line
-# https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-special-identities-groups
-# https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-special-identities-groups#everyone
-# https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-r2-and-2012/hh750728(v=ws.11)
-# https://stackoverflow.com/questions/5944180/how-do-you-run-a-command-as-an-administrator-from-the-windows-command-line
-function windows_net_share_setup() {
-    # Название группы Everyone необходимо уточнять через её SID (S-1-1-0), "Все" - это локализованное имя
-    # whoami /groups
-    # https://learn.microsoft.com/ru-ru/windows/win32/com/runas
-
-    # runas /user:"Администратор" "net share public=\"${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}\" /GRANT:Все,FULL" || return $?
-    return 0
-}
-
-function smbd_setup() {
-    if is_msys; then
-        windows_net_share_setup || return $?
-        return 0
-    fi
-
-    # https://ubuntu.com/tutorials/install-and-configure-samba#1-overview
-    local SMBD="smbd"
-
-    service_disable "${SMBD}"
-
-    # make_samba_user_and_assign_rights || return $?
-    samba_make_public_directory || return $?
-    smbd_make_config || return $?
-
-    if is_termux; then
-        local SMBD_EXECUTABLE_PATH=""
-        SMBD_EXECUTABLE_PATH=$(which "${SMBD}") || return $?
-
-        runit_create_run_file "${SMBD}" \
-"#!${SHELL}
-exec ${SMBD_EXECUTABLE_PATH} --foreground --no-process-group --debug-stdout --debuglevel=3 2>&1 || exit $?
-exit 0" || return $?
-
-        termux_set_symlinks_to_storage "${GLOBAL_CONFIG_SAMBA_PUBLIC_DIRECTORY_PATH}"
-    fi
-
-    service_enable "${SMBD}" || return $?
-
-    if ! is_service_active "${SMBD}"; then
-        echo "FATAL: ${SMBD} not started"
-        return 1
-    fi
-
-    # https://www.samba.org/~tpot/articles/firewall.html
-    # https://ixnfo.com/iptables-pravila-dlya-samba.html
-    # https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
-    # https://entnet.ru/server/domain/ustanovka-i-nastrojka-samba-server.html
-    return 0
-}
 
 function desktop_environment_get_desktop_file_path() {
     local DESKTOP_ENVIRONMENT_PRIORITY_LIST="xfce cinnamon"
@@ -1836,20 +282,17 @@ function vnc_server_create_xstartup() {
     local EXEC=""
     EXEC=$(desktop_file_get_value "${DESKTOP_ENVIRONMENT_DESKTOP_FILE_PATH}" "Desktop Entry" "Exec") || return $?
 
-    create_file "#!${SHELL}
+    fs_create_file "#!${SHELL}
 autocutsel -fork
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 ${EXEC}" "${XSTARTUP_FILE_PATH}" "${VNC_USER}" || return $?
-    set_file_as_executable "${XSTARTUP_FILE_PATH}" || return $?
+    fs_set_file_as_executable "${XSTARTUP_FILE_PATH}" || return $?
     return 0
 }
 
 function vnc_server_get_executable_path() {
-    local VNC_SERVER_EXEC="vncserver"
-    local RESULT=""
-    RESULT=$(which "${VNC_SERVER_EXEC}") || return $?
-    echo "${RESULT}"
+    get_executable_path "vncserver" || return $?
     return 0
 }
 
@@ -1933,7 +376,7 @@ function vnc_server_create_systemd_config() {
     # https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-vnc-on-ubuntu-22-04
     # https://wiki.archlinux.org/title/Systemd_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)#%D0%A2%D0%B8%D0%BF%D1%8B_%D1%81%D0%BB%D1%83%D0%B6%D0%B1
     # https://wiki.archlinux.org/title/TigerVNC#With_a_user_service
-    create_file "[Unit]
+    fs_create_file "[Unit]
 Description=Start VNC server at startup
 
 [Service]
@@ -1991,8 +434,10 @@ function vnc_server_setup() {
         return 0
     fi
 
+    vnc_server_packages_setup || return $?
+
     local declare -A VNC_SERVER_CONFIG=()
-    vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_USER}" || return $?
+    vnc_server_get_config_info VNC_SERVER_CONFIG "${GLOBAL_CONFIG_VNC_SERVER_USER}" || return $?
 
     local VNC_USER="${VNC_SERVER_CONFIG["USER"]}"
     local VNCD_INSTANCE_NAME="${VNC_SERVER_CONFIG["INSTANCE_NAME"]}"
@@ -2013,7 +458,7 @@ function vnc_server_setup() {
 
     service_enable "${VNCD_INSTANCE_NAME}" "${VNC_USER}" || return $?
 
-    if ! is_service_active "${VNCD_INSTANCE_NAME}" "${VNC_USER}"; then
+    if ! service_is_active "${VNCD_INSTANCE_NAME}" "${VNC_USER}"; then
         echo "FATAL: ${VNCD_INSTANCE_NAME} not started"
         return 1
     fi
@@ -2031,280 +476,51 @@ function vnc_server_setup() {
     return 0
 }
 
-# https://community.openvpn.net/openvpn/wiki/OpenvpnSoftwareRepos#DebianUbuntu:UsingOpenVPNaptrepositories
-function openvpn_setup() {
-    if is_termux; then
-        return 0 # fixme utopia Или скомпилировать или скачать openvpn https://openvpn.net/community-downloads/ (но сможем ли мы сконфигурировать эту версию?)
-    fi
 
-    if package_manager_is_apt; then
-        local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
-
-        local PACKAGE_NAME="openvpn"
-        local KEY_FILE_URL="https://swupdate.openvpn.net/repos/repo-public.gpg"
-        local URIS="https://build.openvpn.net/debian/openvpn/stable"
-        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
-        local COMPONENTS="main"
-        local ARCHITECTURES="amd64"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
-        package_manager_install_packages "${PACKAGE_NAME}" || return $?
-        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run ${PACKAGE_NAME}"
-        return 0
-    fi
-
-    # fixme utopia Дописать для прочих менеджеров пакетов
-    return 1
-}
-
-# https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
-function openvpn3_setup() {
-    if is_termux; then
-        return 0 # fixme utopia Или скомпилировать или скачать openvpn-connect
-    fi
-
-    if package_manager_is_apt; then
-        local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
-
-        local PACKAGE_NAME="openvpn3"
-        local KEY_FILE_URL="https://packages.openvpn.net/packages-repo.gpg"
-        local URIS="https://packages.openvpn.net/openvpn3/debian"
-        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
-        local COMPONENTS="main"
-        local ARCHITECTURES="amd64"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
-        package_manager_install_packages "${PACKAGE_NAME}" || return $?
-        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run ${PACKAGE_NAME}"
-        return 0
-    fi
-    return 1
-}
-
-# https://docs.waydro.id/usage/install-on-desktops#ubuntu-debian-and-derivatives
-# https://repo.waydro.id/
-function waydroid_setup() {
-    # https://learn.microsoft.com/en-us/windows/android/wsa/
-    if is_termux || is_msys; then
-        return 0
-    fi
-
-    if package_manager_is_apt; then
-        local OS_DISTRO_VERSION_CODENAME=""
-        OS_DISTRO_VERSION_CODENAME=$(get_os_distro_codename_or_version) || return $?
-
-        local PACKAGE_NAME="waydroid"
-        local KEY_FILE_URL="https://repo.waydro.id/waydroid.gpg"
-        local URIS="https://repo.waydro.id"
-        local SUITES="${OS_DISTRO_VERSION_CODENAME}"
-        local COMPONENTS="main"
-        local ARCHITECTURES="amd64"
-        apt_add_sources "${PACKAGE_NAME}" "${KEY_FILE_URL}" "${URIS}" "${SUITES}" "${COMPONENTS}" "${ARCHITECTURES}" || return $?
-        package_manager_install_packages "${PACKAGE_NAME}" || return $?
-        echo "PACKAGE INSTALLED: \"${PACKAGE_NAME}\", run ${PACKAGE_NAME}"
-        return 0
-    fi
-    return 1
-}
-
-# https://www.etallen.com/cpuid.html
-function cpuid_setup() {
-    local CPUID_PACKAGE="cpuid"
-    local CPUID_SOURCES_URL="https://www.etallen.com/cpuid/cpuid-20250513.src.tar.gz"
-    if [[ "${MACHINE_NAME}" == "i386" || "${MACHINE_NAME}" == "i686" || "${MACHINE_NAME}" == "x86_64" || "${MACHINE_NAME}" == "ia64" ]]; then
-        local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/${CPUID_PACKAGE}"
-        rm -rf "${INSTALL_DIR_PATH}" || return $?
-        make_dirs "${INSTALL_DIR_PATH}" || return $?
-
-        download_file "${CPUID_SOURCES_URL}" "-" | tar -xz -C "${INSTALL_DIR_PATH}" --strip-components=1 || return $?
-        make -C "${INSTALL_DIR_PATH}" || return $?
-        make -C "${INSTALL_DIR_PATH}" DESTDIR="${GLOBAL_CONFIG_ROOT_PREFIX}" install || return $?
-        return 0
-    fi
-}
-
-# PYTHONPATH=$PYTHONPATH:/opt/edk2/BaseTools/Source/Python python FMMT.py -e "/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP" 380B6B4F-1454-41F2-A6D3-61D1333E8CB4 /home/utopia/HomeVpn/data/gop.efi
-function uefiextract_setup() {
-    local UEFIEXTRACT_PACKAGE="uefiextract"
-    local UEFIEXTRACT_SOURCES_URL="https://github.com/LongSoft/UEFITool/releases/download/A72/UEFIExtract_NE_A72_x64_linux.zip"
-    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/${UEFIEXTRACT_PACKAGE}"
-    rm -rf "${INSTALL_DIR_PATH}" || return $?
-    make_dirs "${INSTALL_DIR_PATH}" || return $?
-
-    local TMP_FILE_PATH=""
-    TMP_FILE_PATH=$(mktemp) || return $?
-
-    download_file "${UEFIEXTRACT_SOURCES_URL}" "${TMP_FILE_PATH}" && \
-    7z x "${TMP_FILE_PATH}" -o"${INSTALL_DIR_PATH}"
-    local COMMAND_CHAIN_RESULT=$?
-    rm -f "${TMP_FILE_PATH}"
-    return ${COMMAND_CHAIN_RESULT}
-}
-
-function uefiextract_get_intel_gop_driver() {
-    local UEFI_IMAGE_PATH="${1}"
-    local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
-    local INTEL_GOP_DRIVER_UUID="380B6B4F-1454-41F2-A6D3-61D1333E8CB4"
-
-    local TMP_DIR_PATH=""
-    TMP_DIR_PATH=$(mktemp --directory --dry-run) || return $?
-
-    "/opt/uefiextract/uefiextract" "${UEFI_IMAGE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
-    make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
-    cp -f "${TMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}"
-    local COMMAND_CHAIN_RESULT=$?
-    rm -rf "${TMP_DIR_PATH}"
-    return ${COMMAND_CHAIN_RESULT}
-}
-
-function ovmf_get_arch() {
-    if [[ "${MACHINE_NAME}" == "i386" || "${MACHINE_NAME}" == "i686" ]]; then
-        echo "IA32"
-        return 0
-    elif [[ "${MACHINE_NAME}" == "x86_64" ]]; then
-        echo "X64"
-        return 0
-    elif [[ "${MACHINE_NAME}" == "armv8l" ]]; then # 64-ёх битный ARM поддерживающий 32-ух битные инструкции
-        echo "ARM"
-        return 0
-    elif [[ "${MACHINE_NAME}" == "aarch64" ]]; then
-        echo "AARCH64"
-        return 0
-    else
-        echo "UNKNOWN ARCH"
-        return 1
-    fi
-}
-
-
-
-function edk2_install_dependencies() {
-    # fixme utopia Зависимости только для Ubuntu/LinuxMint
-    package_manager_install_packages "build-essential uuid-dev nasm iasl" || return $?
-    return 0
-}
-
-
-function vfio_igd_pkg_setup() {
-    local EDK2_DIR_PATH="${1}"
-    local DOWNLOAD_URL="https://github.com/tomitamoeko/VfioIgdPkg.git"
-    local INSTALL_DIR_PATH="/opt/VfioIgdPkg"
-    local SYMLINK_DIR_PATH="${EDK2_DIR_PATH}/VfioIgdPkg"
-    local PROJECT_BRANCH="remotes/origin/master"
-    local OUT_BIN_DIR_PATH="${MY_DIR}/data/ovmf"
-    local OUT_BIN_PATH="${OUT_BIN_DIR_PATH}/vbios.rom"
-
-    git_clone_or_fetch "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "${PROJECT_BRANCH}" || return $?
-
-    make_dirs "${OUT_BIN_DIR_PATH}" || return $?
-
-    create_symlink "${INSTALL_DIR_PATH}" "${SYMLINK_DIR_PATH}" || return $?
-
-    pushd "${SYMLINK_DIR_PATH}" || return $?
-    ./build.sh --device_id 0x0126 --release --gop "/home/utopia/HomeVpn/data/IntelGopDriver.efi" "${OUT_BIN_PATH}"
-    local COMMAND_CHAIN_RESULT=$?
-    popd
-    return ${COMMAND_CHAIN_RESULT}
-}
-
-# https://launchpad.net/ubuntu/questing/+package/ovmf
-# https://launchpad.net/ubuntu/+source/edk2/2025.02-8ubuntu3
-# https://superuser.com/questions/1660806/how-to-install-a-windows-guest-in-qemu-kvm-with-secure-boot-enabled
-# https://github.com/rhuefi/qemu-ovmf-secureboot
-# https://forums.unraid.net/topic/128595-secure-boot-off-in-ovmf-tpm-bios-windows-11/
-# https://projectacrn.github.io/1.6/tutorials/waag-secure-boot.html#generate-platform-key-pk
-function edk2_ovmf_setup() {
-    local DOWNLOAD_URL="https://github.com/tianocore/edk2.git"
-    local INSTALL_DIR_PATH="${GLOBAL_CONFIG_ROOT_PREFIX}/opt/edk2"
-    local PROJECT_TAG="edk2-stable202508.01"
-
-    edk2_install_dependencies || return $?
-
-    git_clone_or_fetch "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "${PROJECT_TAG}" || return $?
-
-    pushd "${INSTALL_DIR_PATH}" || return $?
-
-    local TOOLCHAIN="GCC"
-    local BUILD_VARIANT="RELEASE"
-    local BUILD_DIR="Build/OvmfX64"
-    local BUILD_DIR_PATH="${INSTALL_DIR_PATH}/${BUILD_DIR}/${BUILD_VARIANT}_${TOOLCHAIN}"
-    local OVMF_CODE_PATH="${BUILD_DIR_PATH}/FV/OVMF_CODE.fd"
-    local OVMF_VARS_PATH="${BUILD_DIR_PATH}/FV/OVMF_VARS.fd"
-
-    git submodule update --init --recursive                                               && \
-    pip_install_packages "${INSTALL_DIR_PATH}" "${INSTALL_DIR_PATH}/pip-requirements.txt" && \
-    python_venv_activate "${INSTALL_DIR_PATH}"                                            && \
-    make -C "${INSTALL_DIR_PATH}/BaseTools"                                               && \
-    source edksetup.sh                                                                    && \
-    build \
-        -DSECURE_BOOT_ENABLE=TRUE \
-        --platform="${INSTALL_DIR_PATH}/OvmfPkg/OvmfPkgX64.dsc" \
-        --arch="$(ovmf_get_arch)" \
-        --tagname=GCC \
-        --buildtarget=RELEASE                                                             && \
-    cp -f "${OVMF_CODE_PATH}" "${MY_DIR}/data/ovmf/OVMF_CODE.fd"                          && \
-    cp -f "${OVMF_VARS_PATH}" "${MY_DIR}/data/ovmf/OVMF_VARS.fd"                          && \
-    vfio_igd_pkg_setup "${INSTALL_DIR_PATH}"                                              && \
-    python_venv_deactivate
-    local COMMAND_CHAIN_RESULT=$?
-    popd
-    return ${COMMAND_CHAIN_RESULT}
-}
-
-
-function extract_intel_gop_driver() {
-    local UEFI_IMAGE_PATH="/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP"
-    local EDK2_DIR_PATH="/opt/edk2"
-    local OUT_DIR_PATH="/home/utopia/HomeVpn/data"
-    local EDK2_PYTHON_PATH="${EDK2_DIR_PATH}/BaseTools/Source/Python"
-    local FMMT_SCRIPT_PATH="${EDK2_PYTHON_PATH}/FMMT/FMMT.py"
-    local OUT_INTEL_GOP_DRIVER_PATH="${OUT_DIR_PATH}/IntelGopDriver.efi"
-    local INTEL_GOP_DRIVER_UUID="A0327FE0-1FDA-4E5B-905D-B510C45A61D0"
-
-    pushd "${EDK2_DIR_PATH}" || return $?
-
-    python_venv_activate "${EDK2_DIR_PATH}" || return $?
-    source edksetup.sh || return $?
-    PYTHONPATH="$PYTHONPATH:${EDK2_PYTHON_PATH}" python "${FMMT_SCRIPT_PATH}" -e "${UEFI_IMAGE_PATH}" "${INTEL_GOP_DRIVER_UUID}" 380B6B4F-1454-41F2-A6D3-61D1333E8CB4 "${OUT_INTEL_GOP_DRIVER_PATH}" || return $?
-    python_venv_deactivate
-    local COMMAND_CHAIN_RESULT=$?
-    popd
-    return ${COMMAND_CHAIN_RESULT}
-}
 
 
 function main_install_min_packages() {
-    local PACKAGE_LIST="${1}"
-
-    package_manager_install_packages "${PACKAGE_LIST}" || return $?
-    python_install || return $?
-    service_init || return $?
-
+    make_setup || return $?
+    download_setup || return $?
+    git_setup || return $?
+    user_setup || return $?
+    service_setup || return $?
+    network_setup || return $?
+    firewall_setup || return $?
+    pci_setup || return $?
+    python_setup || return $?
+    startup_setup || return $?
+    qemu_setup || return $?
     openvpn_setup || return $?
     cpuid_setup || return $?
+    ssh_client_setup || return $?
+    ssh_server_setup || return $?
+
+    if is_termux; then
+        termux_specific_packages_setup || return $?
+    fi
     return 0
 }
 
 function main_install_dev_packages() {
-    local PACKAGE_LIST="${1}"
+    main_install_min_packages || return $?
 
-    main_install_min_packages "${PACKAGE_LIST}" || return $?
-
+    dev_packages_setup || return $?
     rdp_client_install || return $?
-    sshd_setup || return $?
+    smb_server_setup || return $?
+    vnc_client_setup || return $?
     vnc_server_setup || return $?
-    smbd_setup || return $?
+    telnet_client_setup || return $?
     return 0
 }
 
 function main_install_full_packages() {
-    local PACKAGE_LIST="${1}"
+    main_install_dev_packages || return $?
 
-    main_install_dev_packages "${PACKAGE_LIST}" || return $?
+    package_manager_install_packages "${FULL_PACKAGES}" || return $?
 
-    # Может быть не скачано из-за политики JetBrains по России
-    pycharm_install
-    wine_install || return $?
+    pycharm_setup # Может быть не скачано из-за политики JetBrains по России
+    wine_setup || return $?
     openvpn3_setup || return $?
     waydroid_setup || return $?
     # fixme utopia Для MSYS2 rdp_server_setup || return $?
@@ -2315,31 +531,15 @@ function main() {
     package_manager_update_and_upgrade || return $?
 
     if [[ "${GLOBAL_CONFIG_SETUP_PACKAGES_MODE,,}" == "min" ]]; then
-        main_install_min_packages "${MINIMAL_PACKAGES}" || return $?
+        main_install_min_packages || return $?
     elif [[ "${GLOBAL_CONFIG_SETUP_PACKAGES_MODE,,}" == "dev" ]]; then
-        main_install_dev_packages "${DEV_PACKAGES}" || return $?
+        main_install_dev_packages || return $?
     else
-        main_install_full_packages "${FULL_PACKAGES}" || return $?
+        main_install_full_packages || return $?
     fi
     return 0
 }
 
-function smb_server_get_config_file_path() {
-    local SMB_SERVER_BUILD_OPTIONS=""
-    SMB_SERVER_BUILD_OPTIONS=$(smbd -b) || return $?
-
-    local REGEX=""
-    REGEX=$(printf "CONFIGFILE:[[:blank:]]+([^\n\r]+)") || return $?
-
-    #echo "${REGEX}"
-
-    if [[ "${SMB_SERVER_BUILD_OPTIONS}" =~ ${REGEX} ]]; then
-        echo "${BASH_REMATCH[1]}"
-        return 0
-    fi
-
-    return 1
-}
 
 # https://ostechnix.com/bash-variables-shell-scripting/
 # https://linuxopsys.com/topics/bash-readarray-with-examples
@@ -2363,11 +563,4 @@ function smb_server_get_config_file_path() {
 # https://bytexd.com/xrdp-ubuntu/
 # https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-#uefiextract_setup
-# Узнать версию UEFI
-# sudo dmidecode --type=0
-#uefiextract_get_intel_gop_driver "/home/utopia/Загрузки/Acer # Revo RN96 (DT.BGEER.007)/BIOS_Acer_R01-A3_Windows(2021723)/ROM/R01-A3.CAP" "/home/utopia/HomeVpn/data/IntelGopDriver.efi"
-#extract_intel_gop_driver
-smb_server_get_config_file_path
-
-#main
+main

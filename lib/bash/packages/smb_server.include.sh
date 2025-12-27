@@ -100,8 +100,11 @@ function windows_net_share_setup() {
 
 ## @brief Настроить Android/termux специфику SMB сервера
 ## @details https://smarden.org/runit/runscripts#samba
+## @param [in] Имя службы
 ## @retval 0 - успешно
 function termux_smb_server_setup() {
+    local SMB_SERVER="${1}"
+
     local SMB_SERVER_EXECUTABLE_PATH=""
     SMB_SERVER_EXECUTABLE_PATH=$(get_executable_path "${SMB_SERVER}") || return $?
 
@@ -133,7 +136,7 @@ function smb_server_setup() {
     smb_server_make_config || return $?
 
     if is_termux; then
-        termux_smb_server_setup || return $?
+        termux_smb_server_setup "${SMB_SERVER}" || return $?
     fi
 
     service_enable "${SMB_SERVER}" || return $?

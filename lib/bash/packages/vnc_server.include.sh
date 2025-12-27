@@ -20,6 +20,7 @@ function vnc_server_packages_setup() {
     # fixme utopia pcregrep и findutils здесь временно
     local PACKAGE_LIST="pcregrep findutils tigervnc-standalone-server tigervnc-xorg-extension x11-xserver-utils autocutsel"
     if is_termux; then
+        termux_gui_packages_setup || return $?
         PACKAGE_LIST="tigervnc xorg-xhost"
     fi
 
