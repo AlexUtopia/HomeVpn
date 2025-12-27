@@ -9,14 +9,14 @@
 ## @details Умолчательный - тот который предоставляется системным менеджером пакетов
 ## @retval 0 - успешно
 function rdp_client_setup_default() {
-    local RDP_CLIENT_PACKAGE="freerdp2-x11 freerdp2-wayland"
+    local PACKAGE_LIST="freerdp2-x11 freerdp2-wayland"
     if is_termux; then
-        RDP_CLIENT_PACKAGE="freerdp"
+        PACKAGE_LIST="freerdp"
     elif is_msys; then
-        RDP_CLIENT_PACKAGE="${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}freerdp"
+        PACKAGE_LIST="${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}freerdp"
     fi
 
-    package_manager_install_packages "${RDP_CLIENT_PACKAGE}" || return $?
+    package_manager_install_packages "${PACKAGE_LIST}" || return $?
     return 0
 }
 

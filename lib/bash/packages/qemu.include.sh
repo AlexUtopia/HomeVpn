@@ -10,7 +10,7 @@
 ## @brief Установить qemu
 ## @retval 0 - успешно
 function qemu_setup() {
-    PACKAGE_LIST="qemu-system swtpm"
+    local PACKAGE_LIST="qemu-system swtpm"
     if is_termux; then
         PACKAGE_LIST="qemu-system-x86-64 swtpm"
     elif is_msys; then

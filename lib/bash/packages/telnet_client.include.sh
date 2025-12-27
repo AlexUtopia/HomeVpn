@@ -11,11 +11,11 @@
 ## @brief Установить telnet клиент
 ## @retval 0 - успешно
 function telnet_client_setup() {
-    TELNET_CLIENT_PACKAGE="putty"
+    local PACKAGE_LIST="putty"
     if is_msys; then
-        TELNET_CLIENT_PACKAGE="${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}putty"
+        PACKAGE_LIST="${GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX}putty"
     fi
 
-    package_manager_install_packages "${TELNET_CLIENT_PACKAGE}" || return $?
+    package_manager_install_packages "${PACKAGE_LIST}" || return $?
     return 0
 }

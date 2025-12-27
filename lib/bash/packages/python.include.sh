@@ -91,14 +91,14 @@ function python_setup() {
         fi
     fi
 
-    local PYTHON_PACKAGE_LIST="python${PYTHON_VERSION} python3-pip python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev"
+    local PACKAGE_LIST="python${PYTHON_VERSION} python3-pip python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev"
     if is_termux; then
-        PYTHON_PACKAGE_LIST="python python-pip"
+        PACKAGE_LIST="python python-pip"
     elif is_msys; then
-        PYTHON_PACKAGE_LIST="python python-pip"
+        PACKAGE_LIST="python python-pip"
     fi
 
-    package_manager_install_packages "${PYTHON_PACKAGE_LIST}" || return $?
+    package_manager_install_packages "${PACKAGE_LIST}" || return $?
 
     pip_install_packages "${HOME_VPN_PROJECT_ROOT}" || return $?
     return 0

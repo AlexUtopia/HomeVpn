@@ -1,18 +1,18 @@
 #!/bin/bash
 
-## @brief Функции работы с iproute2 - набор утилит для работы с сетью
-## https://wiki.linuxfoundation.org/networking/iproute2
+## @brief Функции работы с DNS/DHCP сервером dnsmasq
+## https://thekelleys.org.uk/dnsmasq/doc.html
 ## https://wiki.archlinux.org/title/Dnsmasq
 ## @details Требуется для настройки сетевых интерфейсов TAP и сетевого моста виртуальных машин
 
 
 ## @brief Установить dnsmasq
 ## @retval 0 - успешно
-function iproute2_setup() {
-    if is_msys; then
+function dns_dhcp_server_setup() {
+    if is_termux || is_msys; then
         return 0
     fi
 
-    package_manager_install_packages "iproute2" || return $?
+    package_manager_install_packages "dnsmasq-base" || return $?
     return 0
 }

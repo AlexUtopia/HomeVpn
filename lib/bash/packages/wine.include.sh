@@ -24,14 +24,12 @@ function winetricks_setup_latest() {
 ## @details Умолчательный - тот который предоставляется системным менеджером пакетов
 ## @retval 0 - успешно
 function wine_setup_default() {
-    local WINE_PACKAGE="wine"
+    local PACKAGE_LIST="wine"
     if is_termux; then
-        WINE_PACKAGE="wine-stable"
-    elif is_msys; then
-        return 0
+        PACKAGE_LIST="wine-stable"
     fi
 
-    package_manager_install_packages "${WINE_PACKAGE}" || return $?
+    package_manager_install_packages "${PACKAGE_LIST}" || return $?
     return 0
 }
 

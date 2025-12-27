@@ -6,15 +6,18 @@
 ## @brief Установить пакеты работы с пользователями
 ## @retval 0 - успешно
 function user_setup() {
-    PASSWD_PACKAGE="passwd" # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
-                            # passwd для настройки доступа к ssh серверу по паролю
+    if is_msys; then
+        return 0
+    fi
+
     if is_termux; then
         termux_user_packages_setup || return $?
         return 0
-    elif is_msys; then
-        PASSWD_PACKAGE=""
     fi
-    package_manager_install_packages "${PASSWD_PACKAGE}" || return $?
+
+    # Утилиты usermod, useradd см. https://pkgs.org/download/passwd
+    # passwd для настройки доступа к ssh серверу по паролю
+    package_manager_install_packages "passwd" || return $?
     return 0
 }
 

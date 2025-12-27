@@ -8,7 +8,7 @@
 ##         https://man7.org/linux/man-pages/man1/crontab.1.html
 ##         https://man7.org/linux/man-pages/man5/crontab.5.html
 ## @retval 0 - успешно
-function cron_setup() {
+function startup_setup() {
     if is_termux || is_msys; then
         return 0
     fi
