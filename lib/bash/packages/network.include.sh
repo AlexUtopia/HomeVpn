@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## @brief Функции работы для работы с сетью
+## @brief Функции для работы с сетью
 ## https://wiki.linuxfoundation.org/networking/iproute2
 ## https://wiki.archlinux.org/title/Dnsmasq
 ## @details Требуется для настройки сетевых интерфейсов TAP и сетевого моста виртуальных машин

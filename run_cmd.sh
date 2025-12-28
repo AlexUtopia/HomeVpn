@@ -1,9 +1,17 @@
 #!/bin/bash
 
-MY_DIR="$(dirname "$(readlink -f "${0}")")"
+## @brief Скрипт для работы с функциями main.py
 
-VENV_DIR_PATH="${MY_DIR}/.venv"
-VENV_ACTIVATE_FILE_PATH="${VENV_DIR_PATH}/bin/activate"
 
-source "${VENV_ACTIVATE_FILE_PATH}" && python "${MY_DIR}/main.py" "$@" && deactivate || exit $?
-exit 0
+HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")"
+
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/os.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/config.include.sh"
+
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
+
+python_venv_activate "${HOME_VPN_PROJECT_ROOT}" &&
+python "${HOME_VPN_PROJECT_ROOT}/main.py" $@
+COMMAND_CHAIN_RESULT=$?
+python_venv_deactivate
+exit ${COMMAND_CHAIN_RESULT}

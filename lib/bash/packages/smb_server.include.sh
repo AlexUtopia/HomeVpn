@@ -36,7 +36,7 @@ function smb_server_get_config_file_path() {
 
 ## @brief Создать публичную (общедоступную) директорию
 ## @retval 0 - успешно
-function smb_server_make_public_directory() {
+function smb_server_make_public_dir() {
     fs_make_dirs "${GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH}" || return $?
     chmod 0777 "${GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH}" || return $?
     return 0
@@ -132,7 +132,7 @@ function smb_server_setup() {
 
     service_disable "${SMB_SERVER}"
 
-    smb_server_make_public_directory || return $?
+    smb_server_make_public_dir || return $?
     smb_server_make_config || return $?
 
     if is_termux; then

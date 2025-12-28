@@ -54,6 +54,7 @@ function uefiextract_setup() {
 ## @brief Извлечь IntelGopDriver из UEFI образа
 ## @param [in] Путь до UEFI образа материнской платы
 ## @param [in] Путь до конечного файла куда извлечь IntelGopDriver из UEFI
+##             Если файл существует, он будет перезаписан
 ## @retval 0 - успешно
 function uefiextract_get_intel_gop_driver() {
     local UEFI_IMAGE_FILE_PATH="${1}"
