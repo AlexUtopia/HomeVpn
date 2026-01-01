@@ -70,28 +70,28 @@ fixme utopia Описать wine
 
 Таблица 1.2 - Поддерживаемые дистрибутивы linux
 
-| Дистрибутив                | [setup-packages.sh](./setup-packages.sh) | Примечание                               |
-|----------------------------|------------------------------------------|------------------------------------------|
-| Ubuntu                     | + |                                          |
-| Linux Mint 21.2 (Cinnamon) | + |                                          |
-| Debian                     | + |                                          |
-| Arch Linux                 | + |                                          |
-| Fedora                     | + | требуются доработки по менеджеру пакетов |
-| openSUSE                   | + | требуются доработки по менеджеру пакетов |
-| RHEL                       | + | требуются доработки по менеджеру пакетов |
-| CentOS                     | + | требуются доработки по менеджеру пакетов |
-| termux 0.118.0             | + |                                          |
+| Дистрибутив                | [setup-packages.sh](scripts/setup-packages.sh) | Примечание                               |
+|----------------------------|-----------------------------------------------------|------------------------------------------|
+| Ubuntu                     | +                                                   |                                          |
+| Linux Mint 21.2 (Cinnamon) | +                                                   |                                          |
+| Debian                     | +                                                   |                                          |
+| Arch Linux                 | +                                                   |                                          |
+| Fedora                     | +                                                   | требуются доработки по менеджеру пакетов |
+| openSUSE                   | +                                                   | требуются доработки по менеджеру пакетов |
+| RHEL                       | +                                                   | требуются доработки по менеджеру пакетов |
+| CentOS                     | +                                                   | требуются доработки по менеджеру пакетов |
+| termux 0.118.0             | +                                                   |                                          |
 
 
 # 2 Разворот проекта
 
 Проект разворачивается в несколько этапов:
  - скачивание проекта с github на ПК (см. пункты 2.2 - 2.4)
- - установка и автоматическая настройка пакетов при помощи скрипта [setup-packages.sh](/setup-packages.sh)
+ - установка и автоматическая настройка пакетов при помощи скрипта [setup-packages.sh](scripts/setup-packages.sh)
  - настройка серверной части проекта HomeVpn (пункт 2.5)
  - настройка клиентской части проекта HomeVpn (пункт 2.6)
 
-Если проект уже выкачан, форсировано подтянутся последние изменения для ветки `main` и ещё раз будет вызван [setup-packages.sh](/setup-packages.sh)
+Если проект уже выкачан, форсировано подтянутся последние изменения для ветки `main` и ещё раз будет вызван [setup-packages.sh](scripts/setup-packages.sh)
 
 ## 2.1 Конфигурационные параметры setup-packages.sh
 
@@ -141,13 +141,13 @@ ${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -o Dpkg::Options::="--force-c
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B main "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 fi
 
@@ -173,13 +173,13 @@ ${RUN_WITH_ADMIN_RIGHTS} pacman -Syu --noconfirm && pacman -S --noconfirm git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 fi
 
@@ -206,13 +206,13 @@ ${RUN_WITH_ADMIN_RIGHTS} yum check-update && yum -y update && yum install git &&
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 fi
 
@@ -238,13 +238,13 @@ ${RUN_WITH_ADMIN_RIGHTS} dnf check-update && dnf -y upgrade && dnf install git &
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 fi
 
@@ -270,13 +270,13 @@ ${RUN_WITH_ADMIN_RIGHTS} zypper refresh && zypper update -y && zypper install gi
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 fi
 
@@ -340,13 +340,13 @@ ${RUN_WITH_ADMIN_RIGHTS} apt update && apt upgrade -o Dpkg::Options::="--force-c
 if [[ -d "${PROJECT_DIR_PATH}" ]]; then
     pushd "${PROJECT_DIR_PATH}" &&
     git fetch && git checkout -f -B "${PROJECT_BRANCH}" "remotes/origin/${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 else
     mkdir -p "${PROJECT_BASE_DIR_PATH}" &&
     pushd "${PROJECT_BASE_DIR_PATH}" &&
     git clone "${PROJECT_URL}" -b "${PROJECT_BRANCH}" &&
-    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/setup-packages.sh"
+    ${RUN_WITH_ADMIN_RIGHTS_PRESERV_ENV} "${PROJECT_DIR_PATH}/scripts/setup-packages.sh"
     popd
 fi
 
@@ -385,7 +385,7 @@ fixme utopia Дописать
 
 ```batch
 
-set "SETUP_SCRIPT_DOWNLOAD_URL=https://raw.githubusercontent.com/AlexUtopia/HomeVpn/main/setup-packages.bat"
+set "SETUP_SCRIPT_DOWNLOAD_URL=https://raw.githubusercontent.com/AlexUtopia/HomeVpn/main/scripts/setup-packages.bat"
 set "SETUP_SCRIPT_FILE_PATH=%PUBLIC%\Downloads\setup-packages.bat"
 bitsadmin /transfer download_setup_script_job /download "%SETUP_SCRIPT_DOWNLOAD_URL%" "%SETUP_SCRIPT_FILE_PATH%" && call "%SETUP_SCRIPT_FILE_PATH%"
 

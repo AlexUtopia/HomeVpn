@@ -30,8 +30,8 @@ function uefiextract_get_platform() {
 ## @return Путь до исполняемого файла uefiextract
 ## @retval 0 - успешно
 function uefiextract_get_executable_path() {
-   echo "${GLOBAL_CONFIG_OPT_DIR_PATH}/uefiextract/uefiextract"
-   return 0
+    echo "${GLOBAL_CONFIG_OPT_DIR_PATH}/uefiextract/uefiextract"
+    return 0
 }
 
 ## @brief Установить uefiextract
