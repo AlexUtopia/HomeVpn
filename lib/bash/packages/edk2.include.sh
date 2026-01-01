@@ -33,7 +33,7 @@ EDK2_BUILD_VARIANT="RELEASE"
 
 ## @brief Установить пакеты требуемые для сборки edk2/ovmf
 ## @retval 0 - успешно
-function edk2_install_dependencies() {
+function edk2_build_setup_dependencies() {
     # fixme utopia Зависимости только для Ubuntu/LinuxMint
     package_manager_install_packages "build-essential uuid-dev nasm iasl" || return $?
     return 0
@@ -126,7 +126,7 @@ function edk2_ovmf_setup() {
     local INSTALL_DIR_PATH="${GLOBAL_CONFIG_OPT_DIR_PATH}/${PACKAGE_NAME}"
     local PROJECT_TAG="edk2-stable202508.01"
 
-    edk2_install_dependencies || return $?
+    edk2_build_setup_dependencies || return $?
 
     git_clone_or_fetch "${DOWNLOAD_URL}" "${INSTALL_DIR_PATH}" "${PROJECT_TAG}" || return $?
 

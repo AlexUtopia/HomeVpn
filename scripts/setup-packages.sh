@@ -24,8 +24,8 @@
 
 # https://unix.stackexchange.com/a/306115
 
-MY_DIR="$(dirname "$(readlink -f "${0}")")"
 
+set -x # Раскомментировать для отладки
 
 HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")"
 
@@ -38,12 +38,8 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/git.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/pacman.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager.include.sh"
 
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/systemd.include.sh"
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/runit.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service.include.sh"
 
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
@@ -70,9 +66,6 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_client.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_server.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waidroid.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/wine.include.sh"
-
-
-set -x # Раскомментировать для отладки
 
 
 ### Full packages begin

@@ -549,7 +549,7 @@ fixme utopia Провести эксперименты с wayland по инст�
 
 ### 4.2.1 Запуск графических приложений от имени администратора (root)
 
-Использовать скрипт [connect_to_host_over_ssh.sh](/connect_to_host_over_ssh.sh)
+Использовать скрипт [connect_to_host_over_ssh.sh](scripts/connect_to_host_over_ssh.sh)
 
 fixme utopia batch скрипт для win/putty
 https://superuser.com/questions/119792/how-to-use-x11-forwarding-with-putty

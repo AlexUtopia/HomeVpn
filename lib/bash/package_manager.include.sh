@@ -3,6 +3,10 @@
 ## @brief Функции работы с системным менеджером пакетов
 
 
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/pacman.include.sh"
+
+
 ## @brief Проверить существует ли пакетный менеджер apt
 ## @details Debian, Ubuntu, Linux Mint, termux
 ## @retval 0 - пакетный менеджер apt существует; 1 - не существует

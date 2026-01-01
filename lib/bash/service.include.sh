@@ -7,6 +7,10 @@
 ##        4) [Windows]        sc (неготов)
 
 
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/systemd.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/runit.include.sh"
+
+
 ## @brief Инициализировать службы
 ## @retval 0 - успешно
 function service_setup() {

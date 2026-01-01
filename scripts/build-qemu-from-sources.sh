@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## @brief Настроить сертификаты для openvpn клиента
+## @brief Собрать и установить qemu
 
 
 # set -x # Раскомментировать для отладки
@@ -11,13 +11,13 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/os.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/config.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/bash.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/fs.include.sh"
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/git.include.sh"
 
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/easyrsa.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager.include.sh"
 
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/project_config.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
+
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/qemu.include.sh"
 
 
-CLIENT_NAME="${1}"
-
-easyrsa_build_certificates_for_openvpn_client "${CLIENT_NAME}"
+qemu_build_from_sources

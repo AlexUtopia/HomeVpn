@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## @brief Установка и настройка системы сертификации для openvpn сервера
+## @brief Установить и настроить систему сертификации для openvpn сервера
 
 
 # set -x # Раскомментировать для отладки
@@ -16,5 +16,6 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/easyrsa.include.sh"
 
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/project_config.include.sh"
+
 
 easyrsa_setup
