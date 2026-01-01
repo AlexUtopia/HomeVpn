@@ -467,7 +467,7 @@ fixme utopia Дописать
 
 ```bash
 
-sudo ./setup-easy-rsa.sh
+sudo ./scripts/setup-openvpn-server.sh
 
 ```
 
