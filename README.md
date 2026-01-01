@@ -475,7 +475,7 @@ sudo ./scripts/setup-openvpn-server.sh
 
 ```bash
 
-sudo ./build-client.sh <имя_пользователя>
+sudo ./scripts/setup-openvpn-client.sh <имя_пользователя>
 
 ```
 
