@@ -8,7 +8,8 @@
 ##               OVMF_VARS.fd
 ##               OVMF_CODE.secboot.fd - пригодно для запуска Windows в защищённом режиме
 ##               OVMF_VARS.secboot.fd - пригодно для запуска Windows в защищённом режиме
-##               vbios.rom            - видеобиос (UEFI) для встроенных VGA Intel
+##               intel_ivbios_8086_<INTEL_VGA_PID>_out.rom - видеобиос (UEFI) для встроенных VGA Intel с выводом изображения на монитор
+##               intel_ivbios_8086_<INTEL_VGA_PID>.rom - видеобиос (UEFI) для встроенных VGA Intel без вывода изображения на монитор
 ##               IntelGopDriver.efi   - IntelGopDriver извлечённый из оригинального UEFI, необязательный
 ##             aarch64/
 ##               OVMF_CODE.fd
@@ -18,6 +19,14 @@
 ##
 ## https://github.com/tianocore/edk2/tree/master/OvmfPkg
 ## https://github.com/retrage/edk2-nightly
+
+## Коллекция готовых intel_ivbios структура директорий
+## <edk2-tag-name>/
+##     </sys/class/dmi/id/board_vendor>/
+##         </sys/class/dmi/id/board_name>/
+##             </sys/class/dmi/id/bios_vendor>/
+##                 </sys/class/dmi/id/bios_vendor>/
+##                     </sys/class/dmi/id/bios_date>/
 
 
 EDK2_TOOLCHAIN="GCC"
