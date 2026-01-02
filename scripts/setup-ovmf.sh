@@ -23,7 +23,7 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vfio_igd.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/edk2.include.sh"
 
 
-VGA_PID="${1}"
+INTEL_VGA_PID="${1}"
 UEFI_IMAGE_FILE_PATH="${2}"
 
-edk2_ovmf_setup "${VGA_PID}" "${UEFI_IMAGE_FILE_PATH}"
+edk2_ovmf_setup "${INTEL_VGA_PID}" "${UEFI_IMAGE_FILE_PATH}"

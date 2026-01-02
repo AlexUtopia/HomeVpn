@@ -192,7 +192,7 @@ function apt_add_sources() {
 
     apt update
     local APT_UPDATE_RESULT=$?
-    if [[ ! ${APT_UPDATE_RESULT} ]]; then
+    if ! check_return_code ${APT_UPDATE_RESULT}; then
         rm -f "${SOURCE_FILE_PATH}" "${KEY_FILE_PATH}"
         return ${APT_UPDATE_RESULT}
     fi

@@ -113,12 +113,15 @@ function edk2_ovmf_build_x86_64() {
 }
 
 ## @brief Собрать и установить edk2/ovmf
-## @param [in] PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter)
+## @details Сборка видеобиоса актуальна только для интегрированных VGA (Video Graphics Adapter) Intel
+## @param [in] PCI PID (Product IDentifier) целевого VGA Intel, необязательный аргумент.
+##             Если не задан то видеобиос собран не будет.
 ##             Пример: 0x0126
-## @param [in] Путь до UEFI образа материнской платы, необязательный аргумент. Если не задан то видеобиос будет собран без поддержки вывода изображения на монитор
+## @param [in] Путь до UEFI образа материнской платы, необязательный аргумент.
+##             Если не задан то видеобиос будет собран без поддержки вывода изображения на монитор
 ## @retval 0 - успешно
 function edk2_ovmf_setup() {
-    local VGA_PID="${1}"
+    local INTEL_VGA_PID="${1}"
     local UEFI_IMAGE_FILE_PATH="${2}"
 
     local PACKAGE_NAME="edk2"
@@ -144,9 +147,12 @@ function edk2_ovmf_setup() {
     make -C "${INSTALL_DIR_PATH}/BaseTools"                                               &&
     set --                                                                                &&
     source "edksetup.sh"                                                                  &&
-    edk2_ovmf_build_x64 "${INSTALL_DIR_PATH}"                                             &&
-    vfio_igd_setup "${INSTALL_DIR_PATH}" "${VGA_PID}" "${INTEL_GOP_DRIVER_FILE_PATH}"
+    edk2_ovmf_build_x64 "${INSTALL_DIR_PATH}"
     local COMMAND_CHAIN_RESULT=$?
+    if check_return_code ${COMMAND_CHAIN_RESULT} && [[ -n "${INTEL_VGA_PID}" ]]; then
+        vfio_igd_setup "${INSTALL_DIR_PATH}" "${INTEL_VGA_PID}" "${INTEL_GOP_DRIVER_FILE_PATH}"
+        COMMAND_CHAIN_RESULT=$?
+    fi
 
     python_venv_deactivate
     return ${COMMAND_CHAIN_RESULT}

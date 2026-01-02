@@ -31,3 +31,21 @@ function is_executable_available() {
     fi
     return 1
 }
+
+## @brief Проверить результат выполнения функции на успех
+## @details Использовать с оператором if, пример
+##
+##          target_function_call
+##          local TARGET_FUNCTION_RESULT=$?
+##          if [[ ! check_return_code ${TARGET_FUNCTION_RESULT} ]]; then
+##              # Обработать неуспешное исполнение target_function_call
+##              return ${TARGET_FUNCTION_RESULT}
+##          else
+##              # Обработать успешное исполнение target_function_call
+##          fi
+##
+## @param [in] Результат выполнения целевой функции
+## @retval Результат выполнения целевой функции пригодный для использования с оператором if
+function check_return_code() {
+    return ${1}
+}
