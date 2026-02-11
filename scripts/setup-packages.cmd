@@ -1,9 +1,9 @@
 chcp 65001
-rem @echo off
+:: @echo off
 
-rem Использование bitsadmin для скачивания файлов https://xakep.ru/2015/09/14/easy-hack-200/
-rem Установка msys2 из командной строки https://github.com/msys2/msys2-installer?tab=readme-ov-file#cli-usage-examples
-rem Запуск команды msys2 на исполнение из под cmd https://www.msys2.org/wiki/Launchers/
+:: Использование bitsadmin для скачивания файлов https://xakep.ru/2015/09/14/easy-hack-200/
+:: Установка msys2 из командной строки https://github.com/msys2/msys2-installer?tab=readme-ov-file#cli-usage-examples
+:: Запуск команды msys2 на исполнение из под cmd https://www.msys2.org/wiki/Launchers/
 
 
 set "PROJECT_NAME=HomeVpn"
@@ -13,7 +13,7 @@ set "MSYS2_INSTALL_DIR_PATH=%SYSTEMDRIVE%:\msys64"
 set "MSYS2_CONSOLE=%MSYS2_INSTALL_DIR_PATH%\msys2_shell.cmd"
 
 
-rem 1) Скачаем msys2
+:: 1) Скачаем msys2
 bitsadmin /transfer download_msys2_job /download "%MSYS2_DOWNLOAD_URL%" "%MSYS2_INSTALLER_FILE_PATH%"
 if %ERRORLEVEL% NEQ 0 (
     echo Download MSYS2 FAIL: %ERRORLEVEL%
@@ -22,7 +22,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo Download MSYS2 OK
 
 
-rem 2) Установим msys2
+:: 2) Установим msys2
 "%MSYS2_INSTALLER_FILE_PATH%" install --verbose --confirm-command --accept-messages --root "%MSYS2_INSTALL_DIR_PATH%"
 if %ERRORLEVEL% EQU 0 (
     echo Install MSYS2 OK
@@ -33,7 +33,7 @@ if %ERRORLEVEL% EQU 0 (
     exit /b %ERRORLEVEL%
 )
 
-rem 3) Скачаем и настроим HomeVpn
+:: 3) Скачаем и настроим HomeVpn
 call "%MSYS2_CONSOLE%" -no-start -clang64 -defterm -c ^"set -x; PROJECT_BASE_DIR_PATH=$(echo ~); ^
 PROJECT_NAME=^"%PROJECT_NAME%^"; ^
 PROJECT_URL=^"git@github.com:AlexUtopia/${PROJECT_NAME}.git^"; ^

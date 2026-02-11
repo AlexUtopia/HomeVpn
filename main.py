@@ -851,6 +851,7 @@ class UnitTest_LinuxKernelVersion(unittest.TestCase):
 # https://devblogs.microsoft.com/oldnewthing/20050201-00/?p=36553
 # https://stackoverflow.com/a/43512141
 # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
+# https://stackoverflow.com/a/54837707
 class CurrentOs:
     @staticmethod
     def is_windows():
@@ -862,6 +863,11 @@ class CurrentOs:
     def is_msys():
         # https://docs.python.org/3/library/sys.html#sys.platform
         return sys.platform.lower().startswith('msys')
+
+    @staticmethod
+    def is_cygwin():
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform.lower().startswith('cygwin')
 
     @staticmethod
     def is_linux():
@@ -882,6 +888,10 @@ class CurrentOs:
             return cmd_result.stdout.lower().startswith("android")
         except Exception:
             return False
+
+    @staticmethod
+    def is_windows_platform():
+        return CurrentOs.is_windows() or CurrentOs.is_msys()
 
     @staticmethod
     def get_linux_kernel_version():
@@ -982,12 +992,303 @@ class CurrentOs:
         return CurrentOs.is_uefi_boot() and False
 
 
-class Shell:
+class ShellBashDecorator:
+    __ENCODE_TABLE_FOR_REDUCE_NEW_LINE_ESCAPING = [("\\\r\n", ""), ("\\\n\r", ""), ("\\\n", ""), ("\\\r", "")]
+
+    __ENCODE_TABLE = [("\\", "\\\\"), ("$", "\\$"), ("\"", "\\\"")]
+
     def __init__(self):
         pass
 
-    def suppress_stdout(self):
+    def __call__(self, func):
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            cmd_line = self.full_escape_cmd_line(cmd_line)
+            self.__check_cmd_line(cmd_line)
+            return f'bash -l -c "{cmd_line}"'
+
+        return __decorator_func
+
+    def full_escape_cmd_line(self, cmd_line):
+        return EscapeLiteral(
+            encode_table=self.__ENCODE_TABLE_FOR_REDUCE_NEW_LINE_ESCAPING + self.__ENCODE_TABLE).encode(cmd_line)
+
+    def escape_cmd_line_for_win(self, cmd_line):
+        return EscapeLiteral(encode_table=[("\\", "\\\\")]).encode(cmd_line)
+
+    def __check_cmd_line(self, cmd_line):
+        if "\n" in cmd_line or "\r" in cmd_line:
+            raise Exception("[bash] only single string command available")
+
+
+def apply_decorators(decorators_list):
+    """A decorator that applies a list of other decorators."""
+
+    def decorator(func):
+        # Apply each decorator in reverse order
+        for dec in reversed(decorators_list):
+            func = dec(func)
+        return func
+
+    return decorator
+
+
+class ShellBashScriptDecorator:
+    TEMP_PATH = "TEMP_PATH"
+
+    def __init__(self, call_wrapper_decorator_list, temp_script_file_extension=""):
+        self.__call_wrapper_decorator_list = call_wrapper_decorator_list
+        self.__temp_script_file_extension = temp_script_file_extension
+        self.__script_file_path = f'${self.TEMP_PATH}'
+
+    def __call__(self, func):
+        @apply_decorators(self.__call_wrapper_decorator_list)
+        def __wrapper():
+            return self.__script_file_path
+
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            cmd_line = ShellBashDecorator().full_escape_cmd_line(cmd_line)
+            call_script_cmd_line = __wrapper()
+            # Для wine директория /tmp не годится, т.к. монтируется в wine'е в режиме noexec
+            return f'{self.TEMP_PATH}="$(mktemp ~/XXXXXXXXX{self.__temp_script_file_extension})" && echo "{cmd_line}" > "{self.__script_file_path}" && echo $TEMP_PATH && cat $TEMP_PATH && chmod +x "{self.__script_file_path}" && {call_script_cmd_line}; rm -f "{self.__script_file_path}"'
+
+        return __decorator_func
+
+
+# C:\msys64\msys2_shell.cmd -no-start -defterm -clang64 -c "echo gggg"
+# sudo docker run -it ghcr.io/msys2/msys2-docker-experimental bash
+# https://github.com/msys2/MSYS2-packages/blob/master/filesystem/msys2_shell.cmd#L92C1-L92C66
+# sudo docker --user=utopia run -it ghcr.io/msys2/msys2-docker-experimental bash -c "WINEDEBUG=-all; wine cmd.exe /q /c \"C:\\\\msys64\\\\msys2_shell.cmd -no-start -defterm -clang64 -c \\\"echo gggg\\\"\""
+# + заменить строку при помощи sed (костыль чтобы работало)
+# sed -i 's/delims=,;=	 "/delims=,;= "/g' "~/.wine/drive_c/msys64/msys2_shell.cmd"
+# for /f "tokens=%msys2_shiftCounter%,* delims=,;=	 " %%i in ("!msys2_full_cmd!") do set SHELL_ARGS=%%j
+# на
+# for /f "tokens=%msys2_shiftCounter%,* delims=,;= " %%i in ("!msys2_full_cmd!") do set SHELL_ARGS=%%j
+# https://github.com/msys2/msys2-docker/pkgs/container/msys2-docker-experimental
+class ShellMsys2Decorator:
+    def __init__(self, msys2_shell_script_path=r'%SYSTEMDRIVE%\msys64\msys2_shell.cmd'):
+        self.__msys2_shell_script_path = pathlib.Path(os.path.expandvars(msys2_shell_script_path))
+
+    def __call__(self, func):
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            cmd_line = ShellBashDecorator().escape_cmd_line_for_win(cmd_line)
+            cmd_line = ShellCmdDecorator().full_escape_cmd_line(cmd_line)
+            return f'"{self.__msys2_shell_script_path}" -no-start -clang64 -defterm -c "{cmd_line}"'
+
+        return __decorator_func
+
+
+# fixme utopia Экранировать
+#  https://ss64.com/nt/syntax-esc.html
+#  https://stackoverflow.com/questions/10296162/escaping-special-characters-in-cmd
+#  https://www.google.com/search?q=windows+cmd+escape+literal&newwindow=1&sca_esv=e4930b54a8b6c4ed&sxsrf=ANbL-n5t3-PS6ZgaPr3o5FZu5HpW1USBkg%3A1768600370106&ei=MrNqaeqWBo-D1fIP4NeAwQU&ved=0ahUKEwjq97zmhZGSAxWPQVUIHeArIFgQ4dUDCBE&uact=5&oq=windows+cmd+escape+literal&gs_lp=Egxnd3Mtd2l6LXNlcnAiGndpbmRvd3MgY21kIGVzY2FwZSBsaXRlcmFsMgUQIRigATIFECEYoAEyBRAhGJ8FSO3NA1AAWJbMA3ABeAGQAQCYAWWgAeQQqgEEMjYuMbgBA8gBAPgBAZgCG6ACnRPCAgoQIxiABBgnGIoFwgIEECMYJ8ICDRAAGIAEGLEDGEMYigXCAhEQLhiABBixAxjRAxiDARjHAcICCxAAGIAEGLEDGIMBwgIFEAAYgATCAggQABiABBixA8ICERAAGIAEGLEDGIMBGIoFGI0GwgIQEAAYgAQYsQMYQxiDARiKBcICChAAGIAEGEMYigXCAgoQABiABBgUGIcCwgIHEAAYgAQYCsICCBAAGIAEGMsBwgIGEAAYBxgewgIIEAAYExgHGB7CAgQQABgewgIHECEYoAEYCsICBBAhGBWYAwCSBwUxNy4xMKAH86IBsgcFMTYuMTC4B5ATwgcKMC4xLjEyLjkuNcgHpgKACAA&sclient=gws-wiz-serp
+#  %COMSPEC%
+class ShellCmdDecorator:
+    __ENCODE_TABLE_FOR_REDUCE_NEW_LINE_ESCAPING = [("^\r\n", ""), ("^\n\r", ""), ("^\n", ""), ("^\r", "")]
+
+    __ENCODE_TABLE = [("^", "^^"), ("&", "^&"), ("%", "%%"), ("|", "^|"), ("\"", "\"\"")]
+
+    def __init__(self, cmd_path=r'cmd.exe', is_force_call_cmd=True):
+        self.__cmd_path = pathlib.Path(os.path.expandvars(cmd_path))
+        self.__is_force_call_cmd = is_force_call_cmd
+
+    def __call__(self, func):
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            cmd_line = self.full_escape_cmd_line(cmd_line)
+            self.__check_cmd_line(cmd_line)
+            return f'"{self.__cmd_path}" /q /c "{cmd_line}"'
+
+        return __decorator_func
+
+    def full_escape_cmd_line(self, cmd_line):
+        return EscapeLiteral(
+            encode_table=self.__ENCODE_TABLE_FOR_REDUCE_NEW_LINE_ESCAPING + self.__ENCODE_TABLE).encode(cmd_line)
+
+    def __check_cmd_line(self, cmd_line):
+        if "\n" in cmd_line or "\r" in cmd_line:
+            raise Exception("[cmd] only single string command available")
+
+
+# https://askubuntu.com/questions/880832/what-is-the-difference-between-wine-and-wine64
+# WineHQ запускается из под bash, рекомендуется применять с ShellCmdDecorator
+# https://unix.stackexchange.com/questions/801401/wine-cmd-automatically-escapes-quotes-adds-backslash
+class ShellWineDecorator:
+    WINE_DEFAULT = "wine"
+    WINE_STABLE = "/opt/wine-stable/bin/wine"
+
+    @staticmethod
+    def get_wine_executable_path():
+        if CurrentOs.is_linux():
+            if pathlib.Path(ShellWineDecorator.WINE_STABLE).exists():
+                return ShellWineDecorator.WINE_STABLE
+            return ShellWineDecorator.WINE_DEFAULT
+        elif CurrentOs.is_termux():
+            return "wine-stable"
+        else:
+            raise Exception("[wine] Wine is not available")
+
+    def __init__(self, wine_path=None, is_crutch_for_msys2_over_wine=True):
+        self.__wine_path = wine_path
+        if not self.__wine_path:
+            self.__wine_path = ShellWineDecorator.get_wine_executable_path()
+        self.__is_crutch_for_msys2_over_wine = is_crutch_for_msys2_over_wine
+
+    def __call__(self, func):
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            return f'{self.__crutch_for_msys2_over_wine()}WINEDEBUG=-all && "{self.__wine_path}" {cmd_line}'
+
+        return __decorator_func
+
+    def __crutch_for_msys2_over_wine(self):
+        if not self.__is_crutch_for_msys2_over_wine:
+            return ""
+        return f'sed -i \'s/delims=,;=	 "/delims=,;= "/g\' ~/.wine/drive_c/msys64/msys2_shell.cmd && '
+
+
+class RunInBashShellDecorator:
+    WIN_BASH_AUTO_SELECT = 0
+    WIN_BASH_MSYS2 = 1
+    WIN_BASH_CYGWIN = 2
+
+    def __init__(self, win_bash=WIN_BASH_AUTO_SELECT, shell_bash_decorator=ShellBashDecorator(),
+                 shell_cmd_decorator=ShellCmdDecorator(), shell_msys2_decorator=ShellMsys2Decorator()):
+        self.__win_bash = win_bash
+        self.__shell_bash_decorator = shell_bash_decorator
+        self.__shell_cmd_decorator = shell_cmd_decorator
+        self.__shell_msys2_decorator = shell_msys2_decorator
+
+    def __call__(self, func):
+        @self.__shell_bash_decorator
+        def __decorator_func_bash(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        @self.__shell_cmd_decorator
+        @self.__shell_msys2_decorator
+        def __decorator_func_msys2(*args, **kwargs):
+            return __decorator_func_bash(*args, **kwargs)
+
+        @self.__shell_cmd_decorator
+        # @ShellCygwinDecorator fixme utopia Реализовать
+        def __decorator_func_cygwin(*args, **kwargs):
+            return __decorator_func_bash(*args, **kwargs)
+
+        if CurrentOs.is_windows_platform():
+            if self.__win_bash == self.WIN_BASH_AUTO_SELECT:
+                if CurrentOs.is_msys():
+                    return __decorator_func_msys2
+                # if CurrentOs.is_cygwin():
+                #     return __decorator_func_cygwin
+                else:
+                    raise Exception("[bash] Windows bash NOT AVAILABLE")
+            else:
+                if self.__win_bash == self.WIN_BASH_MSYS2:
+                    return __decorator_func_msys2
+                if self.__win_bash == self.WIN_BASH_CYGWIN:
+                    return __decorator_func_cygwin
+                else:
+                    raise Exception("[bash] Windows bash NOT SUPPORTED")
+        return __decorator_func_bash
+
+
+class ShellMsys2Docker:
+    def __init__(self, docker_image="ghcr.io/msys2/msys2-docker-experimental", user=os.getlogin()):
+        self.__docker_image = docker_image
+        self.__user = user
+
+    def __call__(self, func):
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            return f'docker run -it "{self.__docker_image}" {cmd_line}'
+
+        return __decorator_func
+
+
+# @ShellDockerMsys2OverWine
+# @RunInCmdShellDecorator(wine_path="wine")
+# @ShellMsys2Decorator --> bash
+class RunInCmdShellDecorator:
+    def __init__(self, shell_cmd_decorator=ShellCmdDecorator(), shell_bash_decorator=ShellBashDecorator(),
+                 shell_wine_decorator=ShellWineDecorator()):
+        self.__shell_cmd_decorator = shell_cmd_decorator
+        self.__shell_bash_decorator = shell_bash_decorator
+        self.__shell_wine_decorator = shell_wine_decorator
+
+    def __call__(self, func):
+        @self.__shell_cmd_decorator
+        def __decorator_func_cmd(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        @self.__shell_bash_decorator
+        @self.__shell_cmd_decorator
+        def __decorator_func_win_unix(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        @self.__shell_bash_decorator
+        @ShellBashScriptDecorator([self.__shell_wine_decorator, self.__shell_cmd_decorator], ".cmd")
+        def __decorator_func_unix(*args, **kwargs):
+            return func(*args, **kwargs)
+
         if CurrentOs.is_windows():
+            return __decorator_func_cmd
+        elif CurrentOs.is_msys() or CurrentOs.is_cygwin():
+            return __decorator_func_win_unix
+        return __decorator_func_unix
+
+
+class RunScriptInShellDecorator:
+    WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST = {".cmd", ".bat", ".com"}
+    UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST = {".sh", ".bash"}
+
+    def __init__(self, shell_script_path, run_in_cmd_shell_decorator=RunInCmdShellDecorator(),
+                 run_in_bash_shell_decorator=RunInBashShellDecorator()):
+        self.__shell_script_path = pathlib.Path(Path(shell_script_path).get())
+        self.__run_in_cmd_shell_decorator = run_in_cmd_shell_decorator
+        self.__run_in_bash_shell_decorator = run_in_bash_shell_decorator
+
+    def __call__(self, func):
+        @self.__run_in_cmd_shell_decorator
+        def __decorator_func_run_in_cmd_shell(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        @self.__run_in_bash_shell_decorator
+        def __decorator_func_run_in_bash_shell(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        shell_script_extension = self.__shell_script_path.suffix
+        if shell_script_extension in self.WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST:
+            return __decorator_func_run_in_cmd_shell
+        elif shell_script_extension in self.UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST:
+            return __decorator_func_run_in_bash_shell
+        else:
+            return func
+
+
+class UnitTest_RunInShell(unittest.TestCase):
+    ENCODING = "utf-8"
+
+    def test_bash_over_msys2(self):
+        self.assertEqual(self.__command_bash_over_msys2(), "")
+
+    @ShellMsys2Docker()
+    @RunInCmdShellDecorator(shell_wine_decorator=ShellWineDecorator(wine_path="wine"))
+    @ShellMsys2Decorator()
+    def __command_bash_over_msys2(self):
+        return fr'echo "\"TEST message $SYSTEMDRIVE $WINEHOMEDIR $MSYSTEM_PREFIX\""'
+
+
+class Shell:
+    WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT = ".cmd"
+    UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT = ".sh"
+
+    def __init__(self, is_windows=CurrentOs.is_windows()):
+        self.__is_windows = is_windows
+
+    def suppress_stdout(self):
+        if self.__is_windows:
             # https://www.robvanderwoude.com/redirection.php
             return '> NUL'
         else:
@@ -997,13 +1298,16 @@ class Shell:
         return f"{self.suppress_stdout()} 2>&1"
 
     def get_script_file_extension(self):
-        if CurrentOs.is_windows():
-            return ".bat"
+        if self.__is_windows:
+            return self.WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
         else:
-            return ".sh"
+            return self.UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
+
+    def get_run_in_shell_command_line(self, shell_script_path):
+        return RunScriptInShellDecorator(shell_script_path).__call__(lambda: f'{shell_script_path}')()
 
     def make_script(self, script_body, is_debug=False):
-        if CurrentOs.is_windows():
+        if self.__is_windows:
             utf8_encoding = 65001
             return f'cpch {utf8_encoding}\n{"@echo off\n" if bool(is_debug) else ""}\n{script_body}\n'
         else:
@@ -2604,7 +2908,8 @@ class ResolvConf2:
             except subprocess.CalledProcessError as ex:
                 if (ex.returncode == self.__SYSTEMD_EXIT_CODE_EXIT_FAILURE) and (attempt < number_of_attempts - 1):
                     sleep_time_before_next_attempt = sleep_time_before_next_attempt_list[attempt]
-                    Logger.instance().warning(f"[ResolvConf] Restart systemd-resolved FAIL: {ex} (attempt = {attempt + 1}/{number_of_attempts}, sleep = {sleep_time_before_next_attempt} seconds)")
+                    Logger.instance().warning(
+                        f"[ResolvConf] Restart systemd-resolved FAIL: {ex} (attempt = {attempt + 1}/{number_of_attempts}, sleep = {sleep_time_before_next_attempt} seconds)")
                     time.sleep(sleep_time_before_next_attempt)
                 else:
                     Logger.instance().error(
@@ -2833,12 +3138,13 @@ class DnsDhcpProvider(DaemonManagerBase):
         return ip_address_start, ip_address_end
 
     def __add_dnsmasq_to_system_dsn_servers_list(self):
-        subprocess.check_call(f"resolvectl dns {self.__interface} {self.__interface.get_ipv4_interface_if().ip}", shell=True)
-        #self.__resolv_conf.add_nameserver(self.__get_target_interface_ip_address())
+        subprocess.check_call(f"resolvectl dns {self.__interface} {self.__interface.get_ipv4_interface_if().ip}",
+                              shell=True)
+        # self.__resolv_conf.add_nameserver(self.__get_target_interface_ip_address())
 
     def __remove_dnsmasq_from_system_dsn_servers_list(self):
         subprocess.check_call(f"resolvectl dns {self.__interface}", shell=True)
-        #self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
+        # self.__resolv_conf.remove_nameserver(self.__get_target_interface_ip_address())
 
     def __get_target_interface_ip_address(self):
         return self.__interface_ip_interface.ip
@@ -4381,6 +4687,7 @@ class Pci(BaseParser):
 
         return result
 
+    # fixme utopia заменить : на другой символ
     def get_rom_file_name(self):
         return f"{self.get_address_and_id()}_rom.bin"
 
@@ -6617,9 +6924,43 @@ exit {self.__EXIT_CODE}
         self.assertEqual(exit_code, self.__SHELL_EXIT_CODE_COMMAND_NOT_FOUND_IN_THE_SYSTEMS_PATH)
 
 
+class ProjectScript:
+    CONFIG_PROJECT_INSTANCE_FILE_PATH = "CONFIG_PROJECT_INSTANCE_FILE_PATH"
+
+    # fixme utopia Нужно пользоваться тем скриптом от которого позвали
+    #  При этом скрипт run_cmd.sh должен уметь корректировать переменную окружения
+    #  HOME_VPN_PROJECT_RUN_CMD
+    #  1) если она уже установлена, то не надо её взводить
+    #  2) если переменная не установлена а выполняемся в рамках msys2
+    #    HOME_VPN_PROJECT_RUN_CMD="${HOME_VPN_PROJECT_ROOT}/run_cmd_msys2.cmd"
+    #  3) если переменная не установлена а выполняемся в рамках cygwin
+    #    HOME_VPN_PROJECT_RUN_CMD="${HOME_VPN_PROJECT_ROOT}/run_cmd_cygwin.bat"
+    #  При этом HOME_VPN_PROJECT_ROOT - путь который пригоден для вызова в рамках винды
+    #  а не только сред исполнения
+    def __init__(self, script_file_name="run_cmd.sh"):
+        self.__script_file_name = script_file_name
+
+    @RunInBashShellDecorator
+    def get_run_cmd_in_shell(self, args, is_suppress_stdout=True, is_suppress_stderr=True):
+        return self.get_run_cmd(args, is_suppress_stdout, is_suppress_stderr)
+
+    def get_run_cmd(self, args, is_suppress_stdout=True, is_suppress_stderr=True):
+        return f'{self.CONFIG_PROJECT_INSTANCE_FILE_PATH}="{self.__get_current_project_instance_config_path()}"; "{self.__get_project_run_cmd_path()}" {args} &> "/dev/null"'
+
+    def __get_current_project_instance_config_path(self):
+        return pathlib.Path(os.environ[self.CONFIG_PROJECT_INSTANCE_FILE_PATH])
+
+    def __get_project_run_cmd_path(self):
+        return self.__get_project_root_path() / self.__script_file_name
+
+    def __get_project_root_path(self):
+        return pathlib.Path(os.environ["HOME_VPN_PROJECT_ROOT"])
+
+
+# fixme utopia Выделить в отдельный скрипт
 class StartupCrontab:
     COMMAND = "startup_run_all_scripts"
-    SUPERVISOR_SCRIPT_ID = "073c0542-ab8f-4518-802b-4417a4519219"
+    SUPERVISOR_SCRIPT_ID = "da7f518c-2839-4a29-bc34-904c0d786a14"
 
     __STARTUP_SCRIPTS_DIR_NAME = ".crontab_startup_scripts"
     __RUN_ONCE_SCRIPT_DIR_NAME = "run_once"
@@ -6680,6 +7021,8 @@ class StartupCrontab:
     def __init__(self, user=getpass.getuser()):
         self.__user = user
 
+    # fixme utopia Дать возможность указать расширение файла скрипта - от него будет зависеть выполнитель
+    #  см. метод Shell().get_run_in_shell_command_line()
     def register_script(self, startup_script_content, is_background_executing=False,
                         is_execute_once=False):
         self.__register_supervisor_script()
@@ -6699,7 +7042,8 @@ class StartupCrontab:
                 if startup_script_name is not None:
                     if startup_script_name.is_execute_once:
                         path = path.replace(self.__get_execute_once_script_dir_path() / path.name)
-                    script_runner.add(path, startup_script_name.is_background_executing)
+                    script_runner.add(Shell().get_run_in_shell_command_line(path),
+                                      startup_script_name.is_background_executing)
         asyncio.run(script_runner.run_all())
         self.__remove_execute_once_script_dir()
 
@@ -6712,7 +7056,7 @@ class StartupCrontab:
 
     def __register_supervisor_script(self):
         with CronTab(user=self.__user) as cron:
-            command = f'"{sys.executable}" "{__file__}" {self.COMMAND}'
+            command = ProjectScript().get_run_cmd_in_shell(self.COMMAND)
             if next(cron.find_comment(self.SUPERVISOR_SCRIPT_ID), None) is not None:
                 return
 
@@ -6746,6 +7090,11 @@ class StartupCrontab:
 # Windows startup
 # https://superuser.com/a/1518663/2121020
 # fixme utopia Переопределить метод __register_supervisor_script()
+# fixme utopia Должны быть разные поставщики bash в зависимости от текущей платформы:
+#  - msys2
+#  - cygwin
+#  - git-bash
+#  а соответственно и папки расположения исполняемых скрипов
 class StartupWindows(StartupCrontab):
     pass
 
@@ -7343,11 +7692,11 @@ class VmRunner:
                 "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else "",
                 "--vm_host_mode" if self.__vm_host_mode else ""]
 
-        command_line = f'"{sys.executable}" "{__file__}" {self.__serializer.serialize(["vm_run", args])} {Shell().suppress_stdout_stderr()}'
+        command_line = ProjectScript().get_run_cmd(f'{self.__serializer.serialize(["vm_run", args])}')
 
         self.__startup.register_script(command_line, is_background_executing=True,
                                        is_execute_once=not self.__vm_host_mode)
-        #Power.reboot()
+        # Power.reboot()
 
     def after_reboot(self):
         sleep_sec = 20
@@ -7427,8 +7776,9 @@ class VmRunner:
         vm_rdp_forwarding = VmRdpForwarding(vm_meta_data, local_network_interface,
                                             vm_meta_data.get_rdp_forward_port())
         stop_event = threading.Event()
-        tcp_forwarding_thread = threading.Thread(target=lambda _stop_event: (vm_ssh_forwarding.add_with_retry(_stop_event),
-                                                                 vm_rdp_forwarding.add_with_retry(_stop_event)), args=(stop_event,))
+        tcp_forwarding_thread = threading.Thread(
+            target=lambda _stop_event: (vm_ssh_forwarding.add_with_retry(_stop_event),
+                                        vm_rdp_forwarding.add_with_retry(_stop_event)), args=(stop_event,))
         tcp_forwarding_thread.start()
 
         if self.__initiate_isa_bridge_passthrough and self.__initiate_builtin_kbd_and_mouse_passthrough:
@@ -7456,7 +7806,7 @@ class VmRunner:
         else:
             self.__grub.restore_from_backup()
             self.__grub.update()
-            #Power.reboot()
+            # Power.reboot()
 
 
 class OsNameAndVersion:
@@ -7475,64 +7825,6 @@ class OsNameAndVersion:
     # Изменить версию win для wine https://forum.winehq.org/viewtopic.php?t=14589
 
 
-class WindowsCommandLineWrapper:
-    def get_command_line(self, cmd):
-        return cmd
-
-
-class LinuxCommandLineWrapper:
-    def get_command_line(self, cmd):
-        return cmd
-
-    # https://stackoverflow.com/questions/26809898/invoke-msys2-shell-from-command-prompt-or-powershell
-    # https://stackoverflow.com/questions/1681208/python-platform-independent-way-to-modify-path-environment-variable
-
-
-class Msys2CommandLineWrapper:
-    MSYS2_DIR_DEFAULT = fr"C:\msys64"
-
-    def __init__(self, msys2_dir=MSYS2_DIR_DEFAULT):
-        self.__msys2_dir = msys2_dir
-
-    def get_command_line(self, cmd):
-        # fixme utopia Экранирование для cmd (shlex?)
-        # https://docs.python.org/3/library/shlex.html#shlex.quote
-        # https://stackoverflow.com/questions/33560364/python-windows-parsing-command-lines-with-shlex
-        self.__setup_path()
-        return fr'"{self.__get_msys2_bash_path()}" -c "{cmd}"'
-
-    def __setup_path(self):
-        print("fixme")
-
-    def __get_msys2_bash_path(self):
-        return fr"{self.__get_msys2_bin_dir()}\bash.exe"
-
-    def __get_msys2_bin_dir(self):
-        return fr"{self.__msys2_dir}\usr\bin"
-
-
-# wine cmd /C ""notepad" "привет мир \'.txt""
-# Файлы в win не могут содержать двоичные кавычки в названии
-# fixme utopia Проверить экранирование одинарной кавычки на винде
-# fixme utopia Использовать WindowsCommandLineWrapper?
-class WineCommandLineWrapper:
-    WINE = "wine"
-
-    def get_command_line(self, cmd):
-        # fixme utopia Экранирование для cmd (shlex?)
-        return fr'"{self.WINE}" cmd /C "{cmd}"'
-
-
-class CommandLineExecutor:
-    def __init__(self, command_line):
-        self.__command_line = command_line
-
-    def run(self, cmd):
-        subprocess.check_call(self.__command_line.get_command_line(cmd), shell=True)
-
-    # https://www.blog.pythonlibrary.org/2010/03/03/finding-installed-software-using-python/
-
-
 class WindowsInstallerInnoSetup:
     def __init__(self):
         print("")
@@ -7549,148 +7841,148 @@ class WindowsInstallerMsi:
     # https://askubuntu.com/a/548087
 
 
-class AptPackageManagerInstaller:
-    def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLineWrapper())):
-        self.__package_name = package_name
-        self.__command_line_executor = command_line_executor
-
-    def is_installed(self):
-        return False
-
-    def install_from_file(self, path_to_installer_file):
-        print("")
-
-    def install(self):
-        print("")
-
-    def uninstall(self):
-        print("")
-
-    def add_ppa(self):
-        print("")
-
-    # https://phoenixnap.com/kb/install-rpm-packages-on-ubuntu
-
-
-class RmpForUbuntuPackageManagerInstaller:
-    def __init__(self):
-        print("")
-
-    # inherit from interface PaketManagerInstallers
-    # CentOs
-
-
-class YumPackageManagerInstaller:
-    def __init__(self):
-        print("")
-
-    # inherit from interface PaketManagerInstallers
-    # ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
-
-
-class PackmanPackageManagerInstaller:
-    def __init__(self):
-        print("")
-
-    def is_installed(self):
-        return False
-
-    def install_from_file(self, path_to_installer_file):
-        print("")
-
-    def install(self):
-        print("")
-
-    def uninstall(self):
-        print("")
-
-    # https://wiki.archlinux.org/title/wine
-    def enable_multilib(self):
-        print("")
-
-    # fedora / centos / rhel
-
-
-class DnfPackageManagerInstaller:
-    def __init__(self):
-        print("")
-
-    def add_repo(self):
-        print("")
-
-    # Если скачивает torrent, то закачивает торрент при помощи transmission
-    # (использовать https://pypi.org/project/python-magic/ для определения типа скачанного файла)
-
-
-class Downloader:
-    def __init__(self):
-        print("")
-
-    # https://habr.com/ru/articles/658463/
-
-
-class TransmissionDaemon:
-    def __init__(self):
-        print("")
-
-
-class PackageName:
-    def __init__(self):
-        print("")
-
-    def get_name(self):
-        return ""
-
-    def get_os(self):
-        return ""
-
-
-class PackageAction:
-    def __init__(self):
-        print("")
-
-    # winetrics + wine 32|64
-    def install(self):
-        # dependency installer
-
-        if self.__is_packet_manager():
-            if os == "Windows" and current_os == "Windows":
-                PackmanPaketManagerInstaller(Msys2CommandLineForInstaller()).install(packet)
-            if os == "Windows" and current_os == "Linux":
-                PackmanPaketManagerInstaller(WineCommandLineForInstaller(Msys2CommandLineForInstaller())).install(
-                    packet)
-            if os == "Ubuntu" and current_os == "Ubuntu":
-                AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install(packet)
-        elif self.__is_download_and_install():
-            download()  # if download_file is torrent --> dowload_torrent
-            # if download archive (zip / tar / rar) --> unpack_archive to tmp folder
-            if downloaded_file == "exe":  # inno setup installer
-                if os == "Windows" and current_os == "Windows":
-                    WindowsInstallerInnoSetup(WindowsCommandLineForInstaller()).install(custom_command_line)
-                if os == "Windows" and current_os == "Linux":
-                    WindowsInstallerInnoSetup(WineCommandLineForInstaller()).install(custom_command_line)
-            if downloaded_file == "msi":  # inno setup installer
-                if os == "Windows" and current_os == "Windows":
-                    WindowsInstallerMsi(WindowsCommandLineForInstaller()).install(custom_command_line)
-                if os == "Windows" and current_os == "Linux":
-                    WindowsInstallerMsi(WineCommandLineForInstaller()).install(custom_command_line)
-            if downloaded_file == "deb":
-                if os == "Ubuntu" and current_os == "Ubuntu":
-                    AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
-            if downloaded_file == "rpm":
-                if os == "CentOs" and current_os == "CentOs":
-                    YumPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
-
-    def __packet_manager(self):
-        return False
-
-    def __is_download_and_install(self):
-        return False
-
-
-class InstallCommandLine:
-    def __init__(self):
-        print("")
+# class AptPackageManagerInstaller:
+#     def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLineWrapper())):
+#         self.__package_name = package_name
+#         self.__command_line_executor = command_line_executor
+#
+#     def is_installed(self):
+#         return False
+#
+#     def install_from_file(self, path_to_installer_file):
+#         print("")
+#
+#     def install(self):
+#         print("")
+#
+#     def uninstall(self):
+#         print("")
+#
+#     def add_ppa(self):
+#         print("")
+#
+#     # https://phoenixnap.com/kb/install-rpm-packages-on-ubuntu
+#
+#
+# class RmpForUbuntuPackageManagerInstaller:
+#     def __init__(self):
+#         print("")
+#
+#     # inherit from interface PaketManagerInstallers
+#     # CentOs
+#
+#
+# class YumPackageManagerInstaller:
+#     def __init__(self):
+#         print("")
+#
+#     # inherit from interface PaketManagerInstallers
+#     # ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
+#
+#
+# class PackmanPackageManagerInstaller:
+#     def __init__(self):
+#         print("")
+#
+#     def is_installed(self):
+#         return False
+#
+#     def install_from_file(self, path_to_installer_file):
+#         print("")
+#
+#     def install(self):
+#         print("")
+#
+#     def uninstall(self):
+#         print("")
+#
+#     # https://wiki.archlinux.org/title/wine
+#     def enable_multilib(self):
+#         print("")
+#
+#     # fedora / centos / rhel
+#
+#
+# class DnfPackageManagerInstaller:
+#     def __init__(self):
+#         print("")
+#
+#     def add_repo(self):
+#         print("")
+#
+#     # Если скачивает torrent, то закачивает торрент при помощи transmission
+#     # (использовать https://pypi.org/project/python-magic/ для определения типа скачанного файла)
+#
+#
+# class Downloader:
+#     def __init__(self):
+#         print("")
+#
+#     # https://habr.com/ru/articles/658463/
+#
+#
+# class TransmissionDaemon:
+#     def __init__(self):
+#         print("")
+#
+#
+# class PackageName:
+#     def __init__(self):
+#         print("")
+#
+#     def get_name(self):
+#         return ""
+#
+#     def get_os(self):
+#         return ""
+#
+#
+# class PackageAction:
+#     def __init__(self):
+#         print("")
+#
+#     # winetrics + wine 32|64
+#     def install(self):
+#         # dependency installer
+#
+#         if self.__is_packet_manager():
+#             if os == "Windows" and current_os == "Windows":
+#                 PackmanPaketManagerInstaller(Msys2CommandLineForInstaller()).install(packet)
+#             if os == "Windows" and current_os == "Linux":
+#                 PackmanPaketManagerInstaller(WineCommandLineForInstaller(Msys2CommandLineForInstaller())).install(
+#                     packet)
+#             if os == "Ubuntu" and current_os == "Ubuntu":
+#                 AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install(packet)
+#         elif self.__is_download_and_install():
+#             download()  # if download_file is torrent --> dowload_torrent
+#             # if download archive (zip / tar / rar) --> unpack_archive to tmp folder
+#             if downloaded_file == "exe":  # inno setup installer
+#                 if os == "Windows" and current_os == "Windows":
+#                     WindowsInstallerInnoSetup(WindowsCommandLineForInstaller()).install(custom_command_line)
+#                 if os == "Windows" and current_os == "Linux":
+#                     WindowsInstallerInnoSetup(WineCommandLineForInstaller()).install(custom_command_line)
+#             if downloaded_file == "msi":  # inno setup installer
+#                 if os == "Windows" and current_os == "Windows":
+#                     WindowsInstallerMsi(WindowsCommandLineForInstaller()).install(custom_command_line)
+#                 if os == "Windows" and current_os == "Linux":
+#                     WindowsInstallerMsi(WineCommandLineForInstaller()).install(custom_command_line)
+#             if downloaded_file == "deb":
+#                 if os == "Ubuntu" and current_os == "Ubuntu":
+#                     AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
+#             if downloaded_file == "rpm":
+#                 if os == "CentOs" and current_os == "CentOs":
+#                     YumPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
+#
+#     def __packet_manager(self):
+#         return False
+#
+#     def __is_download_and_install(self):
+#         return False
+#
+#
+# class InstallCommandLine:
+#     def __init__(self):
+#         print("")
 
 
 def main():
