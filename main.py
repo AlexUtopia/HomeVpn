@@ -853,34 +853,103 @@ class UnitTest_LinuxKernelVersion(unittest.TestCase):
 # https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-osversioninfoexa#remarks
 # https://stackoverflow.com/a/54837707
 class CurrentOs:
+
+    ## Проверить что текущая ОС и её архитектура являются целевыми
+    # @details Архитектура может не указываться
+    # @details Правильные примеры:
+    #              linux:x86_64
+    #              win:amd64
+    #              Android/termux:aarch64
+    #              Android/termux:armv8l
+    #          Неправильные примеры:
+    #              linux:arm - "arm" библиотека cpuinfo не принимает
+    # @param [in] os_and_arch_for_check Целевая ОС и её архитектура
+    # @return True - текущая ОС является целевой; False - нет
     @staticmethod
-    def is_windows():
+    def check_os_and_arch(os_and_arch_for_check):
+        maxsplit = 2
+        os_vs_arch = os_and_arch_for_check.split(":", maxsplit=maxsplit)
+        os_for_check = os_vs_arch[0]
+        result = CurrentOs.check_os(os_for_check)
+        if len(os_vs_arch) == maxsplit:
+            arch_for_check = os_vs_arch[1]
+            return result and CurrentOs.check_arch(arch_for_check)
+        return result
+
+    ## Проверить что текущая ОС является целевой
+    # @details Проверка на Android/termux должна идти перед проверкой на Linux,
+    #          т.к. иначе может случиться ложноположительная проверка на Linux
+    #          (хотя безусловно Android/termux это своего рода Linux)
+    # @param [in] os_for_check Целевая ОС
+    # @return True - текущая ОС является целевой; False - нет
+    @staticmethod
+    def check_os(os_for_check):
+        return (CurrentOs.is_termux(os_for_check) and CurrentOs.is_termux()) or (
+                CurrentOs.is_linux(os_for_check) and CurrentOs.is_linux()) or (
+                CurrentOs.is_windows(os_for_check) and CurrentOs.is_windows()) or (
+                CurrentOs.is_msys(os_for_check) and CurrentOs.is_msys()) or (
+                CurrentOs.is_cygwin(os_for_check) and CurrentOs.is_cygwin())
+
+    ## Проверить что текущая архитектура ОС является целевой
+    # @details Допустимые значения arch_for_check можно увидеть здесь
+    #          https://github.com/workhorsy/py-cpuinfo/blob/master/cpuinfo/cpuinfo.py#L782
+    # @details Полезные ссылки на тему
+    #          https://unix.stackexchange.com/questions/136959/where-does-uname-get-its-information-from
+    #          https://habr.com/ru/companies/intel/articles/201462/
+    #          https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
+    #          https://github.com/torvalds/linux/blob/master/scripts/package/mkdebian#L21
+    #          http://ports.ubuntu.com/ubuntu-ports/dists/noble/main/
+    #          http://archive.ubuntu.com/ubuntu/dists/noble/main/
+    #          https://youtu.be/6DybX5Lkqt4?si=jocEAhC03jxshFLQ
+    # @details В настоящий момент сделано по-простому - с использованием библиотеки cpuinfo
+    # @param [in] os_for_check Целевая архитектура ОС
+    # @return True - текущая архитектура ОС является целевой; False - нет
+    @staticmethod
+    def check_arch(arch_for_check):
+        my_cpu_info = cpuinfo.get_cpu_info()
+        my_arch = my_cpu_info["arch"]
+        my_bits = my_cpu_info["bits"]
+        return cpuinfo.cpuinfo._parse_arch(arch_for_check) == (my_arch, my_bits)
+
+    @staticmethod
+    def is_windows_platform():
+        return CurrentOs.is_windows() or CurrentOs.is_msys() or CurrentOs.is_cygwin()
+
+    @staticmethod
+    def is_windows(my_platform=sys.platform):
         # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('win')
+        return my_platform.lower().startswith('win')
 
     # fixme utopia Что вернёт uname -r?
     @staticmethod
-    def is_msys():
+    def is_msys(my_platform=sys.platform):
         # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('msys')
+        return my_platform.lower().startswith('msys')
 
     @staticmethod
-    def is_cygwin():
+    def is_cygwin(my_platform=sys.platform):
         # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('cygwin')
+        return my_platform.lower().startswith('cygwin')
 
     @staticmethod
-    def is_linux():
+    def is_linux(my_platform=sys.platform):
         # https://docs.python.org/3/library/sys.html#sys.platform
-        return sys.platform.lower().startswith('linux')
+        return my_platform.lower().startswith('linux')
 
     @staticmethod
-    def is_termux():
+    def is_termux(my_platform=sys.platform):
+        if not my_platform and isinstance(my_platform, str):
+            return 'termux' in my_platform.lower()
         # https://termux.dev/en/
-        return CurrentOs.is_android()
+        return CurrentOs.is_android(my_platform)
 
+    # В python 3.13 sys.platform == "android" а не "linux"
+    # https://docs.python.org/3/library/sys.html#sys.platform
     @staticmethod
-    def is_android():
+    def is_android(my_platform=sys.platform):
+        if not my_platform and isinstance(my_platform, str):
+            return 'android' in my_platform.lower()
+
         try:
             cmd_result = subprocess.run("uname -o", shell=True, capture_output=True, text=True)
             if cmd_result.returncode:
@@ -888,10 +957,6 @@ class CurrentOs:
             return cmd_result.stdout.lower().startswith("android")
         except Exception:
             return False
-
-    @staticmethod
-    def is_windows_platform():
-        return CurrentOs.is_windows() or CurrentOs.is_msys()
 
     @staticmethod
     def get_linux_kernel_version():
@@ -1051,7 +1116,7 @@ class ShellBashScriptDecorator:
             cmd_line = ShellBashDecorator().full_escape_cmd_line(cmd_line)
             call_script_cmd_line = __wrapper()
             # Для wine директория /tmp не годится, т.к. монтируется в wine'е в режиме noexec
-            return f'{self.TEMP_PATH}="$(mktemp ~/XXXXXXXXX{self.__temp_script_file_extension})" && echo "{cmd_line}" > "{self.__script_file_path}" && echo $TEMP_PATH && cat $TEMP_PATH && chmod +x "{self.__script_file_path}" && {call_script_cmd_line}; rm -f "{self.__script_file_path}"'
+            return f'{self.TEMP_PATH}="$(mktemp ~/XXXXXXXXX{self.__temp_script_file_extension})" && trap "rm -f \"{self.__script_file_path}\"" EXIT && echo "{cmd_line}" > "{self.__script_file_path}" && chmod +x "{self.__script_file_path}" && {call_script_cmd_line}'
 
         return __decorator_func
 
@@ -1130,7 +1195,7 @@ class ShellWineDecorator:
         else:
             raise Exception("[wine] Wine is not available")
 
-    def __init__(self, wine_path=None, is_crutch_for_msys2_over_wine=True):
+    def __init__(self, wine_path=None, is_crutch_for_msys2_over_wine=False):
         self.__wine_path = wine_path
         if not self.__wine_path:
             self.__wine_path = ShellWineDecorator.get_wine_executable_path()
@@ -1139,7 +1204,7 @@ class ShellWineDecorator:
     def __call__(self, func):
         def __decorator_func(*args, **kwargs):
             cmd_line = func(*args, **kwargs)
-            return f'{self.__crutch_for_msys2_over_wine()}WINEDEBUG=-all && "{self.__wine_path}" {cmd_line}'
+            return f'{self.__crutch_for_msys2_over_wine()}WINEDEBUG=-all && {self.__wine_path} {cmd_line}'
 
         return __decorator_func
 
@@ -1150,9 +1215,10 @@ class ShellWineDecorator:
 
 
 class RunInBashShellDecorator:
-    WIN_BASH_AUTO_SELECT = 0
-    WIN_BASH_MSYS2 = 1
-    WIN_BASH_CYGWIN = 2
+    WIN_BASH_EXECUTE_NOW = 0
+    WIN_BASH_AUTO_SELECT = 1
+    WIN_BASH_MSYS2 = 2
+    WIN_BASH_CYGWIN = 3
 
     def __init__(self, win_bash=WIN_BASH_AUTO_SELECT, shell_bash_decorator=ShellBashDecorator(),
                  shell_cmd_decorator=ShellCmdDecorator(), shell_msys2_decorator=ShellMsys2Decorator()):
@@ -1177,11 +1243,18 @@ class RunInBashShellDecorator:
             return __decorator_func_bash(*args, **kwargs)
 
         if CurrentOs.is_windows_platform():
-            if self.__win_bash == self.WIN_BASH_AUTO_SELECT:
+            if self.__win_bash == self.WIN_BASH_EXECUTE_NOW:
+                if CurrentOs.is_msys():
+                    return __decorator_func_bash
+                if CurrentOs.is_cygwin():
+                    return __decorator_func_bash
+                else:
+                    raise Exception("[bash] Windows bash NOT AVAILABLE")
+            elif self.__win_bash == self.WIN_BASH_AUTO_SELECT:
                 if CurrentOs.is_msys():
                     return __decorator_func_msys2
-                # if CurrentOs.is_cygwin():
-                #     return __decorator_func_cygwin
+                if CurrentOs.is_cygwin():
+                    return __decorator_func_cygwin
                 else:
                     raise Exception("[bash] Windows bash NOT AVAILABLE")
             else:
@@ -1191,7 +1264,8 @@ class RunInBashShellDecorator:
                     return __decorator_func_cygwin
                 else:
                     raise Exception("[bash] Windows bash NOT SUPPORTED")
-        return __decorator_func_bash
+        else:
+            return __decorator_func_bash
 
 
 class ShellMsys2Docker:
@@ -1207,9 +1281,6 @@ class ShellMsys2Docker:
         return __decorator_func
 
 
-# @ShellDockerMsys2OverWine
-# @RunInCmdShellDecorator(wine_path="wine")
-# @ShellMsys2Decorator --> bash
 class RunInCmdShellDecorator:
     def __init__(self, shell_cmd_decorator=ShellCmdDecorator(), shell_bash_decorator=ShellBashDecorator(),
                  shell_wine_decorator=ShellWineDecorator()):
@@ -1270,14 +1341,136 @@ class RunScriptInShellDecorator:
 class UnitTest_RunInShell(unittest.TestCase):
     ENCODING = "utf-8"
 
-    def test_bash_over_msys2(self):
-        self.assertEqual(self.__command_bash_over_msys2(), "")
+    TEST_DATA_LIST = [
+        {
+            "description": "Запуск msys2 bash через wine (с использованием docker, только linux:x86_64)",
+            "decorator_list": [ShellMsys2Docker(),
+                               RunInCmdShellDecorator(shell_wine_decorator=ShellWineDecorator(wine_path="wine",
+                                                                                              is_crutch_for_msys2_over_wine=True)),
+                               ShellMsys2Decorator()],
+            "test_case_list":
+                [
+                    {
+                        "cmd": r'echo "\"TEST message $SYSTEMDRIVE $WINEHOMEDIR $MSYSTEM_PREFIX\""',
+                        "cmd_for_executing": {
+                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"echo \\\"\\\"\\\\\\\\\\\"\\\"TEST message \\\$SYSTEMDRIVE \\\$WINEHOMEDIR \\\$MSYSTEM_PREFIX\\\\\\\\\\\"\\\"\\\"\\\"\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""'''
+                        },
+                        "stdout": r'''"TEST message C: \??\Z:\root /clang64"'''
+                    },
+                    {
+                        "cmd": r'exit 17',
+                        "cmd_for_executing": {
+                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"exit 17\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""'''
+                        },
+                        "exit_code": 17
+                    },
+                    {
+                        "cmd": r'whoami',
+                        "cmd_for_executing": {
+                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"whoami\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""'''
+                        },
+                        "stdout": getpass.getuser()
+                    }
+                ]
+        },
+        {
+            "description": "Запуск cmd.exe (кроссплатформенно)",
+            "decorator_list": [RunInCmdShellDecorator()],
+            "test_case_list":
+                [
+                    {
+                        "cmd": r'echo "TEST message %SYSTEMDRIVE% %COMSPEC%"',
+                        "cmd_for_executing": {
+                            "linux": r'''bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"echo \\\"TEST message %SYSTEMDRIVE% %COMSPEC%\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && WINEDEBUG=-all && /opt/wine-stable/bin/wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""''',
+                            "Android/termux": "",
+                            "windows": "",
+                            "msys": "",
+                            "cygwin": ""
+                        },
+                        "stdout": r'''"TEST message C: C:\windows\system32\cmd.exe"'''
+                    },
+                    {
+                        "cmd": r'exit 17',
+                        "cmd_for_executing": {
+                            "linux": r'''bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"exit 17\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && WINEDEBUG=-all && /opt/wine-stable/bin/wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""''',
+                            "Android/termux": "",
+                            "windows": "",
+                            "msys": "",
+                            "cygwin": ""
+                        },
+                        "exit_code": 17
+                    },
+                    {
+                        "cmd": r'whoami',
+                        "cmd_for_executing": {
+                            "linux": r'''bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"whoami\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && WINEDEBUG=-all && /opt/wine-stable/bin/wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""''',
+                            "Android/termux": "",
+                            "windows": "",
+                            "msys": "",
+                            "cygwin": ""
+                        },
+                        "stdout": fr'{platform.node().upper():.15}\{getpass.getuser()}'
+                    }
+                ]
+        },
+        {
+            "description": "Запуск bash (кроссплатформенно)",
+            "decorator_list": [RunInBashShellDecorator()],
+            "test_case_list":
+                [
+                    {
+                        "cmd": r'echo "\"TEST message\""',
+                        "cmd_for_executing": {
+                            "linux": r'''bash -l -c "echo \"\\\"TEST message\\\"\""''',
+                            "Android/termux": "",
+                            "msys": "",
+                            "cygwin": ""
+                        },
+                        "stdout": f'"TEST message"'
+                    },
+                    {
+                        "cmd": r'exit 17',
+                        "cmd_for_executing": {
+                            "linux": r'''bash -l -c "exit 17"''',
+                            "Android/termux": "",
+                            "msys": "",
+                            "cygwin": ""
+                        },
+                        "exit_code": 17
+                    },
+                    {
+                        "cmd": "whoami",
+                        "cmd_for_executing": {
+                            "linux": r'''bash -l -c "whoami"''',
+                            "Android/termux": "",
+                            "msys": "",
+                            "cygwin": ""
+                        },
+                        "stdout": getpass.getuser()
+                    }
+                ]
+        }
+    ]
 
-    @ShellMsys2Docker()
-    @RunInCmdShellDecorator(shell_wine_decorator=ShellWineDecorator(wine_path="wine"))
-    @ShellMsys2Decorator()
-    def __command_bash_over_msys2(self):
-        return fr'echo "\"TEST message $SYSTEMDRIVE $WINEHOMEDIR $MSYSTEM_PREFIX\""'
+    def test(self):
+        for test_data in self.TEST_DATA_LIST:
+            for test_case in test_data["test_case_list"]:
+                for os_and_arch, expected_cmd_for_executing in test_case["cmd_for_executing"].items():
+                    if CurrentOs.check_os_and_arch(os_and_arch):
+                        test_description = f'[{os_and_arch}] Test "{test_data["description"]}" | {test_case["cmd"]}'
+
+                        cmd_for_executing = apply_decorators(test_data["decorator_list"])(lambda: test_case["cmd"])()
+                        self.assertEqual(expected_cmd_for_executing, cmd_for_executing,
+                                         msg=f'{test_description}\n{cmd_for_executing}')
+
+                        cmd_result = subprocess.run(cmd_for_executing, shell=True, capture_output=True, text=True)
+                        expected_exit_code = test_case.get("exit_code", 0)
+                        self.assertEqual(expected_exit_code, cmd_result.returncode, msg=test_description)
+
+                        expected_stdout = test_case.get("stdout")
+                        if expected_stdout:
+                            self.assertTrue(expected_stdout in cmd_result.stdout,
+                                            msg=f'{test_description}\n{str(cmd_result.stdout)}')
 
 
 class Shell:
