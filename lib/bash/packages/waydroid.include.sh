@@ -1,18 +1,14 @@
 #!/bin/bash
 
-## @brief Функции по установке waydroid
+## @brief Функции по установке и работе с waydroid
 ## https://repo.waydro.id/
 
 
-## @brief Установить waydroid
+## @brief Установить пакет waydroid
 ## @details https://docs.waydro.id/usage/install-on-desktops#ubuntu-debian-and-derivatives
 ## @details https://learn.microsoft.com/en-us/windows/android/wsa/
 ## @retval 0 - успешно
-function waydroid_setup() {
-    if is_termux || is_msys; then
-        return 0
-    fi
-
+function waydroid_packages_setup() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
         OS_DISTRO_VERSION_CODENAME=$(get_linux_distro_codename_or_version) || return $?
@@ -28,4 +24,15 @@ function waydroid_setup() {
         return 0
     fi
     return 1
+}
+
+function waydroid_setup() {
+    if ! is_linux; then
+        return 0
+    fi
+
+    waydroid_packages_setup || return $?
+    waydroid init || return $?
+    service_enable "waydroid-container.service" || return $?
+    return 0
 }

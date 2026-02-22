@@ -25,17 +25,26 @@ function ssh_packages_setup() {
 ## @brief Установить и настроить SSH сервер
 ## @retval 0 - успешно
 function ssh_server_setup() {
-    if [[ -n "${SSH_CONNECTION}" ]]; then
-        echo "SSH server is not installed because execution takes place in a SSH session"
-        return 0
-    fi
-
-    ssh_packages_setup || return $?
-
     local SSH_SERVER="ssh" # https://tokmakov.msk.ru/blog/item/441
     if is_termux; then
         SSH_SERVER="sshd"
     fi
+
+    if [[ -n "${SSH_CONNECTION}" ]]; then
+        echo "SSH server is not installed because execution takes place in a SSH session"
+
+        # Включаем службу если скрипт исполняется внутри SSH сессии (это контринтуитивно)
+        # Это требуется в специфическом сценарии работы с Waydroid/termux:
+        # 1) sshd запускаем вручную при помощи отправки клавиатурных событий в termux
+        # 1.1) настройку runit (termux-services) таким способом не делаем, т.к. у нас нет обратной связи (т.е. stdout termux)
+        # 2) подключаемся к termux по ssh
+        # 3) исполняем данный скрипт
+        # 4) добавляем sshd в автозапуск, реального запуска sshd не произойдёт, т.к. он уже запущен
+        service_enable "${SSH_SERVER}"
+        return 0
+    fi
+
+    ssh_packages_setup || return $?
 
     service_disable "${SSH_SERVER}"
 

@@ -106,6 +106,7 @@ function user_check() {
 ## @details В Android/termux возможен только один пользователь, поэтому имя пользователя игнорируется
 ##          https://wiki.termux.com/wiki/Differences_from_Linux
 ## @param [in] Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
+## @return Домашняя директория пользователя
 ## @retval 0 - успешно
 function user_get_home_dir_path() {
     if is_termux; then
@@ -117,6 +118,19 @@ function user_get_home_dir_path() {
     USER_NAME=$(user_check "${USER_NAME}") || return $?
 
     eval echo "~${USER_NAME}"
+    return 0
+}
+
+## @brief Получить домашнюю директорию текущего зарегистрированного пользователя
+## @return Домашняя директория текущего зарегистрированного пользователя
+## @retval 0 - успешно
+function user_get_logged_user_home_dir_path() {
+    if is_termux; then
+        termux_user_get_home_dir_path || return $?
+        return 0
+    fi
+
+    eval echo "~$(logname)"
     return 0
 }
 
