@@ -36,14 +36,21 @@ function fs_remake_dirs() {
 ## @brief Создать символическую ссылку
 ## @param [in] Исходный путь (оригинальный файл или директория)
 ## @param [in] Целевой путь
+## @param [in] Пользователь от которого создавать директорию, необязательный аргумент
 ## @retval 0 - успешно
 function fs_create_symlink() {
     local SOURCE_PATH="${1}"
     local TARGET_PATH="${2}"
+    local USER_NAME="${3}"
 
-    # В termux почему-то опция -f у ln не всегда срабатывает, поэтому удалим символическую ссылку вручную
-    rm -rf "${TARGET_PATH}" > "/dev/null" || return $?
-    ln -s "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
+    if [[ -n "${USER_NAME}" ]]; then
+        # В termux почему-то опция -f у ln не всегда срабатывает, поэтому удалим символическую ссылку вручную
+        sudo --user="${USER_NAME}" rm -rf "${TARGET_PATH}" > "/dev/null" || return $?
+        sudo --user="${USER_NAME}" ln -s "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
+    else
+        rm -rf "${TARGET_PATH}" > "/dev/null" || return $?
+        ln -s "${SOURCE_PATH}" "${TARGET_PATH}" > "/dev/null" || return $?
+    fi
     return 0
 }
 

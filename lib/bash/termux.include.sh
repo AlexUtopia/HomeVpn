@@ -129,3 +129,31 @@ function termux_set_symlinks_to_storage() {
 
     return 0
 }
+
+## @brief Название пакета termux для Android
+TERMUX_PACKAGE_NAME="com.termux"
+
+## @brief Скачиваемый apk termux
+TERMUX_APK_FILE_NAME="${TERMUX_PACKAGE_NAME}_1022.apk"
+
+## @brief Получить путь до apk termux
+## @return путь до apk termux
+## @retval 0 - успешно
+function termux_get_apk_path() {
+    echo "${GLOBAL_CONFIG_OPT_DIR_PATH}/termux/${TERMUX_APK_FILE_NAME}"
+    return 0
+}
+
+## @brief Скачать apk termux
+## @param [in] Путь для скачивания apk termux, необязательный аргумент (если не задано, = termux_get_apk_path())
+## @retval 0 - успешно
+function termux_download_apk() {
+    local INSTALL_PATH="${1}"
+    if [[ -z "${INSTALL_PATH}" ]]; then
+        INSTALL_PATH=$(termux_get_apk_path) || return $?
+    fi
+
+    local DOWNLOAD_URL="https://f-droid.org/repo/${TERMUX_APK_FILE_NAME}"
+    download_file "${DOWNLOAD_URL}" "${INSTALL_PATH}" "download_if_not_exist" || return $?
+    return 0
+}

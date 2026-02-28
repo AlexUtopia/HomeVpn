@@ -122,15 +122,18 @@ function user_get_home_dir_path() {
 }
 
 ## @brief Получить домашнюю директорию текущего зарегистрированного пользователя
+## @details Текущий зарегистрированный пользователь - результат команды logname
 ## @return Домашняя директория текущего зарегистрированного пользователя
-## @retval 0 - успешно
-function user_get_logged_user_home_dir_path() {
-    if is_termux; then
-        termux_user_get_home_dir_path || return $?
-        return 0
+## @retval 0 - успешно, 1 - logname вернул пустое имя пользователя или ошибку
+function user_get_logname_home_dir_path() {
+    local USER_NAME=""
+    USER_NAME=$(logname) || return $?
+
+    if [[ -z "${USER_NAME}" ]]; then
+        return 1
     fi
 
-    eval echo "~$(logname)"
+    user_get_home_dir_path "${USER_NAME}" || return $?
     return 0
 }
 

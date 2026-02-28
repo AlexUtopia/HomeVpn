@@ -49,3 +49,43 @@ function is_executable_available() {
 function check_return_code() {
     return ${1}
 }
+
+declare -A TRAP_TABLE
+
+# https://www.gnu.org/software/bash/manual/bash.html#index-trap
+function trap_add_handler() {
+    local TRAP_HANDLER="${1}"
+    local TRAP_SIGNAL="${2}"
+
+    local TRAP_TABLE_KEY="${TRAP_SIGNAL}|${BASHPID}"
+
+    local CURRENT_TRAP_HANDLER_CHAIN=${TRAP_TABLE["${TRAP_TABLE_KEY}"]}
+    local NEW_TRAP_HANDLER_CHAIN="${TRAP_HANDLER}"
+    if [[ -n "${CURRENT_TRAP_HANDLER_CHAIN}" ]]; then
+        NEW_TRAP_HANDLER_CHAIN="${TRAP_HANDLER}; ${CURRENT_TRAP_HANDLER_CHAIN}"
+    fi
+    TRAP_TABLE["${TRAP_TABLE_KEY}"]="${NEW_TRAP_HANDLER_CHAIN}"
+    echo "[trap] add for ${TRAP_TABLE_KEY}: ${NEW_TRAP_HANDLER_CHAIN}"
+
+    trap "${NEW_TRAP_HANDLER_CHAIN}" "${TRAP_SIGNAL}"
+    return 0
+}
+
+
+
+function job_setup_kill_handler() {
+    JOB_NAME="${1}"
+    KILL_JOB_HANDLER="${2}"
+
+    JOB_PID="$!"
+    if [[ -z "${KILL_JOB_HANDLER}" ]]; then
+        KILL_JOB_HANDLER="kill -SIGTERM ${JOB_PID}"
+    fi
+
+    local TRAP_HANDLER="${KILL_JOB_HANDLER}; wait ${JOB_PID}"
+    local TRAP_HANDLER_WITH_ECHO="echo '[${JOB_NAME}] ${TRAP_HANDLER}'; ${TRAP_HANDLER}"
+
+    trap_add_handler "${TRAP_HANDLER_WITH_ECHO}" SIGINT
+    trap_add_handler "${TRAP_HANDLER_WITH_ECHO}" EXIT
+    return 0
+}

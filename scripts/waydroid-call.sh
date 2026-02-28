@@ -1,5 +1,18 @@
 #!/bin/bash
 
+HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")/.."
+
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/os.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/config.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/bash.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/fs.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/git.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/download.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/user.include.sh"
+
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
+
+
 # Скачать adb отдельно
 # https://developer.android.com/tools/releases/platform-tools?hl=ru
 
@@ -58,51 +71,35 @@
 # Убрать фоновые процессы
 # https://www.google.com/search?q=bash+script+background+process+kill&sca_esv=9fcb0994feb150f1&biw=1242&bih=554&sxsrf=ANbL-n4spcaHeoQiMJ24yp_I4PtKZLt9Gw%3A1771722634496&ei=ileaaYD-HbnLwPAPqby6eA&ved=0ahUKEwiA65OS9euSAxW5JRAIHSmeDg8Q4dUDCBE&uact=5&oq=bash+script+background+process+kill&gs_lp=Egxnd3Mtd2l6LXNlcnAiI2Jhc2ggc2NyaXB0IGJhY2tncm91bmQgcHJvY2VzcyBraWxsMgYQABgWGB4yCBAAGIAEGKIEMggQABiABBiiBDIFEAAY7wUyBRAAGO8FSNhFUPsgWMdCcAJ4AZABAJgBVaAB6geqAQIxM7gBA8gBAPgBAZgCD6ACvwnCAgoQABhHGNYEGLADwgIHECMYsAIYJ8ICBhAAGAcYHsICCBAAGAcYHhgTwgIIEAAYgAQYywGYAwCIBgGQBgiSBwQxMi4zoAfJUbIHBDEwLjO4B6MJwgcHMi01LjguMsgHpQGACAE&sclient=gws-wiz-serp
 
-TERMUX_PACKAGE_NAME="com.termux"
 
-function waydroid_jobs_cleanup() {
-    local FINALLY_ACTION="${1}"
-
-    echo "[${FINALLY_ACTION}]"
-    echo "$(jobs)"
-
-    kill -- -$$ || return $?
+function waydroid_install_termux() {
+    local TERMUX_APK_PATH=""
+    TERMUX_APK_PATH=$(termux_get_apk_path) || return $?
+    waydroid app install "${TERMUX_APK_PATH}" || return $?
     return 0
 }
 
 
-function waydroid_start_base() {
+function waydroid_session_start_base() {
     waydroid session stop || return $?
     waydroid show-full-ui || return $? # Будет запущена сессия waydroid (waydroid session start)
     return 0
 }
 
-function waydroid_start() {
-    if waydroid_start_base; then
+
+function waydroid_session_start() {
+    echo "[waydroid] Session start 1"
+    if waydroid_session_start_base; then
         return 0;
     fi
 
-    weston || return $? &
+    weston &
+    job_setup_kill_handler "weston"
     sleep 3
 
-    export WAYLAND_DISPLAY=wayland-0
-    waydroid_start_base || return $?
-    return 0
-}
-
-function waydroid_get_termux_apk_path() {
-    echo "${GLOBAL_CONFIG_OPT_DIR_PATH}/termux/${TERMUX_PACKAGE_NAME}.apk"
-    return 0
-}
-
-function waydroid_install_termux() {
-    local DOWNLOAD_URL="https://f-droid.org/repo/${TERMUX_PACKAGE_NAME}_1022.apk"
-    local INSTALL_PATH=""
-    INSTALL_PATH="$(waydroid_get_termux_apk_path)" || return $?
-
-    download "${DOWNLOAD_URL}" "${INSTALL_PATH}" "remake_dirs" || return $?
-
-    waydroid app install "${INSTALL_PATH}" || return $?
+    echo "[waydroid] Session start 2"
+    export WAYLAND_DISPLAY="wayland-0"
+    waydroid_session_start_base || return $?
     return 0
 }
 
@@ -120,27 +117,30 @@ function waydroid_setup_termux_permissions() {
 }
 
 function waydroid_setup_ssh_key() {
-    local LOGGED_USER_HOME_DIR_PATH=""
-    LOGGED_USER_HOME_DIR_PATH="$(user_get_logged_user_home_dir_path)" || return $?
-    local SSH_PRIVATE_KEY_FILE_PATH="${LOGGED_USER_HOME_DIR_PATH}/.ssh/id_rsa"
-    local SSH_PUBLIC_KEY_FILE_PATH="${SSH_PRIVATE_KEY_PATH}.pub"
+    local USER_HOME_DIR_PATH=""
+    USER_HOME_DIR_PATH="$(user_get_logname_home_dir_path)" || return $?
+    local SSH_PRIVATE_KEY_FILE_PATH="${USER_HOME_DIR_PATH}/.ssh/id_rsa"
+    local SSH_PUBLIC_KEY_FILE_PATH="${SSH_PRIVATE_KEY_FILE_PATH}.pub"
     if ! [[ -e "${SSH_PRIVATE_KEY_FILE_PATH}" ]]; then
         ssh-keygen -q -N "" -f "${SSH_PRIVATE_KEY_FILE_PATH}" || return $?
     fi
 
-    local WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH="${LOGGED_USER_HOME_DIR_PATH}/.local/share/waydroid/data/data/${TERMUX_PACKAGE_NAME}/files/home/.ssh/authorized_keys"
+    local WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH="${USER_HOME_DIR_PATH}/.local/share/waydroid/data/data/${TERMUX_PACKAGE_NAME}/files/home/.ssh/authorized_keys"
 
-    fs_create_symlink "${SSH_PUBLIC_KEY_FILE_PATH}" "${WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH}" || return $?
+    sudo cp --force "${SSH_PUBLIC_KEY_FILE_PATH}" "${WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH}" || return $?
     return 0
 }
 
 function waydroid_run_termux() {
+    sleep 3
     waydroid app launch "${TERMUX_PACKAGE_NAME}" || return $?
+    sleep 3
     return 0
 }
 
 function waydroid_termux_run_sshd() {
-    sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent 66" || return $?
+    local ENTER_KEY_EVENT_CODE=66
+    sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent ${ENTER_KEY_EVENT_CODE}" || return $?
     return 0
 }
 
@@ -167,15 +167,68 @@ function waydroid_setup_termux() {
     return 0
 }
 
-function waydroid_termux_shell_over_ssh() {
+function waydroid_termux_try_shell_over_ssh() {
     local WAYDROID_IP_ADDRESS=""
     WAYDROID_IP_ADDRESS=$(waydroid_get_ip_address) || return $?
-    ssh -p 8022 ${WAYDROID_IP_ADDRESS} bash -c "$*"
+    ssh -p 8022 "${WAYDROID_IP_ADDRESS}" "bash -c \"$*\"" || return $?
     return 0
 }
 
-trap 'waydroid_jobs_cleanup SIGINT' SIGINT
-trap 'waydroid_jobs_cleanup EXIT' EXIT
+function waydroid_termux_shell_over_ssh() {
+    local TOTAl_TIMEOUT_SEC=40
 
-waydroid_start || exit $?
-exit 0
+    local START_TIME_POINT=${SECONDS}
+    while (( (SECONDS - START_TIME_POINT) < TOTAl_TIMEOUT_SEC )); do
+        if ! waydroid_termux_try_shell_over_ssh "$*"; then
+            sleep 1
+            continue
+        fi
+        return 0
+    done
+    return 1
+}
+
+
+function waidroid_wait_start() {
+    local TEMP_FILE_PATH="${1}"
+    local TOTAl_TIMEOUT_SEC=30
+
+    # Ждём запуска waydroid UI анализируя stdout/stderr 'wayland session start'
+    local START_TIME_POINT=${SECONDS}
+    while (( (SECONDS - START_TIME_POINT) < TOTAl_TIMEOUT_SEC )); do
+        if ! IFS= read -t 1 -r LINE; then
+            sleep 1
+            continue
+        fi
+
+        echo "${LINE}"
+        REGEX="Android with user [0-9]+ is ready"
+        if [[ "${LINE}" =~ ${REGEX} ]]; then
+            echo "[waydroid] Started OK"
+            sleep 3
+            return 0
+        fi
+    done < "${TEMP_FILE_PATH}"
+    echo "[waydroid] Started FAIL"
+    return 1
+}
+
+
+function waydroid_termux_shell() {
+    local TEMP_FILE_PATH=""
+    TEMP_FILE_PATH=$(mktemp) || return $?
+    trap_add_handler "rm -f '${TEMP_FILE_PATH}'" SIGINT
+    trap_add_handler "rm -f '${TEMP_FILE_PATH}'" EXIT
+
+    waydroid_session_start &> "${TEMP_FILE_PATH}" &
+    job_setup_kill_handler "waydroid_session_start" "waydroid session stop"
+
+    waidroid_wait_start "${TEMP_FILE_PATH}" || return $?
+
+    waydroid_setup_termux || return $?
+    waydroid_termux_shell_over_ssh "$*" || return $?
+    return 0
+}
+
+
+waydroid_termux_shell "$*"

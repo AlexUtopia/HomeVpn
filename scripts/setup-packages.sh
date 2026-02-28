@@ -500,6 +500,10 @@ function main_install_dev_packages() {
     vnc_client_setup || return $?
     vnc_server_setup || return $?
     telnet_client_setup || return $?
+
+    if is_linux; then
+        termux_download_apk || return $?
+    fi
     return 0
 }
 
