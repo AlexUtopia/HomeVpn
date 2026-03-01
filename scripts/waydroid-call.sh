@@ -161,12 +161,12 @@ function waydroid_termux_run() {
     return 0
 }
 
-## @brief Запустить sshd (ssh сервер) в termux
+## @brief Запустить ssh сервер в termux
 ## @details Запуск осуществляется при помощи ввода текста средствами отладки Android.
 ##          При этом обратной связи от termux мы не имеем
-## @details sshd упредительно устанавливается если нужно
+## @details ssh сервер (sshd) упредительно устанавливается если нужно (пакет openssh)
 ## @retval 0 - успешно
-function waydroid_termux_run_sshd() {
+function waydroid_termux_run_ssh_server() {
     local ENTER_KEY_EVENT_CODE=66
     sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent ${ENTER_KEY_EVENT_CODE}" || return $?
     return 0
@@ -179,7 +179,7 @@ function waydroid_termux_setup() {
     waydroid_termux_setup_ssh_server_authorized_keys || return $?
     waydroid_termux_setup_permissions || return $?
     waydroid_termux_run || return $?
-    waydroid_termux_run_sshd || return $?
+    waydroid_termux_run_ssh_server || return $?
     return 0
 }
 

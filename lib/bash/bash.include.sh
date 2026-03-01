@@ -50,9 +50,17 @@ function check_return_code() {
     return ${1}
 }
 
+## @brief Глобальный словарь обработчиков событий
+## @details Ключ: "<название события>|<текущий shell/subshell PID>"
+##          Значение: обработчики события в LIFO порядке
+## @details Функция trap перетирает уже заданный обработчик, требуется обойти данное поведение
 declare -A TRAP_TABLE
 
-# https://www.gnu.org/software/bash/manual/bash.html#index-trap
+## @brief Установить обработчик события (trap)
+## @details https://www.gnu.org/software/bash/manual/bash.html#index-trap
+## @param [in] Обработчик события в виде строки
+## @param [in] Имя события
+## @retval 0 - успешно
 function trap_add_handler() {
     local TRAP_HANDLER="${1}"
     local TRAP_SIGNAL="${2}"
@@ -71,8 +79,13 @@ function trap_add_handler() {
     return 0
 }
 
-
-
+## @brief Установить обработчик завершения job'a
+## @details Вызывать функцию сразу после запуска job'a
+## @details Обработчик устанавливается на сигнал SIGINT и завершение shell/subshell процесса
+##          с ожиданием завершения (wait <job PID>)
+## @param [in] Имя job'a (для отладки)
+## @param [in] Обработчик завершения job'a в виде строки, необязательный аргумент (если не задано, = kill -SIGTERM <job PID>)
+## @retval 0 - успешно
 function job_setup_kill_handler() {
     JOB_NAME="${1}"
     KILL_JOB_HANDLER="${2}"
