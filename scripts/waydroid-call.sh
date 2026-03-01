@@ -18,49 +18,13 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 
 # https://docs.waydro.id/usage/install-on-desktops
 
-#set -x
-
-# настроить запуск службы systemd
-# https://www.google.com/search?q=waydroid-container.service+vs+waydroid+session+start&sca_esv=45931f64f015fd65&sxsrf=ANbL-n6ES3rOiBpNUrjel4_duXgzRxRFXA%3A1771719610881&ei=ukuaad_ANZC2wPAPsYbXoQc&biw=1242&bih=554&ved=0ahUKEwjfhbHw6euSAxUQGxAIHTHDNXQQ4dUDCBE&uact=5&oq=waydroid-container.service+vs+waydroid+session+start&gs_lp=Egxnd3Mtd2l6LXNlcnAiNHdheWRyb2lkLWNvbnRhaW5lci5zZXJ2aWNlIHZzIHdheWRyb2lkIHNlc3Npb24gc3RhcnQyCBAAGIAEGKIEMggQABiABBiiBDIFEAAY7wUyBRAAGO8FMgUQABjvBUjCuQRQAFjNtQRwAngBkAEAmAGEAaABqxqqAQUyNC4xMrgBA8gBAPgBAvgBAZgCJqACpB3CAgQQABgewgIGEAAYCBgewgIFECEYoAHCAgcQIRgKGKABwgIFECEYnwXCAgQQIRgVmAMAkgcFMTcuMjGgB5djsgcFMTUuMjG4B5sdwgcLMC4xMS4xOC44LjHIB90BgAgB&sclient=gws-wiz-serp
+# set -x
 
 # /var/lib/waydroid/waydroid.cfg
 # auto_adb = True
 
-# Скачать termux
-# https://f-droid.org/repo/com.termux_1022.apk
-
-# Установить termux
-# waydroid app install ~/Загрузки/com.termux_1022.apk
-
-# Дать разрешения для termux (выдать сразу все)
-# sudo waydroid shell "pm grant com.termux android.permission.POST_NOTIFICATIONS"
-
-# сгенерировать ssh ключ
-
-# передать публичный ssh ключ сюда (скопировать + переименовать)
-# ~/.local/share/waydroid/data/data/com.termux/files/home/.ssh/authorized_keys
-
-# Запустить termux
-# waydroid app launch com.termux
 
 
-# при помощи команд (sudo waydroid shell)
-# input text "xxx"
-# input keyevent <код клавиши>
-# активировать sshd
-# sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent 66"
-
-# Узнать IP адрес для подключения
-# waydroid status
-#    Session:	RUNNING
-#    Container:	RUNNING
-#    Vendor type:	MAINLINE
-#    IP address:	192.168.240.112
-#    Session user:	utopia(1000)
-#    Wayland display:	wayland-0
-
-# Подключиться по ssh к termux (подождать и в цикле пытаться подключиться - 2 попытки)
-# ssh -p 8022 192.168.240.112
 
 # Пробросить kvm в lxc контейнер
 #   Дать возможность запускать вирт машину обычному пользователю
@@ -72,24 +36,26 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 # https://www.google.com/search?q=bash+script+background+process+kill&sca_esv=9fcb0994feb150f1&biw=1242&bih=554&sxsrf=ANbL-n4spcaHeoQiMJ24yp_I4PtKZLt9Gw%3A1771722634496&ei=ileaaYD-HbnLwPAPqby6eA&ved=0ahUKEwiA65OS9euSAxW5JRAIHSmeDg8Q4dUDCBE&uact=5&oq=bash+script+background+process+kill&gs_lp=Egxnd3Mtd2l6LXNlcnAiI2Jhc2ggc2NyaXB0IGJhY2tncm91bmQgcHJvY2VzcyBraWxsMgYQABgWGB4yCBAAGIAEGKIEMggQABiABBiiBDIFEAAY7wUyBRAAGO8FSNhFUPsgWMdCcAJ4AZABAJgBVaAB6geqAQIxM7gBA8gBAPgBAZgCD6ACvwnCAgoQABhHGNYEGLADwgIHECMYsAIYJ8ICBhAAGAcYHsICCBAAGAcYHhgTwgIIEAAYgAQYywGYAwCIBgGQBgiSBwQxMi4zoAfJUbIHBDEwLjO4B6MJwgcHMi01LjguMsgHpQGACAE&sclient=gws-wiz-serp
 
 
-function waydroid_install_termux() {
-    local TERMUX_APK_PATH=""
-    TERMUX_APK_PATH=$(termux_get_apk_path) || return $?
-    waydroid app install "${TERMUX_APK_PATH}" || return $?
-    return 0
-}
 
 
-function waydroid_session_start_base() {
+## @brief Попытаться запустить waydroid сессию
+## @details waydroid сессия требует запуска с рамках wayland сессии,
+##          которая может отсутствовать на X11 системах. В таком случае функция вернёт ошибку
+## @retval 0 - успешно
+function waydroid_session_try_start() {
     waydroid session stop || return $?
     waydroid show-full-ui || return $? # Будет запущена сессия waydroid (waydroid session start)
     return 0
 }
 
-
+## @brief Запустить waydroid сессию
+## @details waydroid сессия требует запуска с рамках wayland сессии,
+##          которая может отсутствовать на X11 системах.
+##          В таком случае wayland сессия будет запущена через weston
+## @retval 0 - успешно
 function waydroid_session_start() {
     echo "[waydroid] Session start 1"
-    if waydroid_session_start_base; then
+    if waydroid_session_try_start; then
         return 0;
     fi
 
@@ -99,97 +65,20 @@ function waydroid_session_start() {
 
     echo "[waydroid] Session start 2"
     export WAYLAND_DISPLAY="wayland-0"
-    waydroid_session_start_base || return $?
+    waydroid_session_try_start || return $?
     return 0
 }
 
-# runtime permissions:
-  #        android.permission.POST_NOTIFICATIONS: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
-  #        android.permission.READ_EXTERNAL_STORAGE: granted=true, flags=[ USER_SET|REVOKE_WHEN_REQUESTED|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
-  #        android.permission.READ_MEDIA_IMAGES: granted=true, flags=[ USER_SET|REVOKE_WHEN_REQUESTED|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
-  #        android.permission.READ_MEDIA_AUDIO: granted=true, flags=[ USER_SET|REVOKE_WHEN_REQUESTED|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
-  #        android.permission.READ_MEDIA_VIDEO: granted=true, flags=[ USER_SET|REVOKE_WHEN_REQUESTED|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
-  #        android.permission.WRITE_EXTERNAL_STORAGE: granted=true, flags=[ USER_SET|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED|RESTRICTION_INSTALLER_EXEMPT]
-  #        android.permission.ACCESS_MEDIA_LOCATION: granted=true, flags=[ USER_SET|REVOKE_WHEN_REQUESTED|USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
-function waydroid_setup_termux_permissions() {
-    sudo waydroid shell -- bash -c "pm grant ${TERMUX_PACKAGE_NAME} android.permission.POST_NOTIFICATIONS" || return $?
-    return 0
-}
-
-function waydroid_setup_ssh_key() {
-    local USER_HOME_DIR_PATH=""
-    USER_HOME_DIR_PATH="$(user_get_logname_home_dir_path)" || return $?
-    local SSH_PRIVATE_KEY_FILE_PATH="${USER_HOME_DIR_PATH}/.ssh/id_rsa"
-    local SSH_PUBLIC_KEY_FILE_PATH="${SSH_PRIVATE_KEY_FILE_PATH}.pub"
-    if ! [[ -e "${SSH_PRIVATE_KEY_FILE_PATH}" ]]; then
-        ssh-keygen -q -N "" -f "${SSH_PRIVATE_KEY_FILE_PATH}" || return $?
-    fi
-
-    local WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH="${USER_HOME_DIR_PATH}/.local/share/waydroid/data/data/${TERMUX_PACKAGE_NAME}/files/home/.ssh/authorized_keys"
-
-    sudo cp --force "${SSH_PUBLIC_KEY_FILE_PATH}" "${WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH}" || return $?
-    return 0
-}
-
-function waydroid_run_termux() {
-    sleep 3
-    waydroid app launch "${TERMUX_PACKAGE_NAME}" || return $?
-    sleep 3
-    return 0
-}
-
-function waydroid_termux_run_sshd() {
-    local ENTER_KEY_EVENT_CODE=66
-    sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent ${ENTER_KEY_EVENT_CODE}" || return $?
-    return 0
-}
-
-function waydroid_get_ip_address() {
-    local WAYDROID_STATUS=""
-    WAYDROID_STATUS=$(waydroid status) || return $?
-
-    local REGEX=""
-    REGEX=$(printf "IP address:[[:blank:]]+([[:graph:]]+)") || return $?
-
-    if [[ "${WAYDROID_STATUS}" =~ ${REGEX} ]]; then
-        echo "${BASH_REMATCH[1]}"
-        return 0
-    fi
-    return 1
-}
-
-function waydroid_setup_termux() {
-    waydroid_install_termux || return $?
-    waydroid_setup_ssh_key || return $?
-    waydroid_setup_termux_permissions || return $?
-    waydroid_run_termux || return $?
-    waydroid_termux_run_sshd || return $?
-    return 0
-}
-
-function waydroid_termux_try_shell_over_ssh() {
-    local WAYDROID_IP_ADDRESS=""
-    WAYDROID_IP_ADDRESS=$(waydroid_get_ip_address) || return $?
-    ssh -p 8022 "${WAYDROID_IP_ADDRESS}" "bash -c \"$*\"" || return $?
-    return 0
-}
-
-function waydroid_termux_shell_over_ssh() {
-    local TOTAl_TIMEOUT_SEC=40
-
-    local START_TIME_POINT=${SECONDS}
-    while (( (SECONDS - START_TIME_POINT) < TOTAl_TIMEOUT_SEC )); do
-        if ! waydroid_termux_try_shell_over_ssh "$*"; then
-            sleep 1
-            continue
-        fi
-        return 0
-    done
-    return 1
-}
-
-
-function waidroid_wait_start() {
+## @brief Ожидать запуска waydroid ОС
+## @details Максимальное время ожидания 30 секунд
+## @details FIFO в качестве временного файла не подходит,
+##          т.к. операции чтения/записи для FIFO работают в строго блокирующем режиме
+##          что приводит к необходимости запуска отдельного job'а который будет читать FIFO
+##          вплоть до завершения job'а waydroid_session_start().
+##          Читатель FIFO необходим, т.к. писатель FIFO может быть приостановлен при заполнении FIFO "под завязку"
+## @param [in] Путь до временного файла куда перенаправляется stdout/stderr от waydroid сессии
+## @retval 0 - успешно
+function waydroid_wait_start() {
     local TEMP_FILE_PATH="${1}"
     local TOTAl_TIMEOUT_SEC=30
 
@@ -213,8 +102,153 @@ function waidroid_wait_start() {
     return 1
 }
 
+## @brief Установить termux в waydroid
+## @details Путь до termux apk берётся из вызова функции termux_get_apk_path
+## @retval 0 - успешно
+function waydroid_termux_install() {
+    local TERMUX_APK_PATH=""
+    TERMUX_APK_PATH=$(termux_get_apk_path) || return $?
+    waydroid app install "${TERMUX_APK_PATH}" || return $?
+    return 0
+}
 
-function waydroid_termux_shell() {
+## @brief Установить для ssh сервера в termux ключ для подключения ssh клиента (текущий хост)
+## @details Если текущий хост не имеет ssh ключа (публичный/приватный),
+##          ключ будет сгенерирован автоматически (без запросов пользователю)
+## @details Текущий публичный ключ хоста копируется в файл (директория .ssh уже должна существовать)
+##          ~/.local/share/waydroid/data/data/com.termux/files/home/.ssh/authorized_keys
+## @retval 0 - успешно
+function waydroid_termux_setup_ssh_server_authorized_keys() {
+    local USER_HOME_DIR_PATH=""
+    USER_HOME_DIR_PATH="$(user_get_logname_home_dir_path)" || return $?
+    local SSH_PRIVATE_KEY_FILE_PATH="${USER_HOME_DIR_PATH}/.ssh/id_rsa"
+    local SSH_PUBLIC_KEY_FILE_PATH="${SSH_PRIVATE_KEY_FILE_PATH}.pub"
+    if ! [[ -e "${SSH_PRIVATE_KEY_FILE_PATH}" ]]; then
+        ssh-keygen -q -N "" -f "${SSH_PRIVATE_KEY_FILE_PATH}" || return $?
+    fi
+
+    local WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH="${USER_HOME_DIR_PATH}/.local/share/waydroid/data/data/${TERMUX_PACKAGE_NAME}/files/home/.ssh/authorized_keys"
+
+    sudo cp --force "${SSH_PUBLIC_KEY_FILE_PATH}" "${WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH}" || return $?
+    return 0
+}
+
+## @brief Установить все требуемые разрешения для termux
+## @details Узнать разрешения запрашиваемые приложением можно так:
+##          sudo waydroid shell -- bash -c "dumpsys package com.termux"
+##
+##          См. секцию "runtime permissions"
+## @retval 0 - успешно
+function waydroid_termux_setup_permissions() {
+    sudo waydroid shell -- bash -c \
+    "pm grant ${TERMUX_PACKAGE_NAME} android.permission.POST_NOTIFICATIONS && \
+pm grant ${TERMUX_PACKAGE_NAME} android.permission.READ_EXTERNAL_STORAGE && \
+pm grant ${TERMUX_PACKAGE_NAME} android.permission.READ_MEDIA_IMAGES && \
+pm grant ${TERMUX_PACKAGE_NAME} android.permission.READ_MEDIA_AUDIO && \
+pm grant ${TERMUX_PACKAGE_NAME} android.permission.READ_MEDIA_VIDEO && \
+pm grant ${TERMUX_PACKAGE_NAME} android.permission.WRITE_EXTERNAL_STORAGE && \
+pm grant ${TERMUX_PACKAGE_NAME} android.permission.ACCESS_MEDIA_LOCATION" || return $?
+    return 0
+}
+
+## @brief Запустить termux
+## @details Функция учитывает необходимые задержки до и после запуска termux
+## @retval 0 - успешно
+function waydroid_termux_run() {
+    sleep 3
+    waydroid app launch "${TERMUX_PACKAGE_NAME}" || return $?
+    sleep 3
+    return 0
+}
+
+## @brief Запустить sshd (ssh сервер) в termux
+## @details Запуск осуществляется при помощи ввода текста средствами отладки Android.
+##          При этом обратной связи от termux мы не имеем
+## @details sshd упредительно устанавливается если нужно
+## @retval 0 - успешно
+function waydroid_termux_run_sshd() {
+    local ENTER_KEY_EVENT_CODE=66
+    sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent ${ENTER_KEY_EVENT_CODE}" || return $?
+    return 0
+}
+
+## @brief Подготовить termux для удалённого к нему подключения по ssh
+## @retval 0 - успешно
+function waydroid_termux_setup() {
+    waydroid_termux_install || return $?
+    waydroid_termux_setup_ssh_server_authorized_keys || return $?
+    waydroid_termux_setup_permissions || return $?
+    waydroid_termux_run || return $?
+    waydroid_termux_run_sshd || return $?
+    return 0
+}
+
+## @brief Получить IP адрес waydroid
+## @return IP адрес waydroid
+## @retval 0 - успешно
+function waydroid_get_ip_address() {
+    local WAYDROID_STATUS=""
+    WAYDROID_STATUS=$(waydroid status) || return $?
+
+    local REGEX=""
+    REGEX=$(printf "IP address:[[:blank:]]+([[:graph:]]+)") || return $?
+
+    if [[ "${WAYDROID_STATUS}" =~ ${REGEX} ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    return 1
+}
+
+## @brief Попытаться выполнить удалённую команду по ssh в termux (bash)
+## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей
+##          См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
+## @param [in] ... Команда на исполнение в termux (bash)
+## @retval 0 - успешно;
+##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
+##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
+function waydroid_termux_shell_try_run_command_over_ssh() {
+    local WAYDROID_IP_ADDRESS=""
+    WAYDROID_IP_ADDRESS=$(waydroid_get_ip_address) || return $?
+    ssh -p 8022 "${WAYDROID_IP_ADDRESS}" "bash -c \"$*\"" || return $?
+    return 0
+}
+
+## @brief Выполнить удалённую команду по ssh в termux (bash)
+## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей
+##          См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
+## @details Максимальное время ожидания подключения по ssh - 40 секунд
+## @param [in] ... Команда на исполнение в termux (bash)
+## @retval 0 - успешно;
+##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
+##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
+function waydroid_termux_shell_run_command_over_ssh() {
+    local TOTAl_TIMEOUT_SEC=40
+    local SSH_CLIENT_CONNECTION_ERROR_CODE=255
+
+    local SSH_CLIENT_ERROR_CODE=1
+    local START_TIME_POINT=${SECONDS}
+    while (( (SECONDS - START_TIME_POINT) < TOTAl_TIMEOUT_SEC )); do
+        waydroid_termux_shell_try_run_command_over_ssh "$*"
+
+        # 255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось
+        # Все прочие коды ошибок - результат выполнения удалённой команды
+        SSH_CLIENT_ERROR_CODE=$?
+        if (( SSH_CLIENT_ERROR_CODE == SSH_CLIENT_CONNECTION_ERROR_CODE )); then
+            sleep 1
+            continue
+        fi
+        return ${SSH_CLIENT_ERROR_CODE}
+    done
+    return ${SSH_CLIENT_ERROR_CODE}
+}
+
+## @brief Выполнить команду в termux (bash)
+## @param [in] ... Команда на исполнение в termux (bash)
+## @retval 0 - успешно;
+##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
+##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
+function waydroid_termux_shell_run_command() {
     local TEMP_FILE_PATH=""
     TEMP_FILE_PATH=$(mktemp) || return $?
     trap_add_handler "rm -f '${TEMP_FILE_PATH}'" SIGINT
@@ -223,12 +257,12 @@ function waydroid_termux_shell() {
     waydroid_session_start &> "${TEMP_FILE_PATH}" &
     job_setup_kill_handler "waydroid_session_start" "waydroid session stop"
 
-    waidroid_wait_start "${TEMP_FILE_PATH}" || return $?
+    waydroid_wait_start "${TEMP_FILE_PATH}" || return $?
 
-    waydroid_setup_termux || return $?
-    waydroid_termux_shell_over_ssh "$*" || return $?
+    waydroid_termux_setup || return $?
+    waydroid_termux_shell_run_command_over_ssh "$*" || return $?
     return 0
 }
 
 
-waydroid_termux_shell "$*"
+waydroid_termux_shell_run_command "$*"
