@@ -79,6 +79,19 @@ function trap_add_handler() {
     return 0
 }
 
+## @brief Установить обработчик удаления временного файла или директории
+## @param [in] Путь до удаляемого временного файла или директории
+## @retval 0 - успешно
+function trap_add_remove_temp_path_handler() {
+    local TEMP_FILE_OR_DIR_PATH="${1}"
+
+    local TRAP_HANDLER="rm -fr '${TEMP_FILE_OR_DIR_PATH}'"
+
+    trap_add_handler "${TRAP_HANDLER}" SIGINT
+    trap_add_handler "${TRAP_HANDLER}" EXIT
+    return 0
+}
+
 ## @brief Установить обработчик завершения job'a
 ## @details Вызывать функцию сразу после запуска job'a
 ## @details Обработчик устанавливается на сигнал SIGINT и завершение shell/subshell процесса

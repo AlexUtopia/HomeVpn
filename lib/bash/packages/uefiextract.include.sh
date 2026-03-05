@@ -9,15 +9,15 @@
 ## @retval 0 - успешно
 function uefiextract_get_platform() {
     if is_linux; then
-        if [[ "${OS_MACHINE_NAME}" == "x86_64" ]]; then
+        if os_arch_is_x86_64; then
             echo "x64_linux"
             return 0
         fi
-    elif is_msys; then
-        if [[ "${OS_MACHINE_NAME}" == "x86_64" ]]; then
+    elif is_windows_platform; then
+        if os_arch_is_x86_64; then
             echo "win64"
             return 0
-        elif [[ "${OS_MACHINE_NAME}" == "i386" || "${OS_MACHINE_NAME}" == "i686" ]]; then
+        elif os_arch_is_x86; then
             echo "win32"
             return 0
         fi
@@ -65,13 +65,12 @@ function uefiextract_get_intel_gop_driver() {
         return 1
     fi
 
-    local TMP_DIR_PATH=""
-    TMP_DIR_PATH=$(mktemp --directory --dry-run) || return $?
+    local TEMP_DIR_PATH=""
+    TEMP_DIR_PATH=$(mktemp --directory --dry-run) &&
+    trap_add_remove_temp_path_handler "${TEMP_DIR_PATH}" || return $?
 
     "$(uefiextract_get_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
     fs_make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
-    cp -f "${TMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}"
-    local COMMAND_CHAIN_RESULT=$?
-    rm -rf "${TMP_DIR_PATH}"
-    return ${COMMAND_CHAIN_RESULT}
+    cp -f "${TEMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}" || return $?
+    return 0
 }

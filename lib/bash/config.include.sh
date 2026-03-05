@@ -31,7 +31,8 @@ fi
 
 ## @brief Имя пользователя от которого будет работать VNC сервер
 ## @details В Android/termux переменная окружения USER не установлена
-GLOBAL_CONFIG_VNC_SERVER_USER=$(logname)
+GLOBAL_CONFIG_VNC_SERVER_USER=""
+GLOBAL_CONFIG_VNC_SERVER_USER=$(logname) || exit $?
 if [[ -z "${GLOBAL_CONFIG_VNC_SERVER_USER}" ]]; then
     echo "[FATAL] GLOBAL_CONFIG_VNC_USER parameter IS NOT SET"
     exit 1
@@ -39,7 +40,8 @@ fi
 
 ## @brief Имя пользователя от которого будет работать SMB сервер
 ## @details В Android/termux переменная окружения USER не установлена
-GLOBAL_CONFIG_SMB_SERVER_USER=$(logname)
+GLOBAL_CONFIG_SMB_SERVER_USER=""
+GLOBAL_CONFIG_SMB_SERVER_USER=$(logname) || exit $?
 if [[ -z "${GLOBAL_CONFIG_SMB_SERVER_USER}" ]]; then
     echo "[FATAL] GLOBAL_CONFIG_SMB_SERVER_USER parameter IS NOT SET"
     exit 1

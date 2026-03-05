@@ -10,7 +10,7 @@
 function cpuid_setup() {
     local PACKAGE_NAME="cpuid"
     local DOWNLOAD_URL="https://www.etallen.com/cpuid/cpuid-20250513.src.tar.gz"
-    if [[ "${OS_MACHINE_NAME}" == "i386" || "${OS_MACHINE_NAME}" == "i686" || "${OS_MACHINE_NAME}" == "x86_64" || "${OS_MACHINE_NAME}" == "ia64" ]]; then
+    if os_arch_is_intel_native; then
         local INSTALL_DIR_PATH="${GLOBAL_CONFIG_OPT_DIR_PATH}/${PACKAGE_NAME}"
 
         local STRIP_COMPONENTS=1

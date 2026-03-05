@@ -12,12 +12,6 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/user.include.sh"
 
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 
-
-# Скачать adb отдельно
-# https://developer.android.com/tools/releases/platform-tools?hl=ru
-
-# https://docs.waydro.id/usage/install-on-desktops
-
 # set -x
 
 # /var/lib/waydroid/waydroid.cfg
@@ -31,11 +25,6 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 #   sudo usermod -aG libvirt,kvm $USER
 #   lxc config device add <container_name> kvm unix-char path=/dev/kvm
 #   https://www.google.com/search?q=lxc+container+pass+kvm+device&sca_esv=9fcb0994feb150f1&biw=1242&bih=554&sxsrf=ANbL-n5olTSR0QXZpwIIiQyG1uQaMWVMYw%3A1771715438966&ei=bjuaabjUOpq_wPAP97CLyAQ&oq=lxc+&gs_lp=Egxnd3Mtd2l6LXNlcnAiBGx4YyAqAggAMgQQIxgnMgQQIxgnMgQQIxgnMgUQABiABDIKEAAYgAQYigUYQzIFEAAYgAQyBRAAGIAEMgUQABiABDIFEAAYgAQyBRAAGIAESOWe7QJQgY7tAlj0lO0CcAZ4AJABAJgBW6AB2wKqAQE0uAEDyAEA-AEBmAIKoAKZBMICBxAAGB4YsAPCAggQABjvBRiwA8ICCxAAGIAEGLEDGIMBwgIREC4YgAQYsQMYgwEYxwEY0QPCAggQABiABBixA8ICBRAuGIAEmAMAiAYBkAYGkgcDNi40oAfDJrIHAzAuNLgH2QPCBwkwLjEuMS41LjPIB6ABgAgB&sclient=gws-wiz-serp
-
-# Убрать фоновые процессы
-# https://www.google.com/search?q=bash+script+background+process+kill&sca_esv=9fcb0994feb150f1&biw=1242&bih=554&sxsrf=ANbL-n4spcaHeoQiMJ24yp_I4PtKZLt9Gw%3A1771722634496&ei=ileaaYD-HbnLwPAPqby6eA&ved=0ahUKEwiA65OS9euSAxW5JRAIHSmeDg8Q4dUDCBE&uact=5&oq=bash+script+background+process+kill&gs_lp=Egxnd3Mtd2l6LXNlcnAiI2Jhc2ggc2NyaXB0IGJhY2tncm91bmQgcHJvY2VzcyBraWxsMgYQABgWGB4yCBAAGIAEGKIEMggQABiABBiiBDIFEAAY7wUyBRAAGO8FSNhFUPsgWMdCcAJ4AZABAJgBVaAB6geqAQIxM7gBA8gBAPgBAZgCD6ACvwnCAgoQABhHGNYEGLADwgIHECMYsAIYJ8ICBhAAGAcYHsICCBAAGAcYHhgTwgIIEAAYgAQYywGYAwCIBgGQBgiSBwQxMi4zoAfJUbIHBDEwLjO4B6MJwgcHMi01LjguMsgHpQGACAE&sclient=gws-wiz-serp
-
-
 
 
 ## @brief Попытаться запустить waydroid сессию
@@ -75,7 +64,7 @@ function waydroid_session_start() {
 ##          т.к. операции чтения/записи для FIFO работают в строго блокирующем режиме
 ##          что приводит к необходимости запуска отдельного job'а который будет читать FIFO
 ##          вплоть до завершения job'а waydroid_session_start().
-##          Читатель FIFO необходим, т.к. писатель FIFO может быть приостановлен при заполнении FIFO "под завязку"
+##          Читатель FIFO необходим, т.к. писатель FIFO может быть приостановлен ОС при заполнении FIFO "под завязку"
 ## @param [in] Путь до временного файла куда перенаправляется stdout/stderr от waydroid сессии
 ## @retval 0 - успешно
 function waydroid_wait_start() {
@@ -103,7 +92,7 @@ function waydroid_wait_start() {
 }
 
 ## @brief Установить termux в waydroid
-## @details Путь до termux apk берётся из вызова функции termux_get_apk_path
+## @details Путь до termux apk берётся из вызова функции termux_get_apk_path()
 ## @retval 0 - успешно
 function waydroid_termux_install() {
     local TERMUX_APK_PATH=""
@@ -201,7 +190,7 @@ function waydroid_get_ip_address() {
 }
 
 ## @brief Попытаться выполнить удалённую команду по ssh в termux (bash)
-## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей
+## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей.
 ##          См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
 ## @param [in] ... Команда на исполнение в termux (bash)
 ## @retval 0 - успешно;
@@ -215,7 +204,7 @@ function waydroid_termux_shell_try_run_command_over_ssh() {
 }
 
 ## @brief Выполнить удалённую команду по ssh в termux (bash)
-## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей
+## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей.
 ##          См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
 ## @details Максимальное время ожидания подключения по ssh - 40 секунд
 ## @param [in] ... Команда на исполнение в termux (bash)
@@ -250,9 +239,8 @@ function waydroid_termux_shell_run_command_over_ssh() {
 ##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
 function waydroid_termux_shell_run_command() {
     local TEMP_FILE_PATH=""
-    TEMP_FILE_PATH=$(mktemp) || return $?
-    trap_add_handler "rm -f '${TEMP_FILE_PATH}'" SIGINT
-    trap_add_handler "rm -f '${TEMP_FILE_PATH}'" EXIT
+    TEMP_FILE_PATH=$(mktemp) &&
+    trap_add_remove_temp_path_handler "${TEMP_FILE_PATH}" || return $?
 
     waydroid_session_start &> "${TEMP_FILE_PATH}" &
     job_setup_kill_handler "waydroid_session_start" "waydroid session stop"

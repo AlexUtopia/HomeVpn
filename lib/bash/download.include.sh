@@ -15,7 +15,7 @@ function download_setup() {
 ## @param [in] URL для скачивания
 ## @param [in] Путь до скачанного файла; можно передать "-" - записать результат в stdout
 ## @param [in] Скачать файл только если он не скачан (передать download_if_not_exist), необязательный аргумент
-##             Если аргумент не задан, файл будет перескачен
+##             Если аргумент не задан, файл будет перескачан
 ## @retval 0 - успешно
 function download_file() {
     local URL="${1}"
@@ -66,6 +66,8 @@ function download_targz_and_unpack() {
 
 ## @brief Скачать и распаковать zip файл
 ## @details Директория для распаковки будет создана/пересоздана, если требуется
+## @details Для того чтобы применять wildcards для скрытых файлов используем опцию dotglob
+##          https://www.gnu.org/software/bash/manual/bash.html#The-Shopt-Builtin-1
 ## @param [in] URL для скачивания
 ## @param [in] Путь до директории распаковки архива
 ## @param [in] Не пустая строка (рекомендуется "remake_dirs") - пересоздать директорию распаковки архива, необязательный аргумент
@@ -75,7 +77,7 @@ function download_zip_and_unpack() {
     local URL="${1}"
     local OUT_DIR_PATH="${2}"
     local IS_REMAKE_OUT_DIR_PATH="${3}"
-    local STRIP_COMPONENTS="${4}" # fixme utopia Пока не поддерживается https://superuser.com/a/573624/2121020
+    local STRIP_COMPONENTS="${4}"
 
     if [[ -n "${IS_REMAKE_OUT_DIR_PATH}" ]]; then
         fs_remake_dirs "${OUT_DIR_PATH}" || return $?
@@ -83,12 +85,15 @@ function download_zip_and_unpack() {
         fs_make_dirs "${OUT_DIR_PATH}" || return $?
     fi
 
-    local TMP_FILE_PATH=""
-    TMP_FILE_PATH=$(mktemp) || return $?
+    STRIP_COMPONENTS=$(str_repeat "/*" "${STRIP_COMPONENTS}")
 
-    download_file "${URL}" "${TMP_FILE_PATH}" &&
-    7z x "${TMP_FILE_PATH}" -o"${OUT_DIR_PATH}"
-    local COMMAND_CHAIN_RESULT=$?
-    rm -f "${TMP_FILE_PATH}"
-    return ${COMMAND_CHAIN_RESULT}
+    local TEMP_FILE_PATH=""
+    local TEMP_DIR_PATH=""
+    TEMP_FILE_PATH=$(mktemp) && trap_add_remove_temp_path_handler "${TEMP_FILE_PATH}" &&
+    download_file "${URL}" "${TEMP_FILE_PATH}" &&
+    TEMP_DIR_PATH=$(mktemp --directory) && trap_add_remove_temp_path_handler "${TEMP_DIR_PATH}" &&
+    7z x "${TEMP_FILE_PATH}" -o"${TEMP_DIR_PATH}" &&
+    chmod -R a+rX "${TEMP_DIR_PATH}" &&
+    (shopt -s dotglob && mv "${TEMP_DIR_PATH}"/*${STRIP_COMPONENTS} "${OUT_DIR_PATH}/") || return $?
+    return 0
 }

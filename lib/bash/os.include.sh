@@ -26,7 +26,8 @@ function get_os_name() {
 }
 
 ## @brief Закэшированное имя текущей ОС
-OS_NAME=$(get_os_name)
+OS_NAME=""
+OS_NAME=$(get_os_name) || exit $?
 
 ## @brief Получить название архитектуры ОС
 ## @details Результат - строка в нижнем регистре
@@ -40,42 +41,89 @@ function get_machine_name() {
 }
 
 ## @brief Закэшированная архитектура текущей ОС
-OS_MACHINE_NAME=$(get_machine_name)
+OS_MACHINE_NAME=""
+OS_MACHINE_NAME=$(get_machine_name) || exit $?
+
+## @brief Является ли архитектура текущей ОС x86_64 (64 бита)
+## @retval 0 - архитектура текущей ОС x86_64, 1 - нет
+function os_arch_is_x86_64() {
+    if [[ "${OS_MACHINE_NAME}" == "x86_64" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+## @brief Является ли архитектура текущей ОС x86 (32 бита)
+## @retval 0 - архитектура текущей ОС x86, 1 - нет
+function os_arch_is_x86() {
+    if [[ "${OS_MACHINE_NAME}" == "i386" || "${OS_MACHINE_NAME}" == "i686" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+## @brief Является ли архитектура текущей ОС ia64 (64 бита)
+## @retval 0 - архитектура текущей ОС ia64, 1 - нет
+function os_arch_is_ia64() {
+    if [[ "${OS_MACHINE_NAME}" == "ia64" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+## @brief Является ли архитектура текущей ОС подходящей для процессоров Intel'овской архитектуры
+## @details Кроме ARM процессоров Intel (XScale)
+## @retval 0 - архитектура текущей ОС подходит для процессоров Intel'овской архитектуры, 1 - нет
+function os_arch_is_intel_native() {
+    if os_arch_is_x86_64 || os_arch_is_x86 || os_arch_is_ia64; then
+        return 0
+    fi
+    return 1
+}
 
 ## @brief Проверить является ли текущая ОС Linux
 ## @retval 0 - текущая ОС Linux, 1 - нет
 function is_linux() {
-   if [[ "${OS_NAME}" == *"linux"* ]]; then
-       return 0
-   fi
-   return 1
+    if [[ "${OS_NAME}" == *"linux"* ]]; then
+        return 0
+    fi
+    return 1
 }
 
 ## @brief Проверить является ли текущая ОС Android/termux
 ## @retval 0 - текущая ОС Android/termux, 1 - нет
 function is_termux() {
-   if [[ "${OS_NAME}" == *"android"* ]]; then
-       return 0
-   fi
-   return 1
+    if [[ "${OS_NAME}" == *"android"* ]]; then
+        return 0
+    fi
+    return 1
 }
 
 ## @brief Проверить является ли текущая ОС Windows/MSYS2
 ## @retval 0 - текущая ОС Windows/MSYS2, 1 - нет
 function is_msys() {
-   if [[ "${OS_NAME}" == *"msys"* ]]; then
-       return 0
-   fi
-   return 1
+    if [[ "${OS_NAME}" == *"msys"* ]]; then
+        return 0
+    fi
+    return 1
 }
 
 ## @brief Проверить является ли текущая ОС Windows/Cygwin
 ## @retval 0 - текущая ОС Windows/Cygwin, 1 - нет
 function is_cygwin() {
-   if [[ "${OS_NAME}" == *"cygwin"* ]]; then
-       return 0
-   fi
-   return 1
+    if [[ "${OS_NAME}" == *"cygwin"* ]]; then
+        return 0
+    fi
+    return 1
+}
+
+## @brief Проверить является ли текущая ОС Windows
+## @retval 0 - текущая ОС Windows, 1 - нет
+function is_windows_platform() {
+    if is_msys || is_cygwin; then
+        return 0
+    fi
+    return 1
 }
 
 ## @brief Получить название дистрибутива Linux
@@ -85,15 +133,15 @@ function is_cygwin() {
 ## @return Название дистрибутива Linux
 ## @retval 0 - успешно
 function get_linux_distro_name() {
-   source "/etc/os-release" || return $?
+    source "/etc/os-release" || return $?
 
-   if [[ -n "${UBUNTU_CODENAME}" ]]; then
-       # Для Ubuntu-based дистрибутивов linux (типа Linix Mint) всегда используются ubuntu PPA
-       echo "ubuntu"
-   else
-       echo "${ID,,}"
-   fi
-   return 0
+    if [[ -n "${UBUNTU_CODENAME}" ]]; then
+        # Для Ubuntu-based дистрибутивов linux (типа Linix Mint) всегда используются ubuntu PPA
+        echo "ubuntu"
+    else
+        echo "${ID,,}"
+    fi
+    return 0
 }
 
 ## @brief Получить название версии дистрибутива Linux
@@ -103,14 +151,14 @@ function get_linux_distro_name() {
 ## @return Название версии дистрибутива Linux
 ## @retval 0 - успешно
 function get_linux_distro_codename_or_version() {
-   source "/etc/os-release" || return $?
+    source "/etc/os-release" || return $?
 
-   if [[ -n "${UBUNTU_CODENAME}" ]]; then
-       echo "${UBUNTU_CODENAME,,}"
-   elif [[ -n "${VERSION_CODENAME}" ]]; then
-       echo "${VERSION_CODENAME,,}"
-   else
-       echo "${VERSION_ID,,}"
-   fi
-   return 0
+    if [[ -n "${UBUNTU_CODENAME}" ]]; then
+        echo "${UBUNTU_CODENAME,,}"
+    elif [[ -n "${VERSION_CODENAME}" ]]; then
+        echo "${VERSION_CODENAME,,}"
+    else
+        echo "${VERSION_ID,,}"
+    fi
+    return 0
 }
