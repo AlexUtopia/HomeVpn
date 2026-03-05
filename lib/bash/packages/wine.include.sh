@@ -10,7 +10,7 @@
 ## @retval 0 - успешно
 function winetricks_setup_latest() {
     local PACKAGE_NAME="winetricks"
-    local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20250102.tar.gz"
+    local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20260125.tar.gz"
     local INSTALL_DIR_PATH="${GLOBAL_CONFIG_OPT_DIR_PATH}/${PACKAGE_NAME}"
 
     local STRIP_COMPONENTS=1
