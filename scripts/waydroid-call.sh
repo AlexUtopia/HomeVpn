@@ -14,6 +14,7 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/termux.include.sh"
 
 # set -x
 
+# Чтобы waydroid не спрашивал разрешения на подключение adb прописать в конфиге
 # /var/lib/waydroid/waydroid.cfg
 # auto_adb = True
 
