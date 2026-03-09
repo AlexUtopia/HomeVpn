@@ -25,7 +25,7 @@
 ##     </sys/class/dmi/id/board_vendor>/
 ##         </sys/class/dmi/id/board_name>/
 ##             </sys/class/dmi/id/bios_vendor>/
-##                 </sys/class/dmi/id/bios_vendor>/
+##                 </sys/class/dmi/id/bios_version>/
 ##                     </sys/class/dmi/id/bios_date>/
 
 
