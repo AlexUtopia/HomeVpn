@@ -22,13 +22,32 @@ function user_setup() {
 }
 
 ## @brief Получить имя текущего пользователя
-## @return [in] Имя текущего пользователя
+## @return Имя текущего пользователя
 ## @retval 0 - успешно
 function user_get_current() {
-   local RESULT=""
-   RESULT=$(whoami) || return $?
-   echo "${RESULT}"
-   return 0
+    local USER_NAME=""
+    USER_NAME=$(whoami) || return $?
+    if [[ -z "${USER_NAME}" ]]; then
+        return 1
+    fi
+
+    echo "${USER_NAME}"
+    return 0
+}
+
+## @brief Получить имя текущего зарегистрированного пользователя
+## @details Текущий зарегистрированный пользователь - результат команды logname
+## @return Имя текущего зарегистрированного пользователя
+## @retval 0 - успешно
+function user_get_logname() {
+    local USER_NAME=""
+    USER_NAME=$(logname) || return $?
+    if [[ -z "${USER_NAME}" ]]; then
+        return 1
+    fi
+
+    echo "${USER_NAME}"
+    return 0
 }
 
 ## @brief Создать нового пользователя
@@ -127,11 +146,7 @@ function user_get_home_dir_path() {
 ## @retval 0 - успешно, 1 - logname вернул пустое имя пользователя или ошибку
 function user_get_logname_home_dir_path() {
     local USER_NAME=""
-    USER_NAME=$(logname) || return $?
-
-    if [[ -z "${USER_NAME}" ]]; then
-        return 1
-    fi
+    USER_NAME=$(user_get_logname) || return $?
 
     user_get_home_dir_path "${USER_NAME}" || return $?
     return 0

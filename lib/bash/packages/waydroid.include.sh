@@ -134,11 +134,10 @@ function waydroid_termux_install() {
 function waydroid_termux_setup_ssh_server_authorized_keys() {
     local USER_HOME_DIR_PATH=""
     USER_HOME_DIR_PATH="$(user_get_logname_home_dir_path)" || return $?
-    local SSH_PRIVATE_KEY_FILE_PATH="${USER_HOME_DIR_PATH}/.ssh/id_rsa"
+
+    local SSH_PRIVATE_KEY_FILE_PATH=""
+    SSH_PRIVATE_KEY_FILE_PATH=$(ssh_client_get_private_key_file_path_for_logname_user) || return $?
     local SSH_PUBLIC_KEY_FILE_PATH="${SSH_PRIVATE_KEY_FILE_PATH}.pub"
-    if ! [[ -e "${SSH_PRIVATE_KEY_FILE_PATH}" ]]; then
-        ssh-keygen -q -N "" -f "${SSH_PRIVATE_KEY_FILE_PATH}" || return $?
-    fi
 
     local WAYDROID_TERMUX_SSH_AUTHORIZED_KEYS_FILE_PATH="${USER_HOME_DIR_PATH}/.local/share/waydroid/data/data/${TERMUX_PACKAGE_NAME}/files/home/.ssh/authorized_keys"
 
@@ -221,9 +220,16 @@ function waydroid_get_ip_address() {
 ##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
 ##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
 function waydroid_termux_shell_try_run_command_over_ssh() {
+    local USER_NAME=""
+    USER_NAME=$(user_get_logname) || return $?
+
+    local SSH_PRIVATE_KEY_FILE_PATH=""
+    SSH_PRIVATE_KEY_FILE_PATH=$(ssh_client_get_private_key_file_path_for_logname_user) || return $?
+
     local WAYDROID_IP_ADDRESS=""
-    WAYDROID_IP_ADDRESS=$(waydroid_get_ip_address) || return $?
-    ssh -p 8022 "${WAYDROID_IP_ADDRESS}" "bash -c \"$*\"" || return $?
+    WAYDROID_IP_ADDRESS=$(waydroid_get_ip_address) || return ${SSH_CLIENT_CONNECTION_ERROR_CODE}
+
+    sudo --user="${USER_NAME}" ssh -i "${SSH_PRIVATE_KEY_FILE_PATH}" -p 8022 "${WAYDROID_IP_ADDRESS}" "bash -c '$*'" || return $?
     return 0
 }
 
@@ -237,7 +243,6 @@ function waydroid_termux_shell_try_run_command_over_ssh() {
 ##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
 function waydroid_termux_shell_run_command_over_ssh() {
     local TOTAl_TIMEOUT_SEC=40
-    local SSH_CLIENT_CONNECTION_ERROR_CODE=255
 
     local SSH_CLIENT_ERROR_CODE=1
     local START_TIME_POINT=${SECONDS}

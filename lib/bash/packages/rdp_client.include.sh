@@ -46,7 +46,7 @@ function rdp_client_setup() {
     if is_termux || is_msys; then
         rdp_client_setup_default || return $?
     else
-        rdp_client_setup_nightly || rdp_client_setup_default || return $? # fixme utopia Чтобы будем делать с Linux ARM?
+        rdp_client_setup_nightly || rdp_client_setup_default || return $?
     fi
     return 0
 }

@@ -1281,6 +1281,22 @@ class ShellMsys2Docker:
         return __decorator_func
 
 
+class ShellTermuxWaydroid:
+    def __init__(self):
+        pass
+
+    def __call__(self, func):
+        def __decorator_func(*args, **kwargs):
+            cmd_line = func(*args, **kwargs)
+            cmd_line = ShellBashDecorator().full_escape_cmd_line(cmd_line)
+            return f'WAYDROID_TRY_RUN_COMMAND_OVER_SSH= {self.get_waydroid_termux_shell_run_command_script_path()} "{cmd_line}"'
+
+        return __decorator_func
+
+    def get_waydroid_termux_shell_run_command_script_path(self):
+        return pathlib.Path(os.environ["HOME_VPN_PROJECT_ROOT"]) / "scripts" / "waydroid-termux-shell-run-command.sh"
+
+
 class RunInCmdShellDecorator:
     def __init__(self, shell_cmd_decorator=ShellCmdDecorator(), shell_bash_decorator=ShellBashDecorator(),
                  shell_wine_decorator=ShellWineDecorator()):
@@ -1315,7 +1331,7 @@ class RunScriptInShellDecorator:
     UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST = {".sh", ".bash"}
 
     def __init__(self, shell_script_path, run_in_cmd_shell_decorator=RunInCmdShellDecorator(),
-                 run_in_bash_shell_decorator=RunInBashShellDecorator()):
+                 run_in_bash_shell_decorator=RunInBashShellDecorator(win_bash=RunInBashShellDecorator.WIN_BASH_EXECUTE_NOW)):
         self.__shell_script_path = pathlib.Path(Path(shell_script_path).get())
         self.__run_in_cmd_shell_decorator = run_in_cmd_shell_decorator
         self.__run_in_bash_shell_decorator = run_in_bash_shell_decorator
@@ -1340,6 +1356,7 @@ class RunScriptInShellDecorator:
 
 class UnitTest_RunInShell(unittest.TestCase):
     ENCODING = "utf-8"
+    SSH_CLIENT_CONNECTION_ERROR_CODE = 255
 
     TEST_DATA_LIST = [
         {
@@ -1370,7 +1387,15 @@ class UnitTest_RunInShell(unittest.TestCase):
                             "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"whoami\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""'''
                         },
                         "stdout": getpass.getuser()
+                    },
+                    {
+                        "cmd": r'uname -o',
+                        "cmd_for_executing": {
+                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"uname -o\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && wine \"cmd.exe\" /q /c \"\$TEMP_PATH\""'''
+                        },
+                        "stdout": "Msys"
                     }
+                    # fixme utopia Можно отладить/протестировать setup-packges.sh для msys2
                 ]
         },
         {
@@ -1447,10 +1472,52 @@ class UnitTest_RunInShell(unittest.TestCase):
                             "cygwin": ""
                         },
                         "stdout": getpass.getuser()
+                    },
+                    {
+                        "cmd": r'uname -o',
+                        "cmd_for_executing": {
+                            "linux": (r'''bash -l -c "uname -o"''', "GNU/Linux"),
+                            "Android/termux": r'''fixme utopia''',
+                            "msys": r'''fixme utopia''',
+                            "cygwin": r'''fixme utopia'''
+                        }
+                    }
+                ]
+        },
+        {
+            "description": "Запуск bash в Android/termux (waydroid + termux + ssh сервер)",
+            "decorator_list": [ShellTermuxWaydroid()],
+            "test_case_list":
+                [
+                    {
+                        "cmd": r'echo "\"TEST message $PREFIX\""',
+                        "cmd_for_executing": {
+                            "linux": fr'''WAYDROID_TRY_RUN_COMMAND_OVER_SSH= {ShellTermuxWaydroid().get_waydroid_termux_shell_run_command_script_path()} "echo \"\\\"TEST message \$PREFIX\\\"\""'''
+                        },
+                        "stdout": f'"TEST message /data/data/com.termux/files/usr"',
+                        "ignore_exit_code": SSH_CLIENT_CONNECTION_ERROR_CODE
+                    },
+                    {
+                        "cmd": r'exit 17',
+                        "cmd_for_executing": {
+                            "linux": fr'''WAYDROID_TRY_RUN_COMMAND_OVER_SSH= {ShellTermuxWaydroid().get_waydroid_termux_shell_run_command_script_path()} "exit 17"'''
+                        },
+                        "exit_code": 17,
+                        "ignore_exit_code": SSH_CLIENT_CONNECTION_ERROR_CODE
+                    },
+                    {
+                        "cmd": r'uname -o',
+                        "cmd_for_executing": {
+                            "linux": fr'''WAYDROID_TRY_RUN_COMMAND_OVER_SSH= {ShellTermuxWaydroid().get_waydroid_termux_shell_run_command_script_path()} "uname -o"'''
+                        },
+                        "stdout": "Android",
+                        "ignore_exit_code": SSH_CLIENT_CONNECTION_ERROR_CODE
                     }
                 ]
         }
     ]
+
+
 
     def test(self):
         for test_data in self.TEST_DATA_LIST:
@@ -1459,15 +1526,24 @@ class UnitTest_RunInShell(unittest.TestCase):
                     if CurrentOs.check_os_and_arch(os_and_arch):
                         test_description = f'[{os_and_arch}] Test "{test_data["description"]}" | {test_case["cmd"]}'
 
+                        expected_stdout=None
+                        if isinstance(expected_cmd_for_executing, tuple):
+                            expected_stdout = expected_cmd_for_executing[1]
+                            expected_cmd_for_executing = expected_cmd_for_executing[0]
+
                         cmd_for_executing = apply_decorators(test_data["decorator_list"])(lambda: test_case["cmd"])()
                         self.assertEqual(expected_cmd_for_executing, cmd_for_executing,
                                          msg=f'{test_description}\n{cmd_for_executing}')
 
                         cmd_result = subprocess.run(cmd_for_executing, shell=True, capture_output=True, text=True)
+                        if cmd_result.returncode == test_case.get("ignore_exit_code"):
+                            continue
+
                         expected_exit_code = test_case.get("exit_code", 0)
                         self.assertEqual(expected_exit_code, cmd_result.returncode, msg=test_description)
 
-                        expected_stdout = test_case.get("stdout")
+                        if not expected_stdout:
+                            expected_stdout = test_case.get("stdout")
                         if expected_stdout:
                             self.assertTrue(expected_stdout in cmd_result.stdout,
                                             msg=f'{test_description}\n{str(cmd_result.stdout)}')
@@ -4692,7 +4768,7 @@ class UnitTest_PciAddress(unittest.TestCase):
 
 # fixme utopia Add unit tests
 class PciPassthroughMode(enum.Enum):
-    ## Пробросить только указанные PCI устройства
+    ## Не пробрасывать PCI устройства
     NONE = 0
 
     ## Пробросить только указанные PCI устройства
@@ -4706,7 +4782,7 @@ class PciPassthroughMode(enum.Enum):
     FORCE = 3
 
     def __str__(self):
-        return self.name.lower()
+        return self.name
 
     def __repr__(self):
         return str(self)
@@ -7767,7 +7843,24 @@ class VirtualMachine:
         return self.__serializer.serialize(self.__qemu_ram.get_qemu_parameters())
 
 
+class XXX:
+    def __init__(self, _class, startup = Startup()):
+        self.__class = _class
+        self.__startup = startup
+        self.__serializer = ShellSerializer()
+
+
+    def reboot(self, after_reboot_handler, is_execute_once):
+        command_line = ProjectScript().get_run_cmd(f'{self.__serializer.serialize(["vm_run", args])}')
+
+        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=is_execute_once)
+
+    def __serialize_args(self):
+        return 0
+
+
 class VmRunner:
+    # fixme utopia Передать сюда parser
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
                  initiate_vga_passthrough=PciPassthroughMode.NONE,
                  initiate_vga_audio_passthrough=PciPassthroughMode.NONE,
@@ -8002,181 +8095,6 @@ class VmRunner:
             # Power.reboot()
 
 
-class OsNameAndVersion:
-    def __init__(self, name_and_version):
-        self.__name_and_version = name_and_version
-
-    def is_windows(self):
-        return self.__name_and_version.lower().startswith('win')
-
-    def is_linux(self):
-        return self.__name_and_version.lower().startswith('linux')
-
-    def compare(self):
-        return False
-
-    # Изменить версию win для wine https://forum.winehq.org/viewtopic.php?t=14589
-
-
-class WindowsInstallerInnoSetup:
-    def __init__(self):
-        print("")
-
-
-class WindowsInstallerMsi:
-    def __init__(self):
-        print("")
-
-    # inherit from interface PaketManagerInstaller
-    # Ubuntu / LinuxMint / Debian / termux
-    # https://stackoverflow.com/questions/57610644/linux-package-management-with-python
-    # https://habr.com/ru/articles/683716/
-    # https://askubuntu.com/a/548087
-
-
-# class AptPackageManagerInstaller:
-#     def __init__(self, package_name, command_line_executor=CommandLineExecutor(LinuxCommandLineWrapper())):
-#         self.__package_name = package_name
-#         self.__command_line_executor = command_line_executor
-#
-#     def is_installed(self):
-#         return False
-#
-#     def install_from_file(self, path_to_installer_file):
-#         print("")
-#
-#     def install(self):
-#         print("")
-#
-#     def uninstall(self):
-#         print("")
-#
-#     def add_ppa(self):
-#         print("")
-#
-#     # https://phoenixnap.com/kb/install-rpm-packages-on-ubuntu
-#
-#
-# class RmpForUbuntuPackageManagerInstaller:
-#     def __init__(self):
-#         print("")
-#
-#     # inherit from interface PaketManagerInstallers
-#     # CentOs
-#
-#
-# class YumPackageManagerInstaller:
-#     def __init__(self):
-#         print("")
-#
-#     # inherit from interface PaketManagerInstallers
-#     # ArchLinux / MSYS2-Windows (передать соответствующий CommandLineForInstaller)
-#
-#
-# class PackmanPackageManagerInstaller:
-#     def __init__(self):
-#         print("")
-#
-#     def is_installed(self):
-#         return False
-#
-#     def install_from_file(self, path_to_installer_file):
-#         print("")
-#
-#     def install(self):
-#         print("")
-#
-#     def uninstall(self):
-#         print("")
-#
-#     # https://wiki.archlinux.org/title/wine
-#     def enable_multilib(self):
-#         print("")
-#
-#     # fedora / centos / rhel
-#
-#
-# class DnfPackageManagerInstaller:
-#     def __init__(self):
-#         print("")
-#
-#     def add_repo(self):
-#         print("")
-#
-#     # Если скачивает torrent, то закачивает торрент при помощи transmission
-#     # (использовать https://pypi.org/project/python-magic/ для определения типа скачанного файла)
-#
-#
-# class Downloader:
-#     def __init__(self):
-#         print("")
-#
-#     # https://habr.com/ru/articles/658463/
-#
-#
-# class TransmissionDaemon:
-#     def __init__(self):
-#         print("")
-#
-#
-# class PackageName:
-#     def __init__(self):
-#         print("")
-#
-#     def get_name(self):
-#         return ""
-#
-#     def get_os(self):
-#         return ""
-#
-#
-# class PackageAction:
-#     def __init__(self):
-#         print("")
-#
-#     # winetrics + wine 32|64
-#     def install(self):
-#         # dependency installer
-#
-#         if self.__is_packet_manager():
-#             if os == "Windows" and current_os == "Windows":
-#                 PackmanPaketManagerInstaller(Msys2CommandLineForInstaller()).install(packet)
-#             if os == "Windows" and current_os == "Linux":
-#                 PackmanPaketManagerInstaller(WineCommandLineForInstaller(Msys2CommandLineForInstaller())).install(
-#                     packet)
-#             if os == "Ubuntu" and current_os == "Ubuntu":
-#                 AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install(packet)
-#         elif self.__is_download_and_install():
-#             download()  # if download_file is torrent --> dowload_torrent
-#             # if download archive (zip / tar / rar) --> unpack_archive to tmp folder
-#             if downloaded_file == "exe":  # inno setup installer
-#                 if os == "Windows" and current_os == "Windows":
-#                     WindowsInstallerInnoSetup(WindowsCommandLineForInstaller()).install(custom_command_line)
-#                 if os == "Windows" and current_os == "Linux":
-#                     WindowsInstallerInnoSetup(WineCommandLineForInstaller()).install(custom_command_line)
-#             if downloaded_file == "msi":  # inno setup installer
-#                 if os == "Windows" and current_os == "Windows":
-#                     WindowsInstallerMsi(WindowsCommandLineForInstaller()).install(custom_command_line)
-#                 if os == "Windows" and current_os == "Linux":
-#                     WindowsInstallerMsi(WineCommandLineForInstaller()).install(custom_command_line)
-#             if downloaded_file == "deb":
-#                 if os == "Ubuntu" and current_os == "Ubuntu":
-#                     AptPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
-#             if downloaded_file == "rpm":
-#                 if os == "CentOs" and current_os == "CentOs":
-#                     YumPaketManagerInstaller(LinuxCommandLineForInstaller()).install_from_file()
-#
-#     def __packet_manager(self):
-#         return False
-#
-#     def __is_download_and_install(self):
-#         return False
-#
-#
-# class InstallCommandLine:
-#     def __init__(self):
-#         print("")
-
 
 def main():
     project_config = OpenVpnConfig()
@@ -8259,6 +8177,9 @@ def main():
 
     try:
         args = parser.parse_args()
+        args_dict = vars(args)
+        # Print the result
+        print(args_dict)
     except Exception as ex:
         Logger.instance().error(ex)
         return
@@ -8306,10 +8227,10 @@ def main():
 
     elif args.command == "test":
         pci_list = Pci.get_list()
-        print(pci_list.get_vga_list())
-        print(list(pci_list.get_vga_list())[0].get_rom(pathlib.Path("/home/galina")))
+        #print(pci_list.get_vga_list())
+        #print(list(pci_list.get_vga_list())[0].get_rom(pathlib.Path("/home/galina")))
 
-        print(Pci.get_list().get_pci_id_list())
+        #print(Pci.get_list().get_pci_id_list())
         return
 
         print(Pci.get_list().is_vfio_pci_applied())

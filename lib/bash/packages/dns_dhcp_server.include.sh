@@ -9,7 +9,7 @@
 ## @brief Установить dnsmasq
 ## @retval 0 - успешно
 function dns_dhcp_server_setup() {
-    if is_termux || is_msys; then
+    if ! is_linux; then
         return 0
     fi
 
