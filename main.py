@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 import sys
+import types
 import urllib.request
 import urllib.parse
 import uuid
@@ -48,49 +49,10 @@ import iptc  # fixme utopia Перейти на nftables, iptables остави�
 import socket
 import platform
 import cpuinfo
-import logging
-import logging.handlers
 
 
-class Logger:
-    class LoggerImpl:
-        __LOG_NAME = "HomeVpn"
+from lib.python.logger import Logger
 
-        def __init__(self):
-            self.__logger = logging.getLogger(self.__LOG_NAME)
-            self.__logger.setLevel(logging.DEBUG)
-            file_handler = logging.handlers.TimedRotatingFileHandler(self.__get_log_file_path(),
-                                                                     when='midnight', encoding="utf-8")
-            file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(
-                logging.Formatter(
-                    fmt='{asctime} {levelname: <8} {message} [{process}][{thread}] <{funcName}:{lineno}>',
-                    style='{'))
-            self.__logger.addHandler(file_handler)
-
-            console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setFormatter(logging.Formatter(fmt='{message}', style='{'))
-            self.__logger.addHandler(console_handler)
-
-        def get_logger(self):
-            return self.__logger
-
-        def __get_log_file_path(self):
-            return self.__get_logging_dir_path() / f"{datetime.datetime.now():%Y-%m-%d}_{self.__LOG_NAME}.log"
-
-        def __get_logging_dir_path(self):
-            result = self.__get_current_dir_path() / "logs"
-            result.mkdir(parents=True, exist_ok=True)
-            return result
-
-        def __get_current_dir_path(self):
-            return pathlib.Path(__file__).resolve().parent
-
-    __instance = LoggerImpl()
-
-    @staticmethod
-    def instance():
-        return Logger.__instance.get_logger()
 
 
 class RegexConstants:
@@ -7851,12 +7813,24 @@ class XXX:
 
 
     def reboot(self, after_reboot_handler, is_execute_once):
+        self.__check_func_non_lambda(after_reboot_handler)
+
         command_line = ProjectScript().get_run_cmd(f'{self.__serializer.serialize(["vm_run", args])}')
 
         self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=is_execute_once)
 
     def __serialize_args(self):
         return 0
+
+
+    def __check_func_non_lambda(self, handler):
+        if self.__is_func_non_lambda(handler):
+            raise Exception("[XXX] Handler cannot be a lambda expression")
+
+    def __is_func_non_lambda(self, handler):
+        is_func = isinstance(handler, types.FunctionType)
+        return (handler.__name__ != "<lambda>") if is_func else False
+
 
 
 class VmRunner:
