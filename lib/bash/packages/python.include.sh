@@ -6,8 +6,12 @@
 
 
 ## @brief Получить целевую версию python для данной платформы
-## @details Для проекта требуется версия python >= 3.11 из-за использования regex atomic group
-##          https://docs.python.org/3/library/re.html#regular-expression-syntax
+## @details Для проекта требуется версия python >= 3.12 из-за использования
+##          [3.11+] regex atomic group
+##            https://docs.python.org/3/library/re.html#regular-expression-syntax
+##          [3.12+] возможность создания наследников от pathlib.Path
+##            https://docs.python.org/3.12/whatsnew/3.12.html
+##            The pathlib.Path class now supports subclassing
 ## @return Целевая версия python для данной платформы
 ## @retval 0 - успешно
 function python_get_version() {
