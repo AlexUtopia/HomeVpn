@@ -1,17 +1,17 @@
 from lib.python.system import CurrentOs
 
-from shell_bash_decorator import ShellBashDecorator
-from shell_cmd_decorator import ShellCmdDecorator
-from shell_msys2_decorator import ShellMsys2Decorator
+from .shell_bash_decorator import ShellBashDecorator
+from .shell_cmd_decorator import ShellCmdDecorator
+from .shell_msys2_decorator import ShellMsys2Decorator
 
 
 class RunInBashShellDecorator:
-    WIN_BASH_AUTO_SELECT_EXECUTE_NOW = 0
-    WIN_BASH_AUTO_SELECT = 1
+    WIN_BASH_INTERNAL_CALL = 0
+    WIN_BASH_EXTERNAL_CALL = 1
     WIN_BASH_MSYS2 = 2
     WIN_BASH_CYGWIN = 3
 
-    def __init__(self, win_bash=WIN_BASH_AUTO_SELECT_EXECUTE_NOW, shell_bash_decorator=ShellBashDecorator(),
+    def __init__(self, win_bash=WIN_BASH_INTERNAL_CALL, shell_bash_decorator=ShellBashDecorator(),
                  shell_cmd_decorator=ShellCmdDecorator(), shell_msys2_decorator=ShellMsys2Decorator()):
         self.__win_bash = win_bash
         self.__shell_bash_decorator = shell_bash_decorator
@@ -34,14 +34,14 @@ class RunInBashShellDecorator:
             return __decorator_func_bash(*args, **kwargs)
 
         if CurrentOs.is_windows_platform():
-            if self.__win_bash == self.WIN_BASH_AUTO_SELECT_EXECUTE_NOW:
+            if self.__win_bash == self.WIN_BASH_INTERNAL_CALL:
                 if CurrentOs.is_msys():
                     return __decorator_func_bash
                 if CurrentOs.is_cygwin():
                     return __decorator_func_bash
                 else:
                     raise Exception("[bash] Windows bash NOT AVAILABLE")
-            elif self.__win_bash == self.WIN_BASH_AUTO_SELECT:
+            elif self.__win_bash == self.WIN_BASH_EXTERNAL_CALL:
                 if CurrentOs.is_msys():
                     return __decorator_func_msys2
                 if CurrentOs.is_cygwin():

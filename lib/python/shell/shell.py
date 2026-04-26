@@ -1,13 +1,16 @@
 import os
+import re
 
 from lib.python.system import CurrentOs
 
-from run_script_in_shell_decorator import RunScriptInShellDecorator
+from .run_script_in_shell_decorator import RunScriptInShellDecorator
+from .shell_script_extension import *
 
 
 class Shell:
-    WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT = ".cmd"
-    UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT = ".sh"
+    @staticmethod
+    def get_possible_extensions_regex():
+        return "|".join(map(re.escape, WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT + UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT))
 
     def __init__(self, is_windows: bool = CurrentOs.is_windows()):
         self.__is_windows = is_windows
@@ -33,9 +36,9 @@ class Shell:
 
     def get_script_file_extension(self) -> str:
         if self.__is_windows:
-            return self.WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
+            return WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
         else:
-            return self.UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
+            return UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
 
     def get_run_script_in_shell_command_line(self, shell_script_path: str | os.PathLike[str]) -> str:
         @RunScriptInShellDecorator(shell_script_path)

@@ -6,6 +6,7 @@ import os
 import pathlib
 import shutil
 import stat
+import subprocess
 import typing
 
 from lib.python.system import CurrentOs
@@ -14,7 +15,7 @@ from lib.python.system import CurrentOs
 class Path(pathlib.Path):
     def __init__(self, *args):
         path = pathlib.Path(*args)
-        if not self.is_absolute():
+        if not path.is_absolute():
             path = pathlib.Path(os.environ.get("HOME_VPN_PROJECT_ROOT", pathlib.Path.cwd())) / path
         super().__init__(path)
 
@@ -22,13 +23,22 @@ class Path(pathlib.Path):
         return type(self)(*pathsegments)
 
     @staticmethod
+    def get_windows_home_dir_path(user: str = getpass.getuser()) -> Path | None:
+        if CurrentOs.is_msys() or CurrentOs.is_cygwin():
+            result = Path(subprocess.check_output(f'cygpath -u "${{HOMEDRIVE}}/users/{user}"', text=True))
+            if result.exists():
+                return result
+            return None
+        return Path.get_home_dir_path(user)
+
+    @staticmethod
     def get_home_dir_path(user: str = getpass.getuser()) -> Path | None:
         if CurrentOs.is_termux():
             user = ""
 
-        result = Path(f"~{user}").expanduser()
+        result = pathlib.Path(f"~{user}").expanduser()
         if result.exists():
-            return result
+            return Path(result)
         return None
 
     def file_exists(self) -> bool:

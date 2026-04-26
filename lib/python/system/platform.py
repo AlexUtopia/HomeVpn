@@ -1,6 +1,6 @@
 import pathlib
 
-from current_os import CurrentOs
+from .current_os import CurrentOs
 
 
 class Platform:

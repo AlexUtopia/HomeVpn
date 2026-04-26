@@ -64,7 +64,7 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/startup.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/telnet_client.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_client.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_server.include.sh"
-source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waidroid.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waydroid.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/wine.include.sh"
 
 

@@ -15,7 +15,7 @@
   "dns_config_dir_path": "/opt/dhcp-hostsdir",
   "dns_suffix": "homevpn.org",
   "my_host": "myhost.homevpn.org",
-  "internet_network_interface": null,
+  "internet_network_interface": "wlp9s0",
   "local_network_interface": null,
   "virtio_win_drivers_url": "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 }

@@ -1,14 +1,12 @@
 import os
 import pathlib
 
-from run_in_bash_shell_decorator import RunInBashShellDecorator
-from run_in_cmd_shell_decorator import RunInCmdShellDecorator
+from .run_in_bash_shell_decorator import RunInBashShellDecorator
+from .run_in_cmd_shell_decorator import RunInCmdShellDecorator
+from .shell_script_extension import *
 
 
 class RunScriptInShellDecorator:
-    WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST = {".cmd", ".bat", ".com"}
-    UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST = {".sh", ".bash"}
-
     def __init__(self, shell_script_path: str | os.PathLike[str], run_in_cmd_shell_decorator=RunInCmdShellDecorator(),
                  run_in_bash_shell_decorator=RunInBashShellDecorator()):
         self.__shell_script_path = pathlib.Path(shell_script_path)
@@ -25,9 +23,9 @@ class RunScriptInShellDecorator:
             return func(*args, **kwargs)
 
         shell_script_extension = self.__shell_script_path.suffix
-        if shell_script_extension in self.WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST:
+        if shell_script_extension in WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST:
             return __decorator_func_run_in_cmd_shell
-        elif shell_script_extension in self.UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST:
+        elif shell_script_extension in UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST:
             return __decorator_func_run_in_bash_shell
         else:
             return func

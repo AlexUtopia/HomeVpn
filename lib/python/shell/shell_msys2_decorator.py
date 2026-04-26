@@ -4,8 +4,9 @@ import subprocess
 
 from lib.python.logger import Logger
 from lib.python.system import CurrentOs
-from shell_bash_decorator import ShellBashDecorator
-from shell_cmd_decorator import ShellCmdDecorator
+
+from .shell_bash_decorator import ShellBashDecorator
+from .shell_cmd_decorator import ShellCmdDecorator
 
 
 # C:\msys64\msys2_shell.cmd -no-start -defterm -clang64 -c "echo gggg"
@@ -21,14 +22,14 @@ from shell_cmd_decorator import ShellCmdDecorator
 class ShellMsys2Decorator:
 
     @staticmethod
-    def get_msys2_shell() -> os.PathLike[str]:
+    def get_msys2_shell() -> pathlib.Path:
         if CurrentOs.is_msys():
             call_result = subprocess.run("cygpath -m /", shell=True, capture_output=True, text=True)
-            if call_result.returncode:
-                return pathlib.Path(call_result.stdout) / "msys2_shell.cmd"
+            if not call_result.returncode:
+                return pathlib.Path(call_result.stdout) / "msys64" / "msys2_shell.cmd"
             else:
                 Logger.instance().warning("[msys2] Get msys2_shell.cmd path from cygpath FAIL, use default")
-        return pathlib.Path(r"%SYSTEMDRIVE%/msys64/msys2_shell.cmd")
+        return pathlib.Path(r"${SYSTEMDRIVE}/msys64/msys2_shell.cmd")
 
     @staticmethod
     def get_msys2_environment() -> str:
@@ -40,7 +41,7 @@ class ShellMsys2Decorator:
             elif CurrentOs.check_arch("aarch64"):
                 return "clangarm64"
             else:
-                raise Exception("[msys2] Platform NO SUPPORT")
+                raise Exception("[msys2] Platform NOT SUPPORT")
 
     def __init__(self, msys2_shell_script_path: str | os.PathLike[str] = get_msys2_shell(),
                  msys2_environment: str = get_msys2_environment()):

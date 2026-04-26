@@ -29,7 +29,7 @@ import pathlib
 import requests
 
 # fixme utopia Исправление для iptc который неадекватно работает на Ubuntu 22.04
-import semantic_version
+
 
 # Настройка firewall для вирт машин
 # http://rhd.ru/docs/manuals/enterprise/RHEL-4-Manual/security-guide/s1-firewall-ipt-fwd.html
@@ -45,12 +45,16 @@ import platform
 import cpuinfo
 
 
-from lib.python.logger import Logger
-
-from lib.python.types import BaseParser
-
-from lib.python.utils.regex import RegexConstants
-from lib.python.system import CurrentOs
+from lib.python.logger import *
+from lib.python.network import *
+from lib.python.project import *
+from lib.python.startup import *
+from lib.python.system import *
+from lib.python.types import *
+from lib.python.utils import *
+from lib.python.utils.binary import *
+from lib.python.utils.regex import *
+from lib.python.system import *
 
 
 # fixme utopia Проверить на многопроцессорных системах (у меня есть)
@@ -479,96 +483,6 @@ class UnitTest_Cpu(unittest.TestCase):
         for cpu_name, expected_result in test_data:
             result = Cpu.Win11SupportedCpu().is_support(cpu_name)
             self.assertEqual(result, expected_result, msg=cpu_name)
-
-
-class TextConfigReader:
-    def __init__(self, config_file_path, encoding="utf-8"):
-        self.__config_file_path = Path(config_file_path)
-        self.__encoding = str(encoding)
-
-    def __str__(self):
-        return str(self.__config_file_path)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def get(self):
-        return self.__load_from_config()
-
-    def exists(self):
-        return self.__config_file_path.exists()
-
-    def __load_from_config(self):
-        result = ""
-        with open(self.__config_file_path.get(), mode="rt", encoding=self.__encoding) as config_file:
-            result += str(config_file.read())
-        # print("Load from config: {}".format(result))
-        return result
-
-
-class TextConfigWriter:
-    def __init__(self, config_file_path, encoding="utf-8", last_backup_file_path=None):
-        self.__config_file_path = Path(config_file_path)
-        self.__encoding = str(encoding)
-        self.__last_backup_file_path = last_backup_file_path
-
-    def __str__(self):
-        return str(self.__config_file_path)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def set(self, data, set_executable=False):
-        self.__makedirs()
-
-        with open(self.__config_file_path.get(), mode="wt", encoding=self.__encoding) as config_file:
-            config_file.write(str(data))
-
-        if set_executable:
-            self.__config_file_path.add_executable()
-        return self.__config_file_path
-
-    def set_with_backup(self, data, set_executable=False, is_rewrite_backup=False):
-        if self.__config_file_path.exists():
-            self.__last_backup_file_path = self.__config_file_path.create_backup(
-                backup_file_path=self.__last_backup_file_path if is_rewrite_backup else None)
-        self.set(data, set_executable)
-        return self.get_last_backup_file_path()
-
-    def get_last_backup_file_path(self):
-        return self.__last_backup_file_path
-
-    def restore_from_backup(self, is_remove_backup=False):
-        if self.__last_backup_file_path is None or not self.__last_backup_file_path.exists():
-            return False
-
-        self.__config_file_path.restore_from_backup(self.get_last_backup_file_path(), is_remove_backup=is_remove_backup)
-
-    def __makedirs(self):
-        config_file_dir = os.path.dirname(self.__config_file_path.get())
-        Path(config_file_dir).makedirs()
-
-
-class JsonConfigWriter:
-    def __init__(self, config_file_path, encoding="utf-8"):
-        self.__text_config_writer = TextConfigWriter(config_file_path, encoding)
-
-    def set(self, data):
-        self.__text_config_writer.set(json.dumps(data, sort_keys=True, indent=4))
-
-
-class JsonConfigReader:
-    def __init__(self, config_file_path, encoding="utf-8"):
-        self.__text_config_reader = TextConfigReader(config_file_path, encoding)
-        self.__json_config_writer = JsonConfigWriter(config_file_path, encoding)
-
-    def get(self):
-        return json.loads(self.__text_config_reader.get())
-
-    def get_or_create_if_non_exists(self, default_content_if_create=dict()):
-        if not self.__text_config_reader.exists():
-            self.__json_config_writer.set(default_content_if_create)
-        return self.get()
 
 
 class StunServerAddressList(JsonConfigReader):
@@ -5140,47 +5054,6 @@ class ShellConfig:
         return raw_string_value.trim().isdigit()
 
 
-class Power:
-    # https://pythonassets.com/posts/shutdown-reboot-and-log-off-on-windows-and-linux/
-    @staticmethod
-    def reboot():
-        if CurrentOs.is_linux():
-            Logger.instance().warning("[Power] reboot!!!")
-            Power.__reboot_linux()
-        elif CurrentOs.is_windows():
-            Logger.instance().warning("[Power] reboot!!!")
-            Power.__reboot_windows()
-        else:
-            Logger.instance().warning("[Power] reboot not supported")
-
-    @staticmethod
-    def poweroff():
-        if CurrentOs.is_linux():
-            Logger.instance().warning("[Power] poweroff!!!")
-            Power.__poweroff_linux()
-        elif CurrentOs.is_windows():
-            Logger.instance().warning("[Power] poweroff!!!")
-            Power.__poweroff_windows()
-        else:
-            Logger.instance().warning("[Power] poweroff not supported")
-
-    @staticmethod
-    def __reboot_linux():
-        subprocess.check_call(["reboot"], shell=True)
-
-    @staticmethod
-    def __poweroff_linux():
-        subprocess.check_call(["poweroff"], shell=True)
-
-    @staticmethod
-    def __reboot_windows():
-        subprocess.check_call(["shutdown", "/r", "/t", "0"], shell=True)
-
-    @staticmethod
-    def __poweroff_windows():
-        subprocess.check_call(["shutdown", "/s", "/t", "0"], shell=True)
-
-
 class Grub:
     GRUB_CMDLINE_LINUX = "GRUB_CMDLINE_LINUX"
     GRUB_TOP_LEVEL = "GRUB_TOP_LEVEL"
@@ -5751,34 +5624,6 @@ class VirtualMachine:
         return self.__serializer.serialize(self.__qemu_ram.get_qemu_parameters())
 
 
-class XXX:
-    def __init__(self, _class, startup = Startup()):
-        self.__class = _class
-        self.__startup = startup
-        self.__serializer = ShellSerializer()
-
-
-    def reboot(self, after_reboot_handler, is_execute_once):
-        self.__check_func_non_lambda(after_reboot_handler)
-
-        command_line = ProjectScript().get_run_cmd(f'{self.__serializer.serialize(["vm_run", args])}')
-
-        self.__startup.register_script(command_line, is_background_executing=True, is_execute_once=is_execute_once)
-
-    def __serialize_args(self):
-        return 0
-
-
-    def __check_func_non_lambda(self, handler):
-        if self.__is_func_non_lambda(handler):
-            raise Exception("[XXX] Handler cannot be a lambda expression")
-
-    def __is_func_non_lambda(self, handler):
-        is_func = isinstance(handler, types.FunctionType)
-        return (handler.__name__ != "<lambda>") if is_func else False
-
-
-
 class VmRunner:
     # fixme utopia Передать сюда parser
     def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
@@ -6091,8 +5936,6 @@ def main():
                                    choices=range(TcpPort.TCP_PORT_MIN, TcpPort.TCP_PORT_MAX),
                                    metavar=f"{TcpPort.TCP_PORT_MIN}..{TcpPort.TCP_PORT_MAX}")
 
-    parser_startup = subparsers.add_parser(StartupCrontab.COMMAND, help="Startup action script")
-
     parser_test = subparsers.add_parser("test", help="TEST")
 
     try:
@@ -6216,9 +6059,6 @@ def main():
         print(ggg)
         print(LinuxKernelParamsParser().find_all(ggg["GRUB_CMDLINE_LINUX"], as_ast=True))
 
-
-    elif args.command == StartupCrontab.COMMAND:
-        Startup().run_all_scripts()
 
 
 if __name__ == '__main__':

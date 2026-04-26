@@ -1,6 +1,3 @@
-from .run_in_bash_shell_decorator import RunInBashShellDecorator
-from .run_in_cmd_shell_decorator import RunInCmdShellDecorator
-from .run_script_in_shell_decorator import RunScriptInShellDecorator
 from .shell import Shell
 from .shell_bash_decorator import ShellBashDecorator
 from .shell_bash_script_decorator import ShellBashScriptDecorator
@@ -9,3 +6,7 @@ from .shell_docker_decorator import ShellDockerDecorator
 from .shell_msys2_decorator import ShellMsys2Decorator
 from .shell_termux_waydroid import ShellTermuxWaydroid
 from .shell_wine_decorator import ShellWineDecorator
+
+from .run_in_bash_shell_decorator import RunInBashShellDecorator
+from .run_in_cmd_shell_decorator import RunInCmdShellDecorator
+from .run_script_in_shell_decorator import RunScriptInShellDecorator

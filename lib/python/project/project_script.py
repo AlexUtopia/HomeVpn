@@ -10,7 +10,7 @@ from lib.python.shell import RunInBashShellDecorator
 class ProjectScript:
     CONFIG_PROJECT_INSTANCE_FILE_PATH = "CONFIG_PROJECT_INSTANCE_FILE_PATH"
 
-    def __init__(self, script_file_path="run_cmd.sh", win_bash: int = RunInBashShellDecorator.WIN_BASH_AUTO_SELECT):
+    def __init__(self, script_file_path="run_cmd.sh", win_bash: int = RunInBashShellDecorator.WIN_BASH_EXTERNAL_CALL):
         self.__script_file_path = Path(script_file_path)
         self.__win_bash = win_bash
 

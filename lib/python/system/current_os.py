@@ -6,7 +6,7 @@ import semantic_version
 import subprocess
 import sys
 
-from lib.python.types import LinuxKernelVersion
+from .linux_kernel_version import LinuxKernelVersion
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -215,5 +215,5 @@ class CurrentOs:
     # https://wiki.debian.org/SecureBoot#What_is_UEFI_Secure_Boot.3F
     # https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#Checking_Secure_Boot_status
     @staticmethod
-    def is_uefi_secure_boot(self) -> bool:
+    def is_uefi_secure_boot() -> bool:
         return CurrentOs.is_uefi_boot() and False
