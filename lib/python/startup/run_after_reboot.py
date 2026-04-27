@@ -6,7 +6,6 @@ import sys
 import tempfile
 import types
 import typing
-import uuid
 
 from lib.python.power import Power
 from lib.python.project import ProjectScript

@@ -1,6 +1,7 @@
 from lib.python.types import Path
 
-from .shell_bash_decorator import ShellBashDecorator
+from lib.python.shell import ShellBashDecorator
+
 
 class ShellTermuxWaydroid:
     def __init__(self):

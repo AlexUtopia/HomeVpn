@@ -3,8 +3,8 @@ import re
 
 from lib.python.system import CurrentOs
 
-from .run_script_in_shell_decorator import RunScriptInShellDecorator
-from .shell_script_extension import *
+from lib.python.shell import RunScriptInShellDecorator
+from lib.python.shell import UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT, WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT
 
 
 class Shell:

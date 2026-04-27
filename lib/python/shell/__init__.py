@@ -1,4 +1,6 @@
-from .shell import Shell
+from .shell_script_extension import UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT, UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST, \
+    WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT, WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST
+
 from .shell_bash_decorator import ShellBashDecorator
 from .shell_bash_script_decorator import ShellBashScriptDecorator
 from .shell_cmd_decorator import ShellCmdDecorator
@@ -10,3 +12,5 @@ from .shell_wine_decorator import ShellWineDecorator
 from .run_in_bash_shell_decorator import RunInBashShellDecorator
 from .run_in_cmd_shell_decorator import RunInCmdShellDecorator
 from .run_script_in_shell_decorator import RunScriptInShellDecorator
+
+from .shell import Shell

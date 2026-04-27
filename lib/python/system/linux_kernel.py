@@ -3,7 +3,7 @@ import requests
 import subprocess
 import tempfile
 
-from .current_os import CurrentOs
+from lib.python.system import CurrentOs
 
 
 class LinuxKernel:

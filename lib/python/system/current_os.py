@@ -6,7 +6,7 @@ import semantic_version
 import subprocess
 import sys
 
-from .linux_kernel_version import LinuxKernelVersion
+from lib.python.system import LinuxKernelVersion
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/

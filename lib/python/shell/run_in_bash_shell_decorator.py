@@ -1,8 +1,8 @@
 from lib.python.system import CurrentOs
 
-from .shell_bash_decorator import ShellBashDecorator
-from .shell_cmd_decorator import ShellCmdDecorator
-from .shell_msys2_decorator import ShellMsys2Decorator
+from lib.python.shell import ShellBashDecorator
+from lib.python.shell import ShellCmdDecorator
+from lib.python.shell import ShellMsys2Decorator
 
 
 class RunInBashShellDecorator:

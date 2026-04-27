@@ -1,9 +1,9 @@
 import os
 import pathlib
 
-from .run_in_bash_shell_decorator import RunInBashShellDecorator
-from .run_in_cmd_shell_decorator import RunInCmdShellDecorator
-from .shell_script_extension import *
+from lib.python.shell import RunInBashShellDecorator
+from lib.python.shell import RunInCmdShellDecorator
+from lib.python.shell import UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST, WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST
 
 
 class RunScriptInShellDecorator:

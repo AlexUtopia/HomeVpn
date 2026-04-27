@@ -1,9 +1,9 @@
 from lib.python.system import CurrentOs
 
-from .shell_bash_decorator import ShellBashDecorator
-from .shell_bash_script_decorator import ShellBashScriptDecorator
-from .shell_cmd_decorator import ShellCmdDecorator
-from .shell_wine_decorator import ShellWineDecorator
+from lib.python.shell import ShellBashDecorator
+from lib.python.shell import ShellBashScriptDecorator
+from lib.python.shell import ShellCmdDecorator
+from lib.python.shell import ShellWineDecorator
 
 
 class RunInCmdShellDecorator:

@@ -1,10 +1,9 @@
 import json
 import os
 
+from lib.python.types import JsonConfigWriter
 from lib.python.types import JsonType
 from lib.python.types import Path
-
-from .text_writer import JsonConfigWriter
 
 
 class TextConfigReader:

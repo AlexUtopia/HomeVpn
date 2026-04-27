@@ -8,8 +8,6 @@ from lib.python.system import CurrentOs
 # WineHQ запускается из под bash, рекомендуется применять с ShellCmdDecorator
 # https://unix.stackexchange.com/questions/801401/wine-cmd-automatically-escapes-quotes-adds-backslash
 class ShellWineDecorator:
-
-
     @staticmethod
     def get_wine_executable_path() -> pathlib.Path:
         if CurrentOs.is_linux():

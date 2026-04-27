@@ -1,6 +1,6 @@
 from lib.python.utils import apply_decorators
 
-from .shell_bash_decorator import ShellBashDecorator
+from lib.python.shell import ShellBashDecorator
 
 
 class ShellBashScriptDecorator:

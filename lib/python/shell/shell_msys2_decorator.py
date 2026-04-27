@@ -5,8 +5,8 @@ import subprocess
 from lib.python.logger import Logger
 from lib.python.system import CurrentOs
 
-from .shell_bash_decorator import ShellBashDecorator
-from .shell_cmd_decorator import ShellCmdDecorator
+from lib.python.shell import ShellBashDecorator
+from lib.python.shell import ShellCmdDecorator
 
 
 # C:\msys64\msys2_shell.cmd -no-start -defterm -clang64 -c "echo gggg"
