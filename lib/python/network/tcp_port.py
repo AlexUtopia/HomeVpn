@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 
 class TcpPort:
     TCP_PORT_MIN = 1
@@ -8,10 +10,11 @@ class TcpPort:
     RDP_PORT_DEFAULT = 3389
     VNC_BASE_PORT_NUMBER = 5900
 
-    def __init__(self, port: int | str):
-        if not TcpPort.is_valid(port):
+    def __init__(self, port: TcpPort | int | str):
+        _port = int(port)
+        if not TcpPort.is_valid(_port):
             raise Exception(f"TCP port FAIL: {port}")
-        self.__port = int(port)
+        self.__port = _port
 
     def __str__(self):
         return str(self.__port)

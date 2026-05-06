@@ -1,0 +1,20 @@
+from lib.python.vm import VmMetaData
+
+
+class QemuBios:
+    def __init__(self, vm_meta_data: VmMetaData, chipset: str | None = None):
+        self.__vm_meta_data = vm_meta_data
+        self.__chipset = chipset
+
+    # SeaBIOS используется по умолчанию, дополнительные аргументы не требуются
+    def get_qemu_parameters(self):
+        # https://www.seabios.org/Debugging
+        # https://forums.gentoo.org/viewtopic-p-8812362.html?sid=f8b324e3711f9796b6a777e198212a6d
+        result = [{"-chardev": {"file": {"path": self.__get_log_file_path(), "id": "seabios"}}, "-device": {
+            "isa-debugcon": {"iobase": 0x402, "chardev": "seabios"}}}]
+        if self.__chipset:
+            result.append({"-machine": self.__chipset})
+        return result
+
+    def __get_log_file_path(self):
+        return self.__vm_meta_data.get_working_dir_path() / "seabios.log"

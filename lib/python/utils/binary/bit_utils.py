@@ -206,11 +206,11 @@ class BitUtils:
     @staticmethod
     def __check_int_type(val):
         if not isinstance(val, int):
-            raise Exception("Value unknown type, must be int: {}".format(str(val)))
+            raise Exception(f"Value unknown type, must be int: {val}")
 
     @staticmethod
     def __check_range(val, val_min, val_max):
         if val_min > val_max:
-            raise Exception("Value min ({}) more value max ({}))".format(val_min, val_max))
+            raise Exception(f"Value min ({val_min}) more value max ({val_max}))")
         if val_min > val > val_max:
-            raise Exception("Value invalid range: {}, (min={}, max={})".format(str(val), val_min, val_max))
+            raise Exception(f"Value invalid range: {val}, (min={val_min}, max={val_max})")

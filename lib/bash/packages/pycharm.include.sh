@@ -8,8 +8,9 @@
 ## @brief Установить pycharm
 ## @retval 0 - успешно
 function pycharm_setup() {
-    local PACKAGE_NAME="pycharm-community-2025.1.3.1"
-    local DOWNLOAD_URL="https://download.jetbrains.com/python/${PACKAGE_NAME}.tar.gz"
+    local PACKAGE_VERSION="2026.1.1"
+    local PACKAGE_NAME="pycharm-community-${PACKAGE_VERSION}"
+    local DOWNLOAD_URL="https://github.com/JetBrains/intellij-community/releases/download/pycharm%2F${PACKAGE_VERSION}/pycharm-${PACKAGE_VERSION}.tar.gz"
     local INSTALL_DIR_PATH="${GLOBAL_CONFIG_OPT_DIR_PATH}"
     local PYCHARM_INSTALL_DIR_PATH="${INSTALL_DIR_PATH}/${PACKAGE_NAME}"
 
