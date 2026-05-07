@@ -256,7 +256,7 @@ function desktop_file_get_value() {
     local REGEX="${GROUP_HEADER_SEARCH_REGEX}${KEY_VALUE_REGEX}+"
 
     local RESULT=""
-    RESULT=$(cat "${DESKTOP_ENTRY_FILE_PATH}" | pcregrep --only-matching=1 --multiline "${REGEX}" ) || return $?
+    RESULT=$(cat "${DESKTOP_ENTRY_FILE_PATH}" | pcre2grep --only-matching=1 --multiline "${REGEX}" ) || return $?
     echo "${RESULT}"
     return 0
 }

@@ -18,12 +18,12 @@ function vnc_server_packages_setup() {
     fi
 
     # fixme utopia pcregrep и findutils здесь временно
-    local PACKAGE_LIST="pcregrep findutils tigervnc-standalone-server tigervnc-xorg-extension x11-xserver-utils autocutsel"
+    local PACKAGE_LIST="pcre2-utils findutils tigervnc-standalone-server tigervnc-xorg-extension x11-xserver-utils autocutsel"
     if is_termux; then
         termux_gui_packages_setup || return $?
-        PACKAGE_LIST="pcregrep findutils tigervnc xorg-xhost"
+        PACKAGE_LIST="pcre2grep findutils tigervnc xorg-xhost"
     elif package_manager_is_dnf; then
-        PACKAGE_LIST="pcregrep findutils tigervnc-server xorg-x11-server-utils"
+        PACKAGE_LIST="pcre2-tools findutils tigervnc-server xorg-x11-server-utils"
     fi
 
     package_manager_install_packages "${PACKAGE_LIST}" || return $?
