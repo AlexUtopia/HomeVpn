@@ -4,6 +4,7 @@
 
 
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/dnf.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/pacman.include.sh"
 
 
@@ -54,10 +55,9 @@ function package_manager_update_and_upgrade() {
         apt_update_and_upgrade || return $?
     elif package_manager_is_pacman; then
         pacman_update_and_upgrade || return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
     elif package_manager_is_dnf; then
+        dnf_update_and_upgrade || return $?
+    elif package_manager_is_yum; then
         # fixme utopia Дописать
         return 1
     elif package_manager_is_zypper; then
@@ -81,10 +81,9 @@ function package_manager_install_packages() {
         apt_install_packages "${PACKAGE_NAME_LIST}" || return $?
     elif package_manager_is_pacman; then
         pacman_install_packages "${PACKAGE_NAME_LIST}" || return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
     elif package_manager_is_dnf; then
+        dnf_install_packages "${PACKAGE_NAME_LIST}" || return $?
+    elif package_manager_is_yum; then
         # fixme utopia Дописать
         return 1
     elif package_manager_is_zypper; then
@@ -104,10 +103,9 @@ function package_manager_is_package_installed() {
         apt_is_package_installed "${PACKAGE_NAME}" || return $?
     elif package_manager_is_pacman; then
         pacman_is_package_installed "${PACKAGE_NAME}" || return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
     elif package_manager_is_dnf; then
+        dnf_is_package_installed "${PACKAGE_NAME}" || return $?
+    elif package_manager_is_yum; then
         # fixme utopia Дописать
         return 1
     elif package_manager_is_zypper; then
@@ -127,10 +125,9 @@ function package_manager_is_package_exists_in_repository() {
         apt_is_package_exists_in_repository "${PACKAGE_NAME}" || return $?
     elif package_manager_is_pacman; then
         pacman_is_package_exists_in_repository "${PACKAGE_NAME}" || return $?
-    elif package_manager_is_yum; then
-        # fixme utopia Дописать
-        return 1
     elif package_manager_is_dnf; then
+        dnf_is_package_exists_in_repository "${PACKAGE_NAME}" || return $?
+    elif package_manager_is_yum; then
         # fixme utopia Дописать
         return 1
     elif package_manager_is_zypper; then

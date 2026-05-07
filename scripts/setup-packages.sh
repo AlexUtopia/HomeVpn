@@ -556,4 +556,5 @@ function main() {
 # https://bytexd.com/xrdp-ubuntu/
 # https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-main
+vnc_server_setup
+#main
