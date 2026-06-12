@@ -2,15 +2,18 @@
 
 ## @brief Функции работы с edk2/ovmf
 ## @details Результат (относительно корня проекта):
-##          data/ovmf/
-##             x64/
+##          data/ovmf/<edk2-tag-name>/<CurrentOs.get_name()>/
+##             x86_64/   // target qemu arch (x86_64, aarch64, arm)
 ##               OVMF_CODE.fd
 ##               OVMF_VARS.fd
-##               OVMF_CODE.secboot.fd - пригодно для запуска Windows в защищённом режиме
-##               OVMF_VARS.secboot.fd - пригодно для запуска Windows в защищённом режиме
-##               intel_ivbios_8086_<INTEL_VGA_PID>_out.rom - видеобиос (UEFI) для встроенных VGA Intel с выводом изображения на монитор
-##               intel_ivbios_8086_<INTEL_VGA_PID>.rom - видеобиос (UEFI) для встроенных VGA Intel без вывода изображения на монитор
-##               IntelGopDriver.efi   - IntelGopDriver извлечённый из оригинального UEFI, необязательный
+##               OVMF_CODE.secboot.fd   - пригодно для запуска Windows в защищённом режиме
+##               OVMF_VARS.secboot.fd   - пригодно для запуска Windows в защищённом режиме
+##               <VGA_VID>_<VGA_PID>/   - PCI VID/PID целевого устройства для которого имеется дополнительный rom
+##                 ivbios.rom           - видеобиос (UEFI) для встроенных VGA Intel без вывода изображения на монитор
+##                 <md5hash>/           - Хеш описателя platform.json
+##                   platform.json      - описатель данной IBM PC совместимой платформы (платформа с поддержкой DMI)
+##                   ivbios.rom         - видеобиос (UEFI) для встроенных VGA Intel с выводом изображения на монитор (благодаря сборке с использованием IntelGopDriver.efi)
+##                   IntelGopDriver.efi - IntelGopDriver извлечённый из оригинального UEFI (это платформоспецифичный компонент), необязательный
 ##             aarch64/
 ##               OVMF_CODE.fd
 ##               OVMF_VARS.fd
@@ -19,14 +22,6 @@
 ##
 ## https://github.com/tianocore/edk2/tree/master/OvmfPkg
 ## https://github.com/retrage/edk2-nightly
-
-## Коллекция готовых intel_ivbios структура директорий
-## <edk2-tag-name>/
-##     </sys/class/dmi/id/board_vendor>/
-##         </sys/class/dmi/id/board_name>/
-##             </sys/class/dmi/id/bios_vendor>/
-##                 </sys/class/dmi/id/bios_version>/
-##                     </sys/class/dmi/id/bios_date>/
 
 
 EDK2_TOOLCHAIN="GCC"
@@ -136,7 +131,7 @@ function edk2_ovmf_setup() {
     local PACKAGE_NAME="edk2"
     local DOWNLOAD_URL="https://github.com/tianocore/${PACKAGE_NAME}.git"
     local INSTALL_DIR_PATH="${GLOBAL_CONFIG_OPT_DIR_PATH}/${PACKAGE_NAME}"
-    local PROJECT_TAG="edk2-stable202508.01"
+    local PROJECT_TAG="${CONFIG_OVMF_VERSION}"
 
     edk2_build_setup_dependencies || return $?
 

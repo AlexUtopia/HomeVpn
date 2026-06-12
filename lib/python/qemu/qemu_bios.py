@@ -1,3 +1,5 @@
+import pathlib
+
 from lib.python.vm import VmMetaData
 
 
@@ -7,7 +9,7 @@ class QemuBios:
         self.__chipset = chipset
 
     # SeaBIOS используется по умолчанию, дополнительные аргументы не требуются
-    def get_qemu_parameters(self):
+    def get_qemu_parameters(self) -> list[dict]:
         # https://www.seabios.org/Debugging
         # https://forums.gentoo.org/viewtopic-p-8812362.html?sid=f8b324e3711f9796b6a777e198212a6d
         result = [{"-chardev": {"file": {"path": self.__get_log_file_path(), "id": "seabios"}}, "-device": {
@@ -16,5 +18,5 @@ class QemuBios:
             result.append({"-machine": self.__chipset})
         return result
 
-    def __get_log_file_path(self):
+    def __get_log_file_path(self) -> pathlib.Path:
         return self.__vm_meta_data.get_working_dir_path() / "seabios.log"

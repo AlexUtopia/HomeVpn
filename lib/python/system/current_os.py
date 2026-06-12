@@ -17,6 +17,21 @@ from lib.python.system import LinuxKernelVersion
 # https://stackoverflow.com/a/54837707
 class CurrentOs:
 
+    @staticmethod
+    def get_name() -> str:
+        if CurrentOs.is_termux():
+            return "android"
+        elif CurrentOs.is_linux():
+            return "linux"
+        elif CurrentOs.is_windows():
+            return "windows"
+        elif CurrentOs.is_msys():
+            return "msys"
+        elif CurrentOs.is_cygwin():
+            return "cygwin"
+        else:
+            raise Exception("[OS] UNSUPPORTED")
+
     ## Проверить что текущая ОС и её архитектура являются целевыми
     # @details Архитектура может не указываться
     # @details Правильные примеры:
@@ -72,7 +87,42 @@ class CurrentOs:
         my_cpu_info = cpuinfo.get_cpu_info()
         my_arch: str = my_cpu_info["arch"]
         my_bits: int = my_cpu_info["bits"]
-        return cpuinfo.cpuinfo._parse_arch(arch_for_check) == (my_arch, my_bits)
+        return CurrentOs.__parse_arch(arch_for_check) == (my_arch, my_bits)
+
+    @staticmethod
+    def compat_arch(arch_for_check: str) -> bool:
+        # https://share.google/aimode/wM8wksl3Zcs0nRA9o
+        # | qemu-system (после двоеточия архитектура elf qemu-system) | host arch | Можно использовать KVM |
+        # | --------------------------------------------------------- | --------- | ---------------------- |
+        # | qemu-system-i386:i386                                     | x86_64    | +                      |
+        # | qemu-system-i386:i386                                     | i386      | +                      |
+        # | qemu-system-i386:x86_64                                   | x86_64    | +                      |
+        # | qemu-system-i386:x86_64                                   | i386      | не запустится          |
+        # | qemu-system-x86_64:i386                                   | x86_64    | -                      |
+        # | qemu-system-x86_64:i386                                   | i386      | -                      |
+        # | qemu-system-x86_64:x86_64                                 | x86_64    | +                      |
+        # | qemu-system-x86_64:x86_64                                 | i386      | не запустится          |
+        # fixme utopia Метод не учитывает архитектуру целевого приложения
+
+        compat_table = {
+            ('X86_64', 64): {('X86_32', 32)},
+            ('ARM_8', 64): {('ARM_8', 32), ('ARM_7', 32)},
+            ('ARM_8', 32): {('ARM_7', 32)}
+        }
+
+        my_cpu_info = cpuinfo.get_cpu_info()
+        my_arch_and_bits = (my_cpu_info["arch"], my_cpu_info["bits"])
+        target_arch_and_bits = CurrentOs.__parse_arch(arch_for_check)
+        if target_arch_and_bits == my_arch_and_bits:
+            return True
+
+        return target_arch_and_bits in compat_table.get(my_arch_and_bits, set())
+
+    @staticmethod
+    def __parse_arch(arch_for_check: str) -> tuple[str | None, int | None]:
+        if arch_for_check == "arm":
+            return 'ARM_7', 32
+        return cpuinfo.cpuinfo._parse_arch(arch_for_check)
 
     @staticmethod
     def is_windows_platform() -> bool:
@@ -83,6 +133,8 @@ class CurrentOs:
         # https://docs.python.org/3/library/sys.html#sys.platform
         return my_platform.lower().startswith('win')
 
+    # fixme utopia Проверить работоспособность https://www.msys2.org/wiki/Porting/
+    #   https://stackoverflow.com/a/54837707
     @staticmethod
     def is_msys(my_platform: str = sys.platform) -> bool:
         # https://docs.python.org/3/library/sys.html#sys.platform

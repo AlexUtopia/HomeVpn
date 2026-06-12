@@ -76,3 +76,7 @@ export CONFIG_NETWORK_INTERFACE_INTERNET=""
 ## @brief Имя сетевого интерфейса через который осуществляется выход в локальную сеть
 ## @details Если не задан, то будет определён автоматически
 export CONFIG_NETWORK_INTERFACE_LOCAL=""
+
+## @brief Версия EDK2/OVMF используемая для запуска виртуальной машины с UEFI
+## @details Git-тег из репозитория https://github.com/tianocore/edk2.git
+export CONFIG_OVMF_VERSION="edk2-stable202508.01"

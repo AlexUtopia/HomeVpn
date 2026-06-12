@@ -30,6 +30,9 @@ class PciVidPid(BaseParser):
 
         raise Exception(f"[PciAddress] Format FAIL: {vid_pid} | {type(vid_pid)}")
 
+    def to_path_compat_str(self) -> str:
+        return f"{self.vid}_{self.pid}"
+
     def __str__(self):
         return f"{self.vid}{self.__SEPARATOR}{self.pid}"
 

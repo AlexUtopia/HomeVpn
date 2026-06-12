@@ -126,8 +126,8 @@ class StartupBase:
                 startup_script_content)).with_suffix(startup_script_file_extension)
 
         @staticmethod
-        def __get_startup_script_name_by_content(startup_script_content) -> str:
-            return hashlib.md5(str(startup_script_content).encode(StartupBase.StartupScript.__ENCODE)).hexdigest()
+        def __get_startup_script_name_by_content(startup_script_content: str) -> str:
+            return hashlib.md5(startup_script_content.encode(StartupBase.StartupScript.__ENCODE)).hexdigest()
 
     def __init__(self, supervisor_script_id: str, supervisor_script, user: str = getpass.getuser(),
                  startup_script_base_dir_path: str | os.PathLike[str] | None = None):
