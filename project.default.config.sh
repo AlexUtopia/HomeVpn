@@ -66,9 +66,6 @@ export CONFIG_DNS_MY_HOST="myhost.${CONFIG_DNS_SUFFIX}"
 ## @brief Путь до директории реестра виртуальных машин
 export CONFIG_VM_REGISTRY_DIR_PATH="${HOME_VPN_PROJECT_ROOT}/vm"
 
-## @brief URL на скачивание virtio драйверов для Windows
-export CONFIG_VIRTIO_WIN_DRIVERS_URL="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
-
 ## @brief Имя сетевого интерфейса через который осуществляется выход в интернет
 ## @details Если не задан, то будет определён автоматически
 export CONFIG_NETWORK_INTERFACE_INTERNET=""

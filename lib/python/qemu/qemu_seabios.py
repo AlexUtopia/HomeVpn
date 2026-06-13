@@ -3,7 +3,7 @@ import pathlib
 from lib.python.vm import VmMetaData
 
 
-class QemuBios:
+class QemuSeabios:
     def __init__(self, vm_meta_data: VmMetaData, chipset: str | None = None):
         self.__vm_meta_data = vm_meta_data
         self.__chipset = chipset

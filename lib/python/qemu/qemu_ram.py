@@ -20,7 +20,7 @@ class QemuRam:
     def get_qemu_parameters(self) -> dict:
         return {"-m": self.__ram_size_in_mib}
 
-    def check(self):
+    def check(self) -> None:
         mem = psutil.virtual_memory()
         size_in_bytes = self.__ram_size_in_mib * self.BYTES_IN_MIBIBYTE
         if size_in_bytes > mem.available:

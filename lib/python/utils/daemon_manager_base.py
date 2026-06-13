@@ -10,7 +10,7 @@ class DaemonManagerBase:
     def __init__(self, label: str, action: str):
         self.__label = label
         self.__action = action
-        self.__command_line = None
+        self.__command_line: str = ""
         atexit.register(self.clear_at_exit)
 
     def start(self) -> None:

@@ -1,20 +1,23 @@
 import asyncio
+import os
 import shlex
 
 from lib.python.logger import Logger
 
+type RunnableDescriptorType = tuple[str | os.PathLike[str], bool, bool, bool]
 
 class AsyncRunner:
     STDOUT_DECODE = "utf-8"
     STDERR_DECODE = STDOUT_DECODE
 
     def __init__(self):
-        self.__runnable_descriptor_list_parallel = []
-        self.__runnable_descriptor_list_sequential = []
+        self.__runnable_descriptor_list_parallel : list[RunnableDescriptorType] = []
+        self.__runnable_descriptor_list_sequential : list[RunnableDescriptorType] = []
 
-    def add(self, script_path_or_command, is_background_executing=False, shell=True, log_stdout=True,
-            log_stderr=True):
-        if bool(is_background_executing):
+    def add(self, script_path_or_command: str | os.PathLike[str], is_background_executing: bool = False, shell: bool = True,
+            log_stdout: bool = True,
+            log_stderr: bool = True):
+        if is_background_executing:
             self.__runnable_descriptor_list_parallel.append((script_path_or_command, shell, log_stdout, log_stderr))
         else:
             self.__runnable_descriptor_list_sequential.append((script_path_or_command, shell, log_stdout, log_stderr))
@@ -29,7 +32,7 @@ class AsyncRunner:
         result = await self.__run_parallel(*runnable_list)
         return result[0] + result[1]
 
-    async def __run(self, runnable_descriptor):
+    async def __run(self, runnable_descriptor: RunnableDescriptorType):
         script_path_or_command, shell, log_stdout, log_stderr = runnable_descriptor
 
         Logger.instance().debug(f'[ScriptRun] Start "{script_path_or_command}"')
@@ -56,7 +59,7 @@ class AsyncRunner:
             Logger.instance().debug(f'[ScriptRun] KILL [pid={pid}] "{script_path_or_command}"')
             return await self.__wait(process, script_path_or_command)
 
-    async def __wait(self, process, script_path_or_command):
+    async def __wait(self, process, script_path_or_command: str | os.PathLike[str]):
         await process.wait()
         Logger.instance().debug(
             f'[ScriptRun] End [pid={process.pid}, exit_code={process.returncode}] "{script_path_or_command}"')
@@ -92,20 +95,20 @@ class AsyncRunner:
     async def __pass_value(self, val):
         return val
 
-    async def __log_stdout(self, stdout_stream, is_log):
+    async def __log_stdout(self, stdout_stream, is_log: bool):
         while True:
             buffer = await stdout_stream.readline()
             if buffer:
-                if bool(is_log):
+                if is_log:
                     Logger.instance().debug(buffer.decode(self.STDOUT_DECODE))
             else:
                 break
 
-    async def __log_stderr(self, stderr_stream, is_log):
+    async def __log_stderr(self, stderr_stream, is_log: bool):
         while True:
             buffer = await stderr_stream.readline()
             if buffer:
-                if bool(is_log):
+                if is_log:
                     Logger.instance().error(buffer.decode(self.STDERR_DECODE))
             else:
                 break

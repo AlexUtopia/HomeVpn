@@ -5,3 +5,4 @@ from .pci_vid_pid import PciVidPid
 
 from .pci import Pci
 from .vfio_pci import VfioPci
+from .vfio import Vfio

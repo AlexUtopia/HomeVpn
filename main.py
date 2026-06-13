@@ -1866,36 +1866,7 @@ class Tap:
         subprocess.check_call("ip tuntap del dev {} mode tap".format(self.__interface), shell=True)
 
 
-class Virtio:
-    __WIN_DRIVERS_FILENAME = "virtio-win-drivers.iso"
 
-    def __init__(self, project_config):
-        self.__project_config = project_config
-
-    def get_win_drivers(self):
-        win_drivers_iso_path = self.__get_win_drivers_iso_path()
-        if win_drivers_iso_path.exists():
-            Logger.instance().debug(f"[Virtio] Win drivers was downloaded: \"{win_drivers_iso_path}\"")
-            return win_drivers_iso_path
-
-        self.__download_win_drivers(win_drivers_iso_path)
-        return win_drivers_iso_path
-
-    def __get_win_drivers_iso_path(self):
-        return Path(os.path.join(self.__get_and_make_vm_dir(), Virtio.__WIN_DRIVERS_FILENAME))
-
-    def __get_and_make_vm_dir(self):
-        result = self.__project_config.get_vm_registry_dir_path()
-        Path(result).makedirs()
-        return result
-
-    def __download_win_drivers(self, win_drivers_iso_path):
-        virtio_win_drivers_url = self.__project_config.get_virtio_win_drivers_url()
-
-        Logger.instance().debug(
-            f"[Virtio] Win drivers DOWNLOAD: {virtio_win_drivers_url} --> \"{win_drivers_iso_path}\"")
-        urllib.request.urlretrieve(virtio_win_drivers_url, str(win_drivers_iso_path))
-        Logger.instance().debug(f"[Virtio] Win drivers DOWNLOAD: OK")
 
 
 class UdpWatchdog:
@@ -2173,88 +2144,6 @@ class UnitTest_ClaimCounterMismatch(unittest.TestCase):
         self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
 
 
-# fixme utopia Необходимо проверять параметры загрузки linux kernel (см. /proc/cmdline)
-# Нам нужен парсер командной строки для linux kernel
-class Iommu:
-    # fixme utopia Вырубить виртуализацию в биос и проверить появится ли
-    __IOMMU_SYS_FS_PATH = "/sys/class/iommu/"
-
-    # проверить что в /etc/default/grub есть intel_iommu=on iommu=pt и в dmesg есть
-    # iommu: Default domain type: Passthrough
-    def check(self):
-        return os.path.exists(self.__IOMMU_SYS_FS_PATH) and os.path.isdir(self.__IOMMU_SYS_FS_PATH)
-
-    def is_intel(self):
-        return self.check() and self.__is_cpu_vendor("intel")
-
-    def is_amd(self):
-        return self.check() and self.__is_cpu_vendor("amd")
-
-    def is_arm(self):
-        return self.check() and self.__is_cpu_vendor("arm")
-
-    # https://docs.kernel.org/admin-guide/kernel-parameters.html
-    def get_kernel_parameters(self):
-        if self.is_intel():
-            return [{"intel_iommu": "on", "iommu": "pt"}]
-        elif self.is_amd():
-            return [{"amd_iommu": "on", "iommu": "pt"}]
-        return []
-
-    def __is_cpu_vendor(self, cpu_vendor):
-        try:
-            return str(cpu_vendor) in str(cpuinfo.get_cpu_info()['vendor_id_raw']).lower()
-        except Exception:
-            return False
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# https://docs.kernel.org/driver-api/vfio-mediated-device.html
-# https://docs.kernel.org/driver-api/vfio.html
-class Vfio:
-    def __init__(self, vfio_pci, iommu=Iommu(), is_acs_override=True):
-        self.__vfio_pci = vfio_pci
-        self.__iommu = iommu
-        self.__is_acs_override = bool(is_acs_override)
-
-    def get_kernel_parameters(self):
-        result = [{"modules_load": ["vfio", "vfio_pci", "vfio_iommu_type1", "vfio_virqfd"], "kvm.ignore_msrs": "1",
-                   "vfio_io_iommu_type1.allow_unsafe_interrupts": "1"}]
-        result.extend(self.__vfio_pci.get_kernel_parameters())
-        result.extend(self.__iommu.get_kernel_parameters())
-        pci_id_list = self.__vfio_pci.get_pci_id_list()
-        if self.__is_acs_override and len(pci_id_list) > 0:
-            result.append({"pcie_acs_override": [{"id": pci_id_list}]})
-        return result
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class VgaPciIntel(Pci):
     def __init__(self, pci):
         super().__init__()
@@ -2316,16 +2205,18 @@ class VgaPciIntel(Pci):
                 f"[VgaPciIntel] Current platform NOT SUPPORTED for igd passthrough: {', '.join(recommendation)}")
         else:
             if CurrentOs.is_bios_boot() and qemu_platform.is_bios_boot():
+                # Не знаю на чём проверить
                 return
-            if CurrentOs.is_uefi_boot() and qemu_platform.is_uefi_boot():  # fixme utopia Проверить на Ноутбуке Галины
+            if CurrentOs.is_uefi_boot() and qemu_platform.is_uefi_boot():
                 # https://lore.kernel.org/all/20250312102929.329ff4f5.alex.williamson@redhat.com/T/
                 # https://gitlab.com/qemu-project/qemu/-/issues/1538
-                # Так в UPT режиме работать будет?
+                # Проверить на асере
                 return
             if CurrentOs.is_uefi_boot() and qemu_platform.is_bios_boot():
                 # https://lore.kernel.org/all/20250312102929.329ff4f5.alex.williamson@redhat.com/T/
                 # https://gitlab.com/qemu-project/qemu/-/issues/1538
                 # Так в UPT режиме работать будет?
+                # Работает на асере
                 return
             # fixme utopia Перепроверить с OVMF отсюда. Будет ли работать комбинация BIOS Host / UEFI Guest
             # https://github.com/x78x79x82x79/i915ovmfPkg
@@ -2935,172 +2826,6 @@ class Section:
     #     },
     #     { ... }
     #   ]
-
-
-class ShellSerializer:
-    KEY_VALUE_SEPARATOR_TABLE_DEFAULT = [{"prefix": "--", "separator": "="},
-                                         {"prefix": "", "separator": " "}]
-
-    def __init__(self, quotes_for_string_value='"',
-                 key_value_separator_table=KEY_VALUE_SEPARATOR_TABLE_DEFAULT, pair_separator=" ",
-                 escape_literal=EscapeLiteral(), nested_serializer=None, nested_key_value_separator=" ",
-                 nested_escape_literal=None):
-        self.__quotes_for_string_value = quotes_for_string_value
-        self.__key_value_separator_table = key_value_separator_table
-        self.__pair_separator = pair_separator
-        self.__escape_literal = escape_literal
-        self.__nested_serializer = nested_serializer
-        self.__nested_key_value_separator = nested_key_value_separator
-        self.__nested_escape_literal = nested_escape_literal
-
-    def serialize(self, config):
-        result = self.__serialize_impl(config)
-        if result.endswith(self.__pair_separator):
-            result = result[:len(result) - len(self.__pair_separator)]
-        return result
-
-    def __serialize_impl(self, config):
-        result = ""
-        if isinstance(config, list):
-            for item in config:
-                result = f"{result}{self.__serialize_impl(item)}"
-        elif isinstance(config, dict):
-            for key, value in config.items():
-                if isinstance(value, dict) or isinstance(value, list):
-                    result = f"{result}{self.__serialize_nested_impl(key, value)}"
-                else:
-                    result = f"{result}{self.__serialize_key_value(key, value)}"
-        else:
-            result = f"{result}{self.__serialize_key(config)}"
-        return result
-
-    def __serialize_nested_impl(self, key, value):
-        if self.__nested_serializer is not None:
-            return self.__serialize_key_value(key, self.__nested_serializer.serialize(value), is_nested=True)
-        raise Exception(f"Nested serialization policy NOT FOUND: {key}: {value}")
-
-    def __serialize_key(self, key):
-        if len(key) == 0:
-            return ""
-        return f"{key}{self.__pair_separator}"
-
-    def __serialize_key_value(self, key, value, is_nested=False):
-        separator = self.__get_nested_separator(key) if is_nested else self.__get_separator(key)
-        return f"{key}{separator}{self.__serialize_value(value, is_nested)}{self.__pair_separator}"
-
-    def __serialize_value(self, value, is_nested=False):
-        result = str(value)
-        if isinstance(value, str):
-            result = self.___encode_nested_literal(result) if is_nested else self.__encode_literal(result)
-            result = f"{self.__quotes_for_string_value}{result}{self.__quotes_for_string_value}"
-        return result
-
-    def __get_separator(self, key):
-        for __key_value_separator in self.__key_value_separator_table:
-            if str(key).startswith(__key_value_separator["prefix"]):
-                return __key_value_separator['separator']
-        return ""
-
-    def __get_nested_separator(self, key):
-        if self.__nested_key_value_separator is None:
-            return ""
-        return str(self.__nested_key_value_separator)
-
-    def __encode_literal(self, value):
-        if self.__escape_literal is None:
-            return value
-        return self.__escape_literal.encode(value)
-
-    def ___encode_nested_literal(self, value):
-        if self.__nested_escape_literal is None:
-            return value
-        return self.__nested_escape_literal.encode(value)
-
-
-class UnitTest_ShellSerializer(unittest.TestCase):
-
-    def test_serialize(self):
-        ref_table = {
-            '--device="test_device" key "\\\\\\n\\"hello world!!\\"\\r" key1 --device="test_device" -device2 "test_device2" -device3 "test_device3" --key2=15 --key3=18.7 --key4=True': [
-                {"--device": "test_device"},
-                {"key": "\\\n\"hello world!!\"\r"},
-                "key1",
-                {"--device": "test_device", "-device2": "test_device2", "-device3": "test_device3"},
-                {"--key2": 15, "--key3": 18.7, "--key4": True},
-            ],
-            '--device="test_device" --device1="test_device1"':
-                {
-                    "--device": "test_device",
-                    "--device1": "test_device1"
-                }
-        }
-
-        serializer = ShellSerializer()
-        for config_serialized, config in ref_table.items():
-            result = serializer.serialize(config)
-            self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
-
-    def test_nested_fail(self):
-        config = {"-device": {"subdevice": "test_device"}}
-
-        serializer = ShellSerializer()
-        self.assertRaises(Exception, serializer.serialize, config)
-
-
-class QemuSerializer(ShellSerializer):
-    class QemuEscapeLiteral(EscapeLiteral):
-        def __init__(self):
-            super().__init__(encode_table=[(",", ",,")])
-
-    def __init__(self):
-        super().__init__(nested_serializer=ShellSerializer(quotes_for_string_value="",
-                                                           key_value_separator_table=[
-                                                               {"prefix": "", "separator": "="}],
-                                                           pair_separator=",",
-                                                           escape_literal=QemuSerializer.QemuEscapeLiteral(),
-                                                           nested_serializer=ShellSerializer(quotes_for_string_value="",
-                                                                                             key_value_separator_table=[
-                                                                                                 {"prefix": "",
-                                                                                                  "separator": "="}],
-                                                                                             pair_separator=",",
-                                                                                             escape_literal=QemuSerializer.QemuEscapeLiteral()),
-                                                           nested_key_value_separator=","
-                                                           ))
-
-
-class UnitTest_QemuSerializer(unittest.TestCase):
-
-    def test_serialize(self):
-        ref_table = {
-            '-enable-kvm -m 8192 -netdev "tap,ifname=homevpn-tap2,script=no,downscript=no,id=homevpn-tap2-id" -device "virtio-net,netdev=homevpn-tap2-id,mac=ee:08:bf:ab:45:42" -vnc "127.0.0.1:2" -drive "file=/home/utopia/HomeVpn/vm ,,/win10.img,media=disk,if=virtio" -cpu "Icelake-Server-v5" -smp "cpus=4,sockets=1,cores=2,threads=2,maxcpus=4" -device "virtio-vga-gl" -display "sdl,gl=on" -usb -device "usb-host,vendorid=0x045E,productid=0x00DB" -usb -device "usb-host,vendorid=0x0BDA,productid=0x8771" -usb -device "usb-host,vendorid=0x046D,productid=0xC05B" -usb -device "usb-host,vendorid=0x258A,productid=0x0302" -monitor "telnet:127.0.0.1:55555,server,nowait"': [
-                "-enable-kvm",
-                {"-m": 8192},
-                {"-netdev": {"tap":
-                                 {"ifname": "homevpn-tap2", "script": "no", "downscript": "no",
-                                  "id": "homevpn-tap2-id"}}},
-                {"-device": {"virtio-net": {"netdev": "homevpn-tap2-id", "mac": "ee:08:bf:ab:45:42"}}},
-                {"-vnc": "127.0.0.1:2"},
-                {"-drive": {"file": "/home/utopia/HomeVpn/vm ,/win10.img", "media": "disk", "if": "virtio"}},
-                {"-cpu": "Icelake-Server-v5"},
-                {"-smp": {"cpus": 4, "sockets": 1, "cores": 2, "threads": 2, "maxcpus": 4}},
-                {"-device": "virtio-vga-gl"},
-                {"-display": {"sdl": {"gl": "on"}}},
-                "-usb",
-                {"-device": {"usb-host": {"vendorid": "0x045E", "productid": "0x00DB"}}},
-                "-usb",
-                {"-device": {"usb-host": {"vendorid": "0x0BDA", "productid": "0x8771"}}},
-                "-usb",
-                {"-device": {"usb-host": {"vendorid": "0x046D", "productid": "0xC05B"}}},
-                "-usb",
-                {"-device": {"usb-host": {"vendorid": "0x258A", "productid": "0x0302"}}},
-                {"-monitor": ["telnet:127.0.0.1:55555", "server", "nowait"]}
-            ]
-        }
-
-        serializer = QemuSerializer()
-        for config_serialized, config in ref_table.items():
-            result = serializer.serialize(config)
-            self.assertEqual(result, config_serialized, f"\n\nRESULT\n{result}\n\nREF\n{config_serialized}")
 
 
 class IniSerializer:
@@ -3739,54 +3464,6 @@ exit {self.__EXIT_CODE}
         result = await async_script_runner.run_all()
         pid, exit_code = result[0]
         self.assertEqual(exit_code, self.__SHELL_EXIT_CODE_COMMAND_NOT_FOUND_IN_THE_SYSTEMS_PATH)
-
-
-
-
-
-class QemuPciPassthrough:
-    def __init__(self, vfio_pci):
-        if isinstance(vfio_pci, VfioPci):
-            self.__vfio_pci = vfio_pci
-        elif isinstance(vfio_pci, str):
-            self.__vfio_pci = VfioPci.from_string(vfio_pci)
-        else:
-            raise Exception(f"[QemuPciPassthrough] vfio_pci TYPE MISMATCH: {type(vfio_pci)}")
-
-    def __str__(self):
-        return str(self.__vfio_pci)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def get_qemu_parameters(self, vm_meta_data):
-        return self.__vfio_pci.get_qemu_parameters(vm_meta_data)
-
-    def is_other_vga_disable(self):
-        return self.__vfio_pci.is_other_vga_disable()
-
-    def check_platform(self, qemu_platform):
-        return self.__vfio_pci.check_platform(qemu_platform)
-
-
-# qemu-system-$(uname -m) -cpu help
-class QemuCpu:
-    def __init__(self):
-        pass
-
-    def get_qemu_parameters(self):
-        logical_cpu_count = psutil.cpu_count(logical=True)
-        if not logical_cpu_count:
-            logical_cpu_count = 1
-            Logger.instance().warning(f"[Cpu] logic cores count undefined, use {logical_cpu_count} core")
-        return {"-cpu": self.__get_cpu_parameter_value(),
-                "-smp": {"cpus": logical_cpu_count, "maxcpus": logical_cpu_count}}
-
-    def __get_cpu_parameter_value(self):
-        return "host" if Cpu.is_win11_support() else "Icelake-Server"
-
-
-
 
 
 # fixme utopia Обеспечить возможность установки win11

@@ -2,17 +2,18 @@ import threading
 import time
 
 from lib.python.logger import Logger
-from lib.python.pci import Pci, PciPassthroughMode
+from lib.python.pci import Pci, PciPassthroughMode, Vfio, VfioPci
 from lib.python.power import Power
 from lib.python.startup import RunAfterReboot
 from lib.python.system import LinuxKernel
+from lib.python.utils import ShellSerializer
+from lib.python.vm import Virtio, VmRegistry
 
-from lib.python.qemu import QemuBuiltinKeyboardAndMousePassthrough, QemuCdRom
+from lib.python.qemu import QemuBuiltinKeyboardAndMousePassthrough, QemuCdRom, QemuPlatform, QemuRam
 
 
 class VmRunner:
-    # fixme utopia Передать сюда parser
-    def __init__(self, vm_name, project_config=OpenVpnConfig(), startup=Startup(), block_internet_access=False,
+    def __init__(self, vm_name, project_config=OpenVpnConfig(), block_internet_access=False,
                  initiate_vga_passthrough=PciPassthroughMode.NONE,
                  initiate_vga_audio_passthrough=PciPassthroughMode.NONE,
                  initiate_usb_host_passthrough=PciPassthroughMode.NONE,
@@ -23,7 +24,6 @@ class VmRunner:
                  vm_platform=None, ram=None, os_distr_path=None, vm_host_mode=False):
         self.__vm_name = vm_name
         self.__project_config = project_config
-        self.__startup = startup
         self.__block_internet_access = bool(block_internet_access)
         self.__initiate_vga_passthrough = PciPassthroughMode(initiate_vga_passthrough)
         self.__initiate_vga_audio_passthrough = PciPassthroughMode(initiate_vga_audio_passthrough)
@@ -38,13 +38,11 @@ class VmRunner:
         self.__vm_host_mode = bool(vm_host_mode)
         self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
         self.__serializer = ShellSerializer()
+        self.__run_after_reboot = RunAfterReboot()
 
     def run(self):
         if self.__initiate_vga_passthrough or self.__initiate_usb_host_passthrough or self.__initiate_isa_bridge_passthrough:
-            if self.__qemu_pci_passthrough:
-                self.after_reboot()
-            else:
-                self.before_reboot()
+            self.before_reboot()
         else:
             self.__run()
 
@@ -93,7 +91,7 @@ class VmRunner:
                 # 6.1 или пересборка текущего умолчательного ядра с ASC override патчем
                 # self.__grub.set_top_level(self.__grub.get_last_liquorix_kernel_path())
                 grub_config_backup_path = self.__grub.append_cmd_line_linux(
-                    Vfio(VfioPci(Pci.PciList())).get_kernel_parameters())
+                    Vfio(VfioPci(Pci.PciList())).get_kernel_parameters(), is_acs_override=True)
                 if grub_config_backup_path is None:
                     Logger.instance().error("[Vm] Make GRUB config backup FAIL")
                     return
@@ -115,25 +113,7 @@ class VmRunner:
             return
         self.__grub.update()
 
-        # fixme utopia Параметры командной строки надо отдавать как есть в виде словаря, а словарь лишь дополнить
-        #  параметрами qemu_pci_passthrough и grub_config_backup_path
-        args = [self.__vm_name, "--bi" if self.__block_internet_access else "",
-                {"--vm_platform": self.__vm_platform if self.__vm_platform else QemuPlatform.DEFAULT,
-                 "-m": self.__ram if self.__ram else QemuRam.DEFAULT,
-                 "--qemu_pci_passthrough": str(QemuPciPassthrough(vfio_pci)),
-                 "--grub_config_backup_path": str(grub_config_backup_path),
-                 "--vga_passthrough": self.__initiate_vga_passthrough,
-                 "--vga_audio_passthrough": self.__initiate_vga_audio_passthrough,
-                 "--usb_host_passthrough": self.__initiate_usb_host_passthrough,
-                 "--isa_bridge_passthrough": self.__initiate_isa_bridge_passthrough},
-                "--builtin_kbd_and_mouse_passthrough" if self.__initiate_builtin_kbd_and_mouse_passthrough else "",
-                "--vm_host_mode" if self.__vm_host_mode else ""]
-
-        command_line = ProjectScript().get_run_cmd(f'{self.__serializer.serialize(["vm_run", args])}')
-
-        self.__startup.register_script(command_line, is_background_executing=True,
-                                       is_execute_once=not self.__vm_host_mode)
-        # Power.reboot()
+        self.__run_after_reboot.register_after_reboot_handler(self, self.after_reboot, is_reboot=True)
 
     def after_reboot(self):
         sleep_sec = 20
