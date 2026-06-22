@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 
@@ -7,21 +8,25 @@ from lib.python.power import Power
 from lib.python.startup import RunAfterReboot
 from lib.python.system import LinuxKernel
 from lib.python.utils import ShellSerializer
-from lib.python.vm import Virtio, VmRegistry
+from lib.python.vm import Virtio, VmName, VmRegistry
 
-from lib.python.qemu import QemuBuiltinKeyboardAndMousePassthrough, QemuCdRom, QemuPlatform, QemuRam
+from lib.python.qemu import QemuBuiltinKeyboardAndMousePassthrough, QemuCdRom, QemuRam, VirtualMachine
 
 
 class VmRunner:
-    def __init__(self, vm_name, project_config=OpenVpnConfig(), block_internet_access=False,
+    def __init__(self,
+                 vm_name: VmName,
+                 project_config=OpenVpnConfig(),
+                 block_internet_access: bool = False,
                  initiate_vga_passthrough=PciPassthroughMode.NONE,
                  initiate_vga_audio_passthrough=PciPassthroughMode.NONE,
                  initiate_usb_host_passthrough=PciPassthroughMode.NONE,
                  initiate_isa_bridge_passthrough=PciPassthroughMode.NONE,
-                 initiate_builtin_kbd_and_mouse_passthrough=False,
-                 asc_override_patched_kernel=False,
-                 qemu_pci_passthrough=None, grub_config_backup_path=None,
-                 vm_platform=None, ram=None, os_distr_path=None, vm_host_mode=False):
+                 initiate_builtin_kbd_and_mouse_passthrough: bool = False,
+                 asc_override_patched_kernel: bool = False,
+                 ram: QemuRam | None = None,
+                 os_distr_path: str | os.PathLike[str] | None = None,
+                 vm_host_mode: bool = False):
         self.__vm_name = vm_name
         self.__project_config = project_config
         self.__block_internet_access = bool(block_internet_access)
@@ -31,14 +36,13 @@ class VmRunner:
         self.__initiate_isa_bridge_passthrough = PciPassthroughMode(initiate_isa_bridge_passthrough)
         self.__initiate_builtin_kbd_and_mouse_passthrough = bool(initiate_builtin_kbd_and_mouse_passthrough)
         self.__asc_override_patched_kernel = bool(asc_override_patched_kernel)
-        self.__qemu_pci_passthrough = qemu_pci_passthrough
-        self.__vm_platform = vm_platform
         self.__ram = ram
         self.__os_distr_path = os_distr_path
         self.__vm_host_mode = bool(vm_host_mode)
         self.__grub = Grub(grub_config_backup_path=grub_config_backup_path)
         self.__serializer = ShellSerializer()
         self.__run_after_reboot = RunAfterReboot()
+        self.__vfio_pci: VfioPci | None = None
 
     def run(self):
         if self.__initiate_vga_passthrough or self.__initiate_usb_host_passthrough or self.__initiate_isa_bridge_passthrough:
@@ -104,8 +108,8 @@ class VmRunner:
         elif check_iommu_group_for_passthrough is None:
             return
 
-        vfio_pci = VfioPci(pci_list_for_passthrough)
-        vfio = Vfio(vfio_pci)
+        self.__vfio_pci = VfioPci(pci_list_for_passthrough)
+        vfio = Vfio(self.__vfio_pci)
 
         grub_config_backup_path = self.__grub.append_cmd_line_linux(vfio.get_kernel_parameters())
         if grub_config_backup_path is None:
@@ -207,9 +211,9 @@ class VmRunner:
         if self.__initiate_builtin_kbd_and_mouse_passthrough:
             qemu_builtin_kbd_and_mouse_passthrough = QemuBuiltinKeyboardAndMousePassthrough()
 
-        vm = VirtualMachine(network_bridge, vm_meta_data,
-                            qemu_pci_passthrough=self.__qemu_pci_passthrough,
-                            qemu_platform=QemuPlatform(vm_meta_data, self.__vm_platform),
+        vm = VirtualMachine(network_bridge,
+                            vm_meta_data,
+                            vfio_pci=self.__vfio_pci,
                             qemu_cdrom=QemuCdRom(self.__os_distr_path, Virtio(self.__project_config).get_win_drivers()),
                             qemu_builtin_kbd_and_mouse_passthrough=qemu_builtin_kbd_and_mouse_passthrough,
                             qemu_ram=self.__ram)

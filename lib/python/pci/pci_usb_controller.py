@@ -10,7 +10,7 @@ class UsbUhciPci(Pci):
         return ["usbcore.nousb"]
 
     @staticmethod
-    def is_my_instance(pci):
+    def is_my_instance(pci: Pci):
         return pci.class_code.is_usb_uhci_controller(pci.prog_if)
 
 
@@ -23,7 +23,7 @@ class UsbOhciPci(Pci):
         return ["usbcore.nousb"]
 
     @staticmethod
-    def is_my_instance(pci):
+    def is_my_instance(pci: Pci):
         return pci.class_code.is_usb_ohci_controller(pci.prog_if)
 
 
@@ -36,7 +36,7 @@ class UsbEhciPci(Pci):
         return ["usbcore.nousb"]
 
     @staticmethod
-    def is_my_instance(pci):
+    def is_my_instance(pci: Pci):
         return pci.class_code.is_usb_ehci_controller(pci.prog_if)
 
 
@@ -49,5 +49,5 @@ class UsbXhciPci(Pci):
         return ["usbcore.nousb"]
 
     @staticmethod
-    def is_my_instance(pci):
+    def is_my_instance(pci: Pci):
         return pci.class_code.is_usb_xhci_controller(pci.prog_if)

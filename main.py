@@ -49,6 +49,7 @@ from lib.python.utils import *
 from lib.python.utils.binary import *
 from lib.python.utils.regex import *
 from lib.python.system import *
+from lib.python.qemu import QemuRam
 
 
 # fixme utopia Проверить на многопроцессорных системах (у меня есть)
@@ -2144,16 +2145,6 @@ class UnitTest_ClaimCounterMismatch(unittest.TestCase):
         self.assertEqual(claim_counter_mismatch.get_state(), UdpWatchdog.ClaimCounterMismatch.STATE_NORMAL)
 
 
-class IsaBridgePci(Pci):
-    def __init__(self, pci):
-        super().__init__()
-        self._init(pci)
-
-    @staticmethod
-    def is_my_instance(pci):
-        return pci.class_code.is_isa_bridge()
-
-
 # fixme utopia Parser for command line
 #   -<key1> <value1> -<key2> "<value1>" -<key2> '<value1>' -<key2> --<key3>=<value3> --<key3>="<value3>" --<key3>='<value3>'
 # fixme utopia Parser for subvalue
@@ -3372,11 +3363,6 @@ def main():
                                help="Download, install and configure ASC override patched Linux kernel.\nSee https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF#Bypassing_the_IOMMU_groups_(ACS_override_patch)",
                                action='store_true')
     parser_vm_run.add_argument("--os_distr_path", type=Path, help="OS distributive iso image path")
-    parser_vm_run.add_argument("--qemu_pci_passthrough", type=QemuPciPassthrough,
-                               help="PCI list for passthrough to virtual machine. Not for human use")
-    parser_vm_run.add_argument("--grub_config_backup_path", type=Path,
-                               help="Grub config backup file path. Not for human use")
-
     parser_vm_ssh_fwd = subparsers.add_parser("vm_ssh_fwd", help="Port forwarding for SSH for virtual machine")
     parser_vm_ssh_fwd.add_argument("vm_name", type=str, help="Virtual machine name")
     parser_vm_ssh_fwd.add_argument("host_tcp_port", type=int,
@@ -3428,9 +3414,6 @@ def main():
                  initiate_isa_bridge_passthrough=args.isa_bridge_passthrough,
                  initiate_builtin_kbd_and_mouse_passthrough=args.builtin_kbd_and_mouse_passthrough,
                  asc_override_patched_kernel=args.asc_override_patched_kernel,
-                 qemu_pci_passthrough=args.qemu_pci_passthrough,
-                 grub_config_backup_path=args.grub_config_backup_path,
-                 vm_platform=args.vm_platform,
                  ram=args.m,
                  os_distr_path=args.os_distr_path,
                  vm_host_mode=args.vm_host_mode).run()

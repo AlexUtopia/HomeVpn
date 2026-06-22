@@ -84,7 +84,7 @@ class VgaPciIntel(Pci):
                     f"[VgaPciIntel] Current platform NOT SUPPORTED for igd passthrough: use {' or '.join(qemu_platform.get_uefi_boot_platform_list())} platform")
 
     @staticmethod
-    def is_my_instance(pci):
+    def is_my_instance(pci: Pci):
         return pci.class_code.is_vga() and pci.device_id.is_intel()
 
     def __check_passthrough_in_legacy_mode(self):

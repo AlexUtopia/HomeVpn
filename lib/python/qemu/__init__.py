@@ -9,12 +9,13 @@ from .qemu_ram import QemuRam
 from .qemu_rtc import QemuRtc
 from .qemu_seabios import QemuSeabios
 from .qemu_serial import QemuSerial
+from .qemu_serializer import QemuSerializer
 from .qemu_uefi import QemuUefi
 from .qemu_usb_passthrough import QemuUsbPassthrough
 from .qemu_vga import QemuVgaDefault, QemuVgaVirtio
 
-from .qemu_serializer import QemuSerializer
-
 from .tpm_emulator import TpmEmulator
 
 from .qemu_platform import QemuPlatform
+
+from .virtual_machine import VirtualMachine
