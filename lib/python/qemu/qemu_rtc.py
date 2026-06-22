@@ -1,3 +1,5 @@
+
+
 class QemuRtc:
     def __init__(self):
         pass
