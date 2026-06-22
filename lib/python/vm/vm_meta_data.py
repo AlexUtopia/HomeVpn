@@ -9,8 +9,8 @@ import socket
 import typing
 
 from lib.python.network import TcpPort
-
-from lib.python.vm import VmName
+from lib.python.system import Arch
+from lib.python.vm import QemuPlatform, VmName
 
 
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
@@ -68,9 +68,11 @@ class VmMetaData:
 
     IMAGE_EXTENSION = ".img"
 
+    ARCH_DEFAULT = "x86_64"
+
     def __init__(self, name: VmName | str,
                  image_dir_path: str | os.PathLike[str],
-                 dns_suffix: str = DnsDhcpProvider.DNS_SUFFIX_DEFAULT, arch: str = "x86_64"):
+                 platform: QemuPlatform = QemuPlatform(arch=Arch(ARCH_DEFAULT))):
         self.__image_path = VmMetaData.Parameter[VmName](str(VmName(name)), image_dir_path,
                                                          extension=self.IMAGE_EXTENSION)
         self.__mac_address = VmMetaData.Parameter[netaddr.EUI]("mac_address", image_dir_path,
@@ -79,7 +81,8 @@ class VmMetaData:
         self.__ssh_forward_port = VmMetaData.Parameter[TcpPort]("ssh_forward_port", image_dir_path)
         self.__rdp_forward_port = VmMetaData.Parameter[TcpPort]("rdp_forward_port", image_dir_path)
         self.__dns_suffix = dns_suffix
-        self.__arch = VmMetaData.Parameter[str]("arch", image_dir_path, value_default_handler=lambda: arch)
+        self.__platform = VmMetaData.Parameter[QemuPlatform]("platform", image_dir_path,
+                                                             value_default_handler=lambda: platform)
         self.makedirs()
 
     def __str__(self):
@@ -164,10 +167,10 @@ class VmMetaData:
     def get_working_dir_path(self) -> pathlib.Path:
         return self.get_image_path().parent / "data"
 
-    def get_arch(self) -> str:
-        result = self.__arch.load()
+    def get_platform(self) -> QemuPlatform:
+        result = self.__platform.load()
         if not result:
-            raise Exception("[Vm] Arch UNDEFINED")
+            raise Exception("[Vm] Platform UNDEFINED")
         return result
 
     def makedirs(self) -> None:

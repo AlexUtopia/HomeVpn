@@ -80,14 +80,15 @@ class Ovmf:
 class QemuUefi:
     PREFIX = "uefi"
 
-    def __init__(self, vm_meta_data: VmMetaData, is_secure_boot=True):
+    def __init__(self, vm_meta_data: VmMetaData, machine: str = "q35", is_secure_boot=True):
         self.__vm_meta_data = vm_meta_data
+        self.__machine = machine
         self.__ovmf = Ovmf(self.__vm_meta_data, is_secure_boot=is_secure_boot)
 
     def get_qemu_parameters(self) -> list[dict]:
         ovmf_code_file_path, ovmf_vars_file_path = self.__get_vm_ovmf_paths()
         return [
-            {"-machine": "q35"},
+            {"-machine": self.__machine},
             {"-drive": {
                 "if": "pflash", "format": "raw", "file": ovmf_code_file_path, "readonly": "on"}},
             {"-drive": {

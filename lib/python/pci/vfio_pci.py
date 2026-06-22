@@ -9,8 +9,6 @@ from lib.python.vm import VmMetaData
 class VfioPci:
     def __init__(self, pci_list: Pci.PciList):
         self.__pci_list = pci_list
-        if not isinstance(self.__pci_list, Pci.PciList):
-            raise Exception(f"[VfioPci] pci_list TYPE MISMATCH: {type(self.__pci_list)}")
 
     def __str__(self):
         return str(self.__pci_list)

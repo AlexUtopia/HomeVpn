@@ -6,7 +6,7 @@ import semantic_version
 import subprocess
 import sys
 
-from lib.python.system import LinuxKernelVersion
+from lib.python.system import Arch, LinuxKernelVersion
 
 
 # https://tproger.ru/translations/demystifying-decorators-in-python/
@@ -51,7 +51,7 @@ class CurrentOs:
         result = CurrentOs.check_os(os_for_check)
         if len(os_vs_arch) == maxsplit:
             arch_for_check = os_vs_arch[1]
-            return result and CurrentOs.check_arch(arch_for_check)
+            return result and Arch() == Arch(arch_for_check)
         return result
 
     ## Проверить что текущая ОС является целевой
@@ -67,62 +67,6 @@ class CurrentOs:
                 CurrentOs.is_windows(os_for_check) and CurrentOs.is_windows()) or (
                 CurrentOs.is_msys(os_for_check) and CurrentOs.is_msys()) or (
                 CurrentOs.is_cygwin(os_for_check) and CurrentOs.is_cygwin())
-
-    ## Проверить что текущая архитектура ОС является целевой
-    # @details Допустимые значения arch_for_check можно увидеть здесь
-    #          https://github.com/workhorsy/py-cpuinfo/blob/master/cpuinfo/cpuinfo.py#L782
-    # @details Полезные ссылки на тему
-    #          https://unix.stackexchange.com/questions/136959/where-does-uname-get-its-information-from
-    #          https://habr.com/ru/companies/intel/articles/201462/
-    #          https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
-    #          https://github.com/torvalds/linux/blob/master/scripts/package/mkdebian#L21
-    #          http://ports.ubuntu.com/ubuntu-ports/dists/noble/main/
-    #          http://archive.ubuntu.com/ubuntu/dists/noble/main/
-    #          https://youtu.be/6DybX5Lkqt4?si=jocEAhC03jxshFLQ
-    # @details В настоящий момент сделано по-простому - с использованием библиотеки cpuinfo
-    # @param [in] os_for_check Целевая архитектура ОС
-    # @return True - текущая архитектура ОС является целевой; False - нет
-    @staticmethod
-    def check_arch(arch_for_check: str) -> bool:
-        my_cpu_info = cpuinfo.get_cpu_info()
-        my_arch: str = my_cpu_info["arch"]
-        my_bits: int = my_cpu_info["bits"]
-        return CurrentOs.__parse_arch(arch_for_check) == (my_arch, my_bits)
-
-    @staticmethod
-    def compat_arch(arch_for_check: str) -> bool:
-        # https://share.google/aimode/wM8wksl3Zcs0nRA9o
-        # | qemu-system (после двоеточия архитектура elf qemu-system) | host arch | Можно использовать KVM |
-        # | --------------------------------------------------------- | --------- | ---------------------- |
-        # | qemu-system-i386:i386                                     | x86_64    | +                      |
-        # | qemu-system-i386:i386                                     | i386      | +                      |
-        # | qemu-system-i386:x86_64                                   | x86_64    | +                      |
-        # | qemu-system-i386:x86_64                                   | i386      | не запустится          |
-        # | qemu-system-x86_64:i386                                   | x86_64    | -                      |
-        # | qemu-system-x86_64:i386                                   | i386      | -                      |
-        # | qemu-system-x86_64:x86_64                                 | x86_64    | +                      |
-        # | qemu-system-x86_64:x86_64                                 | i386      | не запустится          |
-        # fixme utopia Метод не учитывает архитектуру целевого приложения
-
-        compat_table = {
-            ('X86_64', 64): {('X86_32', 32)},
-            ('ARM_8', 64): {('ARM_8', 32), ('ARM_7', 32)},
-            ('ARM_8', 32): {('ARM_7', 32)}
-        }
-
-        my_cpu_info = cpuinfo.get_cpu_info()
-        my_arch_and_bits = (my_cpu_info["arch"], my_cpu_info["bits"])
-        target_arch_and_bits = CurrentOs.__parse_arch(arch_for_check)
-        if target_arch_and_bits == my_arch_and_bits:
-            return True
-
-        return target_arch_and_bits in compat_table.get(my_arch_and_bits, set())
-
-    @staticmethod
-    def __parse_arch(arch_for_check: str) -> tuple[str | None, int | None]:
-        if arch_for_check == "arm":
-            return 'ARM_7', 32
-        return cpuinfo.cpuinfo._parse_arch(arch_for_check)
 
     @staticmethod
     def is_windows_platform() -> bool:
