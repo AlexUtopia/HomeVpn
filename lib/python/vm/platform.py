@@ -3,7 +3,6 @@ import typing
 from lib.python.system import Arch
 
 
-# fixme utopia Приспособить для не x86 платформы
 # qemu-system-{VmMetaData.get_arch()} -machine help
 # https://share.google/aimode/NHiO5vvQrgg9PgWCW
 # Добавить метод is_uboot()
