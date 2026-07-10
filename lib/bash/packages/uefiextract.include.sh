@@ -55,11 +55,12 @@ function uefiextract_setup() {
 ## @param [in] Путь до UEFI образа материнской платы
 ## @param [in] Путь до конечного файла куда извлечь IntelGopDriver из UEFI
 ##             Если файл существует, он будет перезаписан
+## @param [in] Uuid секции uefi для извлечения
 ## @retval 0 - успешно
-function uefiextract_get_intel_gop_driver() {
+function uefiextract_get_efi_section() {
     local UEFI_IMAGE_FILE_PATH="${1}"
     local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
-    local INTEL_GOP_DRIVER_UUID="380B6B4F-1454-41F2-A6D3-61D1333E8CB4"
+    local EFI_SECTION_UUID="${3}"
 
     if ! [[ -e "${UEFI_IMAGE_FILE_PATH}" ]]; then
         return 1
@@ -69,8 +70,31 @@ function uefiextract_get_intel_gop_driver() {
     TEMP_DIR_PATH=$(mktemp --directory --dry-run) &&
     trap_add_remove_temp_path_handler "${TEMP_DIR_PATH}" || return $?
 
-    "$(uefiextract_get_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${INTEL_GOP_DRIVER_UUID}" -o "${TMP_DIR_PATH}" -m body &&
+    "$(uefiextract_get_executable_path)" "${UEFI_IMAGE_FILE_PATH}" -i "${EFI_SECTION_UUID}" -o "${TMP_DIR_PATH}" -m body &&
     fs_make_dirs "$(dirname "${OUT_INTEL_GOP_DRIVER_FILE_PATH}")" &&
     cp -f "${TEMP_DIR_PATH}/body.bin" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}" || return $?
+    return 0
+}
+
+## @brief Извлечь IntelGopDriver из UEFI образа
+## @param [in] Путь до UEFI образа материнской платы
+## @param [in] Путь до конечного файла куда извлечь IntelGopDriver из UEFI
+##             Если файл существует, он будет перезаписан
+## @retval 0 - успешно
+function uefiextract_get_intel_gop_driver() {
+    local INTEL_GOP_DRIVER_UUID="380B6B4F-1454-41F2-A6D3-61D1333E8CB4"
+    uefiextract_get_efi_section "${UEFI_IMAGE_FILE_PATH}" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}" "${INTEL_GOP_DRIVER_UUID}"
+    return 0
+}
+
+## @brief Извлечь IntelLegacyVideoBIOS из UEFI образа
+## @details Может отсутствовать
+## @param [in] Путь до UEFI образа материнской платы
+## @param [in] Путь до конечного файла куда извлечь IntelLegacyVideoBIOS из UEFI
+##             Если файл существует, он будет перезаписан
+## @retval 0 - успешно
+function uefiextract_get_intel_legacy_vbios() {
+    local INTEL_LEGACY_VBIOS_UUID="C5A4306E-E247-4ECD-A9D8-5B1985D3DCDA"
+    uefiextract_get_efi_section "${UEFI_IMAGE_FILE_PATH}" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}" "${INTEL_LEGACY_VBIOS_UUID}"
     return 0
 }

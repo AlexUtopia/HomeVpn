@@ -2,7 +2,8 @@ import psutil
 
 from lib.python.logger import Logger
 
-
+# fixme utopia Требуется ли? ,kvm=off
+# https://www.qemu.org/docs/master/system/i386/hyperv.html
 # qemu-system-$(uname -m) -cpu help
 class QemuCpu:
     def __init__(self):

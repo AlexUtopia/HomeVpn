@@ -10,6 +10,14 @@ class TcpPort:
     RDP_PORT_DEFAULT = 3389
     VNC_BASE_PORT_NUMBER = 5900
 
+    VNC_OFFSET_MAX = 20
+
+    @staticmethod
+    def get_vnc_port(offset: int):
+        if offset < 0 or offset > TcpPort.VNC_OFFSET_MAX:
+            raise Exception(f"VNC port offset FAIL: current={offset}, min=0, max={TcpPort.VNC_OFFSET_MAX}")
+        return TcpPort(TcpPort.VNC_BASE_PORT_NUMBER + offset)
+
     def __init__(self, port: TcpPort | int | str):
         _port = int(port)
         if not TcpPort.is_valid(_port):

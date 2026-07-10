@@ -1,9 +1,10 @@
 from lib.python.system import CurrentOs
+from lib.python.vm import VmMetaData
 
-from lib.python.pci import Pci
+from lib.python.pci import BasePath, i915ovmfRom, LegacyVideoBiosRom, Pci, PciRom, VfioIgdPkgRom
 
 
-# https://www.google.com/search?q=%D0%9F%D0%BE%D0%B4%D1%81%D0%BA%D0%B0%D0%B6%D0%B8%2C+%D0%BF%D0%BE%D0%B6%D0%B0%D0%BB%D1%83%D0%B9%D1%81%D1%82%D0%B0+%D1%80%D0%B5%D0%B6%D0%B8%D0%BC+%D0%BF%D1%80%D0%BE%D0%B1%D1%80%D0%BE%D1%81%D0%B0+UPT+%28%D0%BE%D0%BF%D0%B8%D1%81%D0%B0%D0%BD+%D0%B7%D0%B4%D0%B5%D1%81%D1%8C+https%3A%2F%2Fgithub.com%2Fqemu%2Fqemu%2Fcommit%2F0eb734241762bc63bf8308bed3573431f195ddcf%29+%D0%BC%D0%BE%D0%B6%D0%B5%D1%82+%D0%BE%D1%81%D1%83%D1%89%D0%B5%D1%81%D1%82%D0%B2%D0%BB%D1%8F%D1%82%D1%8C%D1%81%D1%8F+%D0%B2+%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D0%B0%D1%85%3A%0D%0A1%29+uefi+host%2C+uefi+guest%0D%0A2%29+uefi+host%2C+bios+guest%0D%0A3%29+bios+host%2C+bios+guest%0D%0A%3F&sca_esv=f8991862dc286373&sxsrf=APpeQnvNPwqYqCBhWM3k4EhBnD02IxUipg%3A1782243307179&source=hp&fbs=ABfTbFVoRrC-QTLMntAkgaY3Jlw1M0E9Cjhp1SXgJnQNWVrX06L8HC9MzKkTNiYdkaZdRzawK0FKI0u2fT5WSfLiPWVe4jK2sImDZVHjeep0OjuHEe3PhscDQn-ZYaNiwI0RNEMGthH94kF_ek3LYpBuS9lcmUaIlEUb84WwpAg_rngMHdIkW_2n_zojt9ygJiZTasX5-ICF8OAuUu0_hvcYSJMLH-pxzdV5s3y0Kkz3drlvWzN2NcdIWTBW6N78ihioJqO2VO-6FCIn86MXpNdBH2MoEEeP1g&aep=1&ntc=1&sa=X&ved=2ahUKEwiV1OjZjZ6VAxXSExAIHTnwKPgQ2J8OegQIDxAD&biw=1242&bih=554&dpr=1.1&mstk=AUtExfDLYa16JUHzhIGa1tLeCd_MFqBzELp0WQrx0puZQBPZy8Vv5BReTCOlx-Y_Hxv6RNFofjFw4kXjXrMr-ch1e3J5oKe-7XbgJ7mOATXHN-Bty3zIAreqz193d4S2u4-b3nYWH25zMx-gD-Fccjs7q8m7IsW_mr5lH5T2Bfdv68BpZ1Zh1yhyQ-vfYDsG6H3X8FEhiVUj3-FKVJuHCRgYQ91opWir-TfGRawNwMuIP5ho57jRimOnDd5_horfD_Dg7j2N2Cag4WL7W-y_VoQiqzObGNoSsWrs286u8nu_Rnmgi-QDNt9yTz9fViVEAHf0amDqHDQVay4F0A&csuir=1&mtid=7d86aqPNOfCk1fIPgaz02QY&lns_mode=cvst&udm=50
+# https://www.google.com/search?q=%D0%9F%D0%BE%D0%B4%D1%81%D0%BA%D0%B0%D0%B6%D0%B8%2C+%D0%BF%D0%BE%D0%B6%D0%B0%D0%BB%D1%83%D0%B9%D1%81%D1%82%D0%B0+%D1%80%D0%B5%D0%B6%D0%B8%D0%BC+%D0%BF%D1%80%D0%BE%D0%B1%D1%80%D0%BE%D1%81%D0%B0+UPT+%28%D0%BE%D0%BF%D0%B8%D1%81%D0%B0%D0%BD+%D0%B7%D0%B4%D0%B5%D1%81%D1%8C+https%3A%2F%2Fgithub.com%2Fqemu%2Fqemu%2Fcommit%2F0eb734241762bc63bf8308bed3573431f195ddcf%29+%D0%BC%D0%BE%D0%B6%D0%B5%D1%82+%D0%BE%D1%81%D1%83%D1%89%D0%B5%D1%81%D1%82%D0%B2%D0%BB%D1%8F%D1%82%D1%8C%D1%81%D1%8F+%D0%B2+%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D0%B0%D1%85%3A%0D%0A1%29+uefi+host%2C+uefi+guest%0D%0A2%29+uefi+host%2C+bios+guest%0D%0A3%29+bios+host%2C+bios+guest%0D%0A%3F&sca_esv=f8991862dc286373&sxsrf=APpeQnvNPwqYqCBhWM3k4EhBnD02IxUipg%3A1782243307179&source=hp&fbs=ABfTbFVoRrC-QTLMntAkgaY3Jlw1M0E9Cjhp1SXgJnQNWVrX06L8HC9MzKkTNiYdkaZdRzawK0FKI0u2fT5WSfLiPWVe4jK2sImDZVHjeep0OjuHEe3PhscDQn-ZYaNiwI0RNEMGthH94kF_ek3LYpBuS9lcmUaIlEUb84WwpAg_rngMHdIkW_2n_zojt9ygJiZTasX5-ICF8OAuUu0_hvcYSJMLH-pxzdV5s3y0Kkz3drlvWzN2NcdIWTBW6N78ihioJqO2VO-6FCIn86MXpNdBH2MoEEeP1g&aep=1&ntc=1&sa=X&ved=2ahUKEwiV1OjZjZ6VAxXSExAIHTnwKPgQ2J8OegQIDxAD&biw=1242&bih=554&dpr=1.1&mstk=AUtExfA21yc9umIS4rKxKKajTDoUcd-oHVotw6M3Rdd1WWfJpZcwOQ61gXxz33hcar8kI8_veqXYyccYcJ4QwdKjTF5u8jsYKtqGaRjO5KjFWmeBG2XM9lHkfPIAMN8rtNBp5oCkq5pdnyfTzZp8aEJ48hinE-qKUsXFlo6LCD8uDgsurRXONkc9Io9pEUKa3vdQ77TLjJkJHjViPrDYxp80ekqK9iKTzqfHkgiupwrsdHdP5hiAfu5qbwTmhKHHeZRJoyWJcJw5kLp8M1qanNF9JIqQPsUKY9zXhLcQ0Xk_BoEL3p1qUT-VqGfRcyFwt1kf_KJb8z_SgU8CAQ&csuir=1&mtid=7d86aqPNOfCk1fIPgaz02QY&lns_mode=cvst&udm=50
 
 # | Параметры / режим проброса              | Legacy (BIOS host) | Legacy (UEFI host) | UPT (Universal PassThrough) | [Проект VfioIgdPkg](https://github.com/tomitamoeko/VfioIgdPkg) | [Проект i915ovmfPkg](https://github.com/x78x79x82x79/i915ovmfPkg) |
 # | --------------------------------------- | ------------------ | ------------------ | --------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -11,7 +12,7 @@ from lib.python.pci import Pci
 # | Guest boot mode                         | BIOS (SeaBIOS)     | BIOS (SeaBIOS)     | UEFI (OVMF)                 | UEFI (OVMF)                                                    | UEFI (OVMF)                                                       |
 # | Guest machine                           | i440fx             | i440fx             | q35                         | q35                                                            | q35                                                               |
 # | CPU Intel                               | от [Sandy Bridge](https://github.com/qemu/qemu/commit/0eb734241762bc63bf8308bed3573431f195ddcf#diff-b3fe4475e398f3125e2c55e21d0415f1af31a4b19fc871cf27da615b2a7a36bfR41) | от [Sandy Bridge](https://github.com/qemu/qemu/commit/0eb734241762bc63bf8308bed3573431f195ddcf#diff-b3fe4475e398f3125e2c55e21d0415f1af31a4b19fc871cf27da615b2a7a36bfR41) | от [Broadwell](https://github.com/qemu/qemu/commit/0eb734241762bc63bf8308bed3573431f195ddcf#diff-b3fe4475e398f3125e2c55e21d0415f1af31a4b19fc871cf27da615b2a7a36bfR12) | от Sandy Bridge до Airmont без вывода на дисплей, начиная со Skylake (следующее за Airmont поколение) с выводом на дисплей (т.к. проектом поддерживается только OpRegion 2+ который появился со Skylake) | [Теоретический совместимо с Intel 14nm CPU (Sky Lake, Kaby Lake, Coffee Lake, Comet Lake)](https://github.com/x78x79x82x79/i915ovmfPkg/blob/master/README.md#current-feature-support) |
-# | Параметр vfio-pci: addr                 | 0x02               | 0x02               | любой                       | 0x02                                                           | 0x02                                                              |
+# | Параметр vfio-pci: addr                 | 0x02               | 0x02               | любой, кроме 0x02 [источник](https://github.com/qemu/qemu/commit/0eb734241762bc63bf8308bed3573431f195ddcf#diff-b3fe4475e398f3125e2c55e21d0415f1af31a4b19fc871cf27da615b2a7a36bfR85) | 0x02                                                           | 0x02                                                              |
 # | Параметр vfio-pci: rombar               | 1                  | 1                  | 0                           | 1                                                              | 1                                                                 |
 # | Параметр vfio-pci: romfile              | /sys/bus/pci/devices/0000:00:02.0/rom<br>Лучше извлечь из BIOS материнской платы чтобы заработал встроенный дисплей (LVDS) | Извлечь legacy video BIOS из UEFI материнской платы, если имеется (секция C5A4306E-E247-4ECD-A9D8-5B1985D3DCDA) | не требуется | vbios.rom собранный из исходников проекта | vbios.rom собранный из исходников проекта |
 # | Параметр vfio-pci: x-igd-legacy-mode    | on                 | on                 | off                         | off                                                            | off                                                               |
@@ -44,18 +45,116 @@ class VgaPciIntel(Pci):
     # https://github.com/qemu/qemu/blob/master/docs/igd-assign.txt
     # https://www.reddit.com/r/VFIO/comments/i9dbyp/this_is_how_i_managed_to_passthrough_my_igd/
     # fixme utopia Проброс с OVMF + __VGA_PASSTHROUGH_MODE_UPT
-    def get_vfio_pci_options_table(self, vm_meta_data):
+    def get_vfio_pci_options_table(self, vm_meta_data: VmMetaData):
         result = super().get_vfio_pci_options_table(vm_meta_data)
 
-        if self.__check_passthrough_in_legacy_mode():
-            result.update({"addr": "0x02", "rombar": 1, "x-vga": "on", "x-igd-opregion": "on"})
+        if CurrentOs.is_bios_boot():
+            if vm_meta_data.get_platform().is_i440fx_bios_boot():
+                # Intel CPU Sandy Bridge+
+                # Пробрасываемый GPU должен быть первичным (self.is_boot_vga())
+                parameters = {
+                    "addr": "0x02",
+                    "rombar": 1,
+                    "x-igd-legacy-mode": "on",
+                    "x-vga": "on",
+                    "x-igd-opregion": "on",
+                    "x-igd-lpc": "on"
+                }
 
-            rom_file_path = self.get_rom(vm_meta_data.get_working_dir_path())
-            if rom_file_path:
-                result["romfile"] = rom_file_path
+                rom_file_path = LegacyVideoBiosRom(BasePath(vm_meta_data.get_platform().get_arch())).get_path()
+                if not rom_file_path.exists():
+                    rom_file_path = self.get_rom(vm_meta_data.get_working_dir_path())
+                    if not rom_file_path.exists():
+                        parameters["romfile"] = str(rom_file_path)
+                    else:
+                        print("Не удалось получить romfile из PCI - выходим")
+                        return
+                else:
+                    parameters["romfile"] = str(rom_file_path)
+                result.update(parameters)
+            else:
+                # Попробовать UPT
+                raise Exception("[VgaPciIntel] Use only i440fx+bios with Intel integrated VGA")
+        elif CurrentOs.is_uefi_boot():
+            if vm_meta_data.get_platform().is_i440fx_bios_boot():
+                # Intel CPU Sandy Bridge+
+                parameters = {
+                    "addr": "0x02",
+                    "rombar": 1,
+                    "x-igd-legacy-mode": "on",
+                    "x-vga": "on",
+                    "x-igd-opregion": "on",
+                    "x-igd-lpc": "on"
+                }
 
-        else:
-            result.update({"x-vga": "on", "x-igd-opregion": "on"})
+                rom_file_path = LegacyVideoBiosRom(BasePath(vm_meta_data.get_platform().get_arch())).get_path()
+                if rom_file_path.exists():
+                    parameters["romfile"] = str(rom_file_path)
+                else:
+                    print(
+                        "Извлеки Video BIOS из UEFI материнской платы, ссылка на доку как это сделать + выход")
+                    return
+                result.update(parameters)
+            elif vm_meta_data.get_platform().is_uefi_boot():
+                mode = "UPT"
+                if mode == "UPT":
+                    # Intel CPU Broadwell+
+                    parameters = {
+                        "addr": "0x03",
+                        "rombar": 0,
+                        "x-igd-legacy-mode": "off",
+                        "x-vga": "off",
+                        "x-igd-opregion": "off",
+                        "x-igd-lpc": "off"
+                    }
+                    # fixme utopia потенциально требуется вычисление x-igd-gms
+                    #   /sys/kernel/debug/dri/0000:00:02.0/i915_capabilities
+                elif mode == "UPT+opregion":
+                    # Intel CPU Broadwell+
+                    parameters = {
+                        "addr": "0x03",
+                        "rombar": 0,
+                        "x-igd-legacy-mode": "off",
+                        "x-vga": "off",
+                        "x-igd-opregion": "on",
+                        "x-igd-lpc": "off"
+                    }
+                elif mode == "VfioIgdPkg":
+                    parameters = {
+                        "addr": "0x02",
+                        "rombar": 1,
+                        "x-igd-legacy-mode": "off",
+                        "x-vga": "off",
+                        "x-igd-opregion": "off",
+                        "x-igd-lpc": "off"
+                    }
+                    rom_file_no_video_path, rom_file_path, intel_gop_driver_file_path = VfioIgdPkgRom(
+                        BasePath(vm_meta_data.get_platform().get_arch()), self.get_id()).get_paths()
+                    if rom_file_path.exists():
+                        parameters["romfile"] = str(rom_file_path)
+                    elif rom_file_no_video_path.exists():
+                        parameters["romfile"] = str(rom_file_no_video_path)
+                    else:
+                        raise Exception("[VgaPciIntel] VfioIgdPkg: Video BIOS (EFI) NOT FOUND\nBuild Video BIOS by instruction and try again")
+                elif mode == "i915ovmfPkg":
+                    parameters = {
+                        "addr": "0x02",
+                        "rombar": 1,
+                        "x-igd-legacy-mode": "off",
+                        "x-vga": "off",
+                        "x-igd-opregion": "off",
+                        "x-igd-lpc": "off"
+                    }
+
+                    rom_file_path = i915ovmfRom(
+                        BasePath(vm_meta_data.get_platform().get_arch()), self.get_id()).get_path()
+                    if rom_file_path.exists():
+                        parameters["romfile"] = str(rom_file_path)
+                    else:
+                        raise Exception("[VgaPciIntel] i915ovmf: Video BIOS (EFI) NOT FOUND\nBuild Video BIOS by instruction and try again")
+                else:
+                    raise Exception("[VgaPciIntel] Unknown mode (UEFI)")
+                result.update(parameters)
 
         return result
 
@@ -63,6 +162,7 @@ class VgaPciIntel(Pci):
         result = super().get_qemu_parameters(vm_meta_data)
         if len(result) > 0 and self.is_other_vga_disable():
             result.append({"-vga": "none"})
+            # -mem-prealloc
             # result.append({"-fw_cfg": {"name": "opt/igd-opregion", "file": "/home/utopia/HomeVpn/opregion.bin"}})
             # result.append({"-fw_cfg": {"name": "opt/igd-bdsm-size", "file": "/home/utopia/HomeVpn/bdsmSize.bin"}})
             # result.append({"-machine": "pc-i440fx-2.2"})

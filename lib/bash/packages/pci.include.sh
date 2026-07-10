@@ -1,6 +1,7 @@
 #!/bin/bash
 
 ## @brief Функции работы с PCI
+## https://eternallybored.org/misc/pciutils/
 
 
 ## @brief Установить утилиты работы с PCI

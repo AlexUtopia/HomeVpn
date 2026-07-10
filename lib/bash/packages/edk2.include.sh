@@ -2,23 +2,43 @@
 
 ## @brief Функции работы с edk2/ovmf
 ## @details Результат (относительно корня проекта):
-##          data/ovmf/<edk2-tag-name>/<CurrentOs.get_name()>/
-##             x86_64/   // target qemu arch (x86_64, aarch64, arm)
-##               OVMF_CODE.fd
-##               OVMF_VARS.fd
-##               OVMF_CODE.secboot.fd   - пригодно для запуска Windows в защищённом режиме
-##               OVMF_VARS.secboot.fd   - пригодно для запуска Windows в защищённом режиме
-##               <VGA_VID>_<VGA_PID>/   - PCI VID/PID целевого устройства для которого имеется дополнительный rom
-##                 ivbios.rom           - видеобиос (UEFI) для встроенных VGA Intel без вывода изображения на монитор
-##                 <md5hash>/           - Хеш описателя platform.json
-##                   platform.json      - описатель данной IBM PC совместимой платформы (платформа с поддержкой DMI)
-##                   ivbios.rom         - видеобиос (UEFI) для встроенных VGA Intel с выводом изображения на монитор (благодаря сборке с использованием IntelGopDriver.efi)
-##                   IntelGopDriver.efi - IntelGopDriver извлечённый из оригинального UEFI (это платформоспецифичный компонент), необязательный
-##             aarch64/
-##               OVMF_CODE.fd
-##               OVMF_VARS.fd
-##               OVMF_CODE.secboot.fd
-##               OVMF_VARS.secboot.fd
+##          data/ovmf/<edk2-tag-name>/
+##            x86_64/   // target qemu arch (x86_64, aarch64, arm)
+##              OVMF_CODE.fd
+##              OVMF_VARS.fd
+##              OVMF_CODE.secboot.fd     - пригодно для запуска Windows в защищённом режиме
+##              OVMF_VARS.secboot.fd     - пригодно для запуска Windows в защищённом режиме
+##              VfioIgdPkg/              - структура директорий для vfio-pci под проект VfioIgdPkg.
+##                                         Здесь соблюдается строгая "цифровая гигиена" при сборке целевого видеобиоса, хотя это не обязательно
+##                                         https://github.com/tomitamoeko/VfioIgdPkg/blob/master/build.sh#L19
+##                <VGA_VID>_<VGA_PID>/   - PCI VID/PID целевого устройства для которого имеется дополнительный rom
+##                  ivbios.rom           - видеобиос (UEFI) для встроенных VGA Intel без вывода изображения на монитор
+##                  platform_<md5hash>/  - хеш описателя platform.json
+##                    platform.json      - описатель данной IBM PC совместимой платформы (платформа с поддержкой DMI); ключи сортируются по алфавиту
+##                    ivbios.rom         - видеобиос (UEFI) для встроенных VGA Intel с выводом изображения на монитор (благодаря сборке с использованием IntelGopDriver.efi)
+##              i915ovmf/                - структура директорий для vfio-pci под проект VfioIgdPkg.
+##                                         Здесь соблюдается строгая "цифровая гигиена" для дерева директорй, хотя это не обязательно
+##                                         https://github.com/x78x79x82x79/i915ovmfPkg/blob/master/i915ovmf.inf#L26
+##                                         Сейчас используется
+##                                         PCI_VENDOR_ID  = 0x8086
+##                                         PCI_DEVICE_ID  = 0x1926
+##                                         Пока мы не подменяем PCI_DEVICE_ID на актуальный, т.к. OVMF может успешно стартовать с не целевым PCI_DEVICE_ID.
+##                                         Хочется сохранить структуру директорий под разные проекты
+##                <VGA_VID>_<VGA_PID>/   - PCI VID/PID целевого устройства для которого имеется дополнительный rom
+##                  ivbios.rom           - видеобиос (UEFI) для встроенных VGA Intel с выводом изображения на монитор
+##            aarch64/
+##              OVMF_CODE.fd
+##              OVMF_VARS.fd
+##              OVMF_CODE.secboot.fd
+##              OVMF_VARS.secboot.fd
+##
+##          data/platform_specific/ // Здесь располагаются платформо зависимые бинари не зависящие от версии edk2/ovmf и текущей ОС
+##                                  // Бинари извлекаются из BIOS/UEFI целевой материнской платы (платформы)
+##            x86_64/   // target qemu arch (x86_64, aarch64, arm)
+##              platform_<md5hash>/
+##                platform.json
+##                legacy_ivbios.rom   - устаревший видеобиос для загрузки вирт машины в BIOS режиме (i440fx). Может быть извлечён из оригинального BIOS или UEFI (см. секцию C5A4306E-E247-4ECD-A9D8-5B1985D3DCDA)
+##                IntelGopDriver.efi  - IntelGopDriver извлечённый из оригинального UEFI, необязательный
 ##
 ## https://github.com/tianocore/edk2/tree/master/OvmfPkg
 ## https://github.com/retrage/edk2-nightly

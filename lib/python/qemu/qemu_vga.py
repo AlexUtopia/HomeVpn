@@ -1,3 +1,5 @@
+from lib.python.vm import VmMetaData
+
 
 # https://www.qemu.org/docs/master/system/devices/virtio-gpu.html
 # https://www.qemu.org/docs/master/system/invocation.html#hxtool-3
@@ -19,3 +21,11 @@ class QemuVgaDefault:
 
     def get_qemu_parameters(self) -> list[dict]:
         return [{"-vga": "std", "-display": {"gtk": {}}}]
+
+
+class QemuVncDefault:
+    def __init__(self, vm_meta_data: VmMetaData):
+        self.__vm_meta_data = vm_meta_data
+
+    def get_qemu_parameters(self) -> list[dict]:
+        return [{"-vga": "std", "-display": {"vnc": {f"0.0.0.0:{self.__vm_meta_data.get_vnc_display_port()}"}}}]

@@ -128,22 +128,28 @@ class Pci(BaseParser):
 
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
-    def get_rom(self, dir_path_for_save_rom_file: str | os.PathLike[str]) -> Path | None:
+    def get_rom(self, dir_path_for_save_rom_file: str | os.PathLike[str]) -> Path:
+        result = Path(dir_path_for_save_rom_file) / self.get_rom_file_name()
+
         rom_file_path = self.__get_sysfs_pci_device_path() / "rom"
         if not rom_file_path.file_exists():
             Logger.instance().warning(f"[PCI/{self.address}] ROM NOT FOUND: {rom_file_path}")
-            return None
+            return result
 
         rom_file_path.write_text("1")
 
-        _dir_path_for_save_rom_file = Path(dir_path_for_save_rom_file)
-        _dir_path_for_save_rom_file.makedirs()
-        result = _dir_path_for_save_rom_file / self.get_rom_file_name()
+        result.parent.makedirs()
         result.copy_from(rom_file_path)
 
         rom_file_path.write_text("0")
 
         return result
+
+    def is_boot_vga(self):
+        is_boot_vga_path = self.__get_sysfs_pci_device_path() / "boot_vga"
+        if not is_boot_vga_path.exists():
+            return False
+        return bool(int(is_boot_vga_path.read_text()))
 
     # fixme utopia заменить : на другой символ
     def get_rom_file_name(self) -> str:

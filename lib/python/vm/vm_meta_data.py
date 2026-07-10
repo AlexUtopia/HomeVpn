@@ -72,7 +72,8 @@ class VmMetaData:
 
     def __init__(self, name: VmName | str,
                  image_dir_path: str | os.PathLike[str],
-                 platform: QemuPlatform = QemuPlatform(arch=Arch(ARCH_DEFAULT))):
+                 platform: QemuPlatform = QemuPlatform(arch=Arch(ARCH_DEFAULT)),
+                 vnc_display_port: TcpPort = TcpPort.get_vnc_port(10)):
         self.__image_path = VmMetaData.Parameter[VmName](str(VmName(name)), image_dir_path,
                                                          extension=self.IMAGE_EXTENSION)
         self.__mac_address = VmMetaData.Parameter[netaddr.EUI]("mac_address", image_dir_path,
@@ -83,6 +84,8 @@ class VmMetaData:
         self.__dns_suffix = dns_suffix
         self.__platform = VmMetaData.Parameter[QemuPlatform]("platform", image_dir_path,
                                                              value_default_handler=lambda: platform)
+        self.__vnc_display_port = VmMetaData.Parameter[TcpPort]("vnc_display_port", image_dir_path,
+                                                                value_default_handler=lambda: vnc_display_port)
         self.makedirs()
 
     def __str__(self):
@@ -171,6 +174,12 @@ class VmMetaData:
         result = self.__platform.load()
         if not result:
             raise Exception("[Vm] Platform UNDEFINED")
+        return result
+
+    def get_vnc_display_port(self) -> TcpPort:
+        result = self.__vnc_display_port.load()
+        if not result:
+            raise Exception("[Vm] VNC display port UNDEFINED")
         return result
 
     def makedirs(self) -> None:
