@@ -25,6 +25,12 @@ function python_get_version() {
     return 0
 }
 
+
+function python_get_executable() {
+    echo "python$(python_get_version)"
+    return 0
+}
+
 ## @brief Получить путь до директории venv python проекта
 ## @param [in] Путь до корня python проекта
 ## @return Путь до директории venv python проекта
@@ -69,7 +75,7 @@ function pip_install_packages() {
         REQUIREMENTS_FILE_PATH="${PROJECT_DIR_PATH}/requirements.txt"
     fi
 
-    local PYTHON_EXECUTABLE="python$(python_get_version)"
+    local PYTHON_EXECUTABLE="$(python_get_executable)"
 
     local VENV_DIR_PATH=""
     VENV_DIR_PATH="$(python_venv_get_dir_path "${PROJECT_DIR_PATH}")" || return $?

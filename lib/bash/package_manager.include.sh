@@ -2,6 +2,7 @@
 
 ## @brief Функции работы с системным менеджером пакетов
 
+# fixme utopia Добавить для винды
 
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/apt.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/package_manager/dnf.include.sh"
@@ -133,6 +134,53 @@ function package_manager_is_package_exists_in_repository() {
     elif package_manager_is_zypper; then
         # fixme utopia Дописать
         return 1
+    else
+        echo "FATAL: unknown package manager"
+        return 1
+    fi
+    return 0
+}
+
+
+function package_manager_install_package_from_file() {
+    local PACKAGE_INSTALLER_FILE_PATH="${1}"
+
+    if package_manager_is_apt; then
+        apt_package_manager_install_package_from_file "${PACKAGE_INSTALLER_FILE_PATH}" || return $?
+    elif package_manager_is_pacman; then
+        pacman_package_manager_install_package_from_file "${PACKAGE_INSTALLER_FILE_PATH}" || return $?
+    elif package_manager_is_dnf; then
+        dnf_package_manager_install_package_from_file "${PACKAGE_INSTALLER_FILE_PATH}" || return $?
+    elif package_manager_is_yum; then
+        # fixme utopia Дописать
+        return 1
+    elif package_manager_is_zypper; then
+        # fixme utopia Дописать
+        return 1
+    else
+        echo "FATAL: unknown package manager"
+        return 1
+    fi
+    return 0
+}
+
+
+function package_manager_get_file_extension() {
+    if package_manager_is_apt; then
+        echo ".deb"
+        return 0
+    elif package_manager_is_pacman; then
+        echo ".pkg.tar.zst"
+        return 0
+    elif package_manager_is_dnf; then
+        echo ".rpm"
+        return 0
+    elif package_manager_is_yum; then
+        echo ".rpm"
+        return 0
+    elif package_manager_is_zypper; then
+        echo ".rpm"
+        return 0
     else
         echo "FATAL: unknown package manager"
         return 1

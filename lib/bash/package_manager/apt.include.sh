@@ -221,3 +221,11 @@ function apt_add_ppa() {
     apt update || return $?
     return 0
 }
+
+
+function apt_package_manager_install_package_from_file() {
+    local PACKAGE_INSTALLER_FILE_PATH="${1}"
+
+    dpkg -i "${PACKAGE_INSTALLER_FILE_PATH}" || return $?
+    return 0
+}

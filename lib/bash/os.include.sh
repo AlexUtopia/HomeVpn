@@ -81,6 +81,15 @@ function os_arch_is_intel_native() {
     return 1
 }
 
+## @brief Является ли архитектура текущей ОС aarch64 (arm64) (64 бита)
+## @retval 0 - архитектура текущей ОС aarch64, 1 - нет
+function os_arch_is_aarch64() {
+    if [[ "${OS_MACHINE_NAME}" == "aarch64" ]]; then
+        return 0
+    fi
+    return 1
+}
+
 ## @brief Проверить является ли текущая ОС Linux
 ## @retval 0 - текущая ОС Linux, 1 - нет
 function is_linux() {

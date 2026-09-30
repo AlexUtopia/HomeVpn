@@ -62,6 +62,8 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/ssh_client.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/ssh_server.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/startup.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/telnet_client.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/throne.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/v2raya.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_client.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/vnc_server.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/waydroid.include.sh"
@@ -556,5 +558,7 @@ function main() {
 # https://bytexd.com/xrdp-ubuntu/
 # https://superuser.com/questions/1539900/slow-ubuntu-remote-desktop-using-xrdp
 
-vnc_server_setup
+#vnc_server_setup
+#v2raya_setup
+throne_setup
 #main
