@@ -50,6 +50,7 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/dns_dhcp_server.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/firewall.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/make.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/network.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/nodejs.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openjdk.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/openvpn3.include.sh"
@@ -560,5 +561,6 @@ function main() {
 
 #vnc_server_setup
 #v2raya_setup
-throne_setup
+#throne_setup
+nodejs_packages_setup
 #main
