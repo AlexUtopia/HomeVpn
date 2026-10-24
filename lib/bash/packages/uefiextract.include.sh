@@ -82,6 +82,9 @@ function uefiextract_get_efi_section() {
 ##             Если файл существует, он будет перезаписан
 ## @retval 0 - успешно
 function uefiextract_get_intel_gop_driver() {
+    local UEFI_IMAGE_FILE_PATH="${1}"
+    local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
+
     local INTEL_GOP_DRIVER_UUID="380B6B4F-1454-41F2-A6D3-61D1333E8CB4"
     uefiextract_get_efi_section "${UEFI_IMAGE_FILE_PATH}" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}" "${INTEL_GOP_DRIVER_UUID}"
     return 0
@@ -94,6 +97,9 @@ function uefiextract_get_intel_gop_driver() {
 ##             Если файл существует, он будет перезаписан
 ## @retval 0 - успешно
 function uefiextract_get_intel_legacy_vbios() {
+    local UEFI_IMAGE_FILE_PATH="${1}"
+    local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
+
     local INTEL_LEGACY_VBIOS_UUID="C5A4306E-E247-4ECD-A9D8-5B1985D3DCDA"
     uefiextract_get_efi_section "${UEFI_IMAGE_FILE_PATH}" "${OUT_INTEL_GOP_DRIVER_FILE_PATH}" "${INTEL_LEGACY_VBIOS_UUID}"
     return 0

@@ -48,6 +48,93 @@ class VgaPciIntel(Pci):
     def get_vfio_pci_options_table(self, vm_meta_data: VmMetaData):
         result = super().get_vfio_pci_options_table(vm_meta_data)
 
+        mode = "UPT"
+        if mode == "UPT":
+            # CPU broadwell+
+            # Любое сочетание
+            print("upt")
+        elif mode == "UPT+opregion":
+            # Любое сочетание
+            # CPU broadwell+
+            print("upt+opregion")
+        elif mode == "legacy":
+            if vm_meta_data.get_platform().is_i440fx_bios_boot():
+                if CurrentOs.is_bios_boot():
+                    # CPU Sandy Bridge to Comet Lake
+                    print("legacy + BIOS HOST")
+                    return
+                elif CurrentOs.is_uefi_boot():
+                    # CPU Sandy Bridge to Comet Lake
+                    print("legacy + UEFI HOST")
+                    return
+            raise Exception()
+        elif mode == "VfioIgdPkg":
+            if vm_meta_data.get_platform().is_uefi_boot():
+                if CurrentOs.is_uefi_boot():
+                    print("VfioIgdPkg")
+                    return
+            raise Exception()
+        elif mode == "i915ovmfPkg":
+            if vm_meta_data.get_platform().is_uefi_boot():
+                if CurrentOs.is_uefi_boot():
+                    print("i915ovmfPkg")
+                    return
+            raise Exception()
+        elif mode == "default":
+            if vm_meta_data.get_platform().is_i440fx_bios_boot():
+                if CurrentOs.is_bios_boot():
+                    if romfile:
+                        # CPU Sandy Bridge to Comet Lake
+                        print("legacy + BIOS HOST")
+                    else:
+                        # CPU broadwell+
+                        print("upt")
+                    return
+                elif CurrentOs.is_uefi_boot():
+                    if romfile:
+                        # CPU Sandy Bridge to Comet Lake
+                        print("legacy + UEFI HOST")
+                    else:
+                        # CPU broadwell+
+                        print("upt")
+                    return
+                raise Exception()
+            elif vm_meta_data.get_platform().is_uefi_boot():
+                if CurrentOs.is_uefi_boot():
+                    print("VfioIgdPkg")
+                    return
+                raise Exception()
+
+
+
+
+
+        if mode == "UPT":
+            # Intel CPU Broadwell+
+            parameters = {
+                "addr": "0x03",
+                "rombar": 0,
+                "x-igd-legacy-mode": "off",
+                "x-vga": "off",
+                "x-igd-opregion": "off",
+                "x-igd-lpc": "off"
+            }
+            # fixme utopia потенциально требуется вычисление x-igd-gms
+            #   /sys/kernel/debug/dri/0000:00:02.0/i915_capabilities
+        elif mode == "UPT+opregion":
+            # Intel CPU Broadwell+
+            parameters = {
+                "addr": "0x03",
+                "rombar": 0,
+                "x-igd-legacy-mode": "off",
+                "x-vga": "off",
+                "x-igd-opregion": "on",
+                "x-igd-lpc": "off"
+            }
+            # fixme utopia потенциально требуется вычисление x-igd-gms
+            #   /sys/kernel/debug/dri/0000:00:02.0/i915_capabilities
+
+
         if CurrentOs.is_bios_boot():
             if vm_meta_data.get_platform().is_i440fx_bios_boot():
                 # Intel CPU Sandy Bridge+
@@ -60,6 +147,8 @@ class VgaPciIntel(Pci):
                     "x-igd-opregion": "on",
                     "x-igd-lpc": "on"
                 }
+                # fixme utopia потенциально требуется вычисление x-igd-gms
+                #   /sys/kernel/debug/dri/0000:00:02.0/i915_capabilities
 
                 rom_file_path = LegacyVideoBiosRom(BasePath(vm_meta_data.get_platform().get_arch())).get_path()
                 if not rom_file_path.exists():
@@ -67,15 +156,17 @@ class VgaPciIntel(Pci):
                     if not rom_file_path.exists():
                         parameters["romfile"] = str(rom_file_path)
                     else:
-                        print("Не удалось получить romfile из PCI - выходим")
+                        print(
+                            "Извлеки Video BIOS из BIOS материнской платы, ссылка на доку как это сделать + выход")
                         return
                 else:
                     parameters["romfile"] = str(rom_file_path)
                 result.update(parameters)
             else:
-                # Попробовать UPT
-                raise Exception("[VgaPciIntel] Use only i440fx+bios with Intel integrated VGA")
+
+
         elif CurrentOs.is_uefi_boot():
+            elif mode == "Legacy":
             if vm_meta_data.get_platform().is_i440fx_bios_boot():
                 # Intel CPU Sandy Bridge+
                 parameters = {
@@ -86,6 +177,8 @@ class VgaPciIntel(Pci):
                     "x-igd-opregion": "on",
                     "x-igd-lpc": "on"
                 }
+                # fixme utopia потенциально требуется вычисление x-igd-gms
+                #   /sys/kernel/debug/dri/0000:00:02.0/i915_capabilities
 
                 rom_file_path = LegacyVideoBiosRom(BasePath(vm_meta_data.get_platform().get_arch())).get_path()
                 if rom_file_path.exists():
@@ -96,29 +189,7 @@ class VgaPciIntel(Pci):
                     return
                 result.update(parameters)
             elif vm_meta_data.get_platform().is_uefi_boot():
-                mode = "UPT"
-                if mode == "UPT":
-                    # Intel CPU Broadwell+
-                    parameters = {
-                        "addr": "0x03",
-                        "rombar": 0,
-                        "x-igd-legacy-mode": "off",
-                        "x-vga": "off",
-                        "x-igd-opregion": "off",
-                        "x-igd-lpc": "off"
-                    }
-                    # fixme utopia потенциально требуется вычисление x-igd-gms
-                    #   /sys/kernel/debug/dri/0000:00:02.0/i915_capabilities
-                elif mode == "UPT+opregion":
-                    # Intel CPU Broadwell+
-                    parameters = {
-                        "addr": "0x03",
-                        "rombar": 0,
-                        "x-igd-legacy-mode": "off",
-                        "x-vga": "off",
-                        "x-igd-opregion": "on",
-                        "x-igd-lpc": "off"
-                    }
+
                 elif mode == "VfioIgdPkg":
                     parameters = {
                         "addr": "0x02",
