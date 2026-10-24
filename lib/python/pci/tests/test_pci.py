@@ -8,7 +8,7 @@ class UnitTest_Pci(unittest.TestCase):
     ENCODING = "utf-8"
 
     def test_lspci_output_parse(self):
-        for path in (pathlib.Path(__file__).resolve() / self.__class__.__name__ / "test_lspci_output_parse").iterdir():
+        for path in (pathlib.Path(__file__).resolve().parent / self.__class__.__name__ / "test_lspci_output_parse").iterdir():
             lspci_output_mock = (path / "lspci_output.txt").read_text(encoding=self.ENCODING)
             expected_result = Pci.PciList.from_string(
                 (path / "expected_result.json").read_text(encoding=self.ENCODING))

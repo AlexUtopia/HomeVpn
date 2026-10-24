@@ -118,7 +118,7 @@ class Pci(BaseParser):
         return {"multifunction": "on"}
 
     def get_qemu_parameters(self, vm_meta_data):
-        return [VfioPci.get_device_for_passthrough(self, vm_meta_data)]
+        return []
 
     def is_other_vga_disable(self):
         return False

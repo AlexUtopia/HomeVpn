@@ -85,7 +85,7 @@ class QemuPlatform:
 
     __BOOT_TABLE = {Arch("x86_64"): X86Compat(),
                     Arch("i386"): X86Compat(),
-                    Arch("aarh64"): ArmCompat(),
+                    Arch("aarch64"): ArmCompat(),
                     Arch("arm"): ArmCompat()}
 
     def __init__(self, arch_and_machine: str | None = None, arch: Arch = Arch(), machine: str | None = None):

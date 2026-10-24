@@ -1,4 +1,5 @@
 from lib.python.utils import UInt16Hex
+from lib.python.utils.binary import BitUtils
 
 
 # https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf

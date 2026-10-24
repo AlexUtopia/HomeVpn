@@ -1,7 +1,7 @@
 from lib.python.system import CurrentOs
 from lib.python.vm import VmMetaData
 
-from lib.python.pci import BasePath, i915ovmfRom, LegacyVideoBiosRom, Pci, PciRom, VfioIgdPkgRom
+from lib.python.pci import BasePath, i915ovmfRom, LegacyVideoBiosRom, Pci, VfioIgdPkgRom
 
 
 # https://www.google.com/search?q=%D0%9F%D0%BE%D0%B4%D1%81%D0%BA%D0%B0%D0%B6%D0%B8%2C+%D0%BF%D0%BE%D0%B6%D0%B0%D0%BB%D1%83%D0%B9%D1%81%D1%82%D0%B0+%D1%80%D0%B5%D0%B6%D0%B8%D0%BC+%D0%BF%D1%80%D0%BE%D0%B1%D1%80%D0%BE%D1%81%D0%B0+UPT+%28%D0%BE%D0%BF%D0%B8%D1%81%D0%B0%D0%BD+%D0%B7%D0%B4%D0%B5%D1%81%D1%8C+https%3A%2F%2Fgithub.com%2Fqemu%2Fqemu%2Fcommit%2F0eb734241762bc63bf8308bed3573431f195ddcf%29+%D0%BC%D0%BE%D0%B6%D0%B5%D1%82+%D0%BE%D1%81%D1%83%D1%89%D0%B5%D1%81%D1%82%D0%B2%D0%BB%D1%8F%D1%82%D1%8C%D1%81%D1%8F+%D0%B2+%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D0%B0%D1%85%3A%0D%0A1%29+uefi+host%2C+uefi+guest%0D%0A2%29+uefi+host%2C+bios+guest%0D%0A3%29+bios+host%2C+bios+guest%0D%0A%3F&sca_esv=f8991862dc286373&sxsrf=APpeQnvNPwqYqCBhWM3k4EhBnD02IxUipg%3A1782243307179&source=hp&fbs=ABfTbFVoRrC-QTLMntAkgaY3Jlw1M0E9Cjhp1SXgJnQNWVrX06L8HC9MzKkTNiYdkaZdRzawK0FKI0u2fT5WSfLiPWVe4jK2sImDZVHjeep0OjuHEe3PhscDQn-ZYaNiwI0RNEMGthH94kF_ek3LYpBuS9lcmUaIlEUb84WwpAg_rngMHdIkW_2n_zojt9ygJiZTasX5-ICF8OAuUu0_hvcYSJMLH-pxzdV5s3y0Kkz3drlvWzN2NcdIWTBW6N78ihioJqO2VO-6FCIn86MXpNdBH2MoEEeP1g&aep=1&ntc=1&sa=X&ved=2ahUKEwiV1OjZjZ6VAxXSExAIHTnwKPgQ2J8OegQIDxAD&biw=1242&bih=554&dpr=1.1&mstk=AUtExfA21yc9umIS4rKxKKajTDoUcd-oHVotw6M3Rdd1WWfJpZcwOQ61gXxz33hcar8kI8_veqXYyccYcJ4QwdKjTF5u8jsYKtqGaRjO5KjFWmeBG2XM9lHkfPIAMN8rtNBp5oCkq5pdnyfTzZp8aEJ48hinE-qKUsXFlo6LCD8uDgsurRXONkc9Io9pEUKa3vdQ77TLjJkJHjViPrDYxp80ekqK9iKTzqfHkgiupwrsdHdP5hiAfu5qbwTmhKHHeZRJoyWJcJw5kLp8M1qanNF9JIqQPsUKY9zXhLcQ0Xk_BoEL3p1qUT-VqGfRcyFwt1kf_KJb8z_SgU8CAQ&csuir=1&mtid=7d86aqPNOfCk1fIPgaz02QY&lns_mode=cvst&udm=50
@@ -231,7 +231,7 @@ class VgaPciIntel(Pci):
 
     def get_qemu_parameters(self, vm_meta_data):
         result = super().get_qemu_parameters(vm_meta_data)
-        if len(result) > 0 and self.is_other_vga_disable():
+        if self.is_other_vga_disable():
             result.append({"-vga": "none"})
             # -mem-prealloc
             # result.append({"-fw_cfg": {"name": "opt/igd-opregion", "file": "/home/utopia/HomeVpn/opregion.bin"}})

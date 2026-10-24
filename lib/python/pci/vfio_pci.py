@@ -30,16 +30,6 @@ class VfioPci:
     def get_pci_id_list(self) -> list[PciVidPid]:
         return self.__pci_list.get_pci_id_list()
 
-    @staticmethod
-    def get_device_for_passthrough(pci: Pci, vm_meta_data: VmMetaData):
-        # PCI устройство нельзя пробросить если оно не включено в iommu группу
-        if pci.iommu_group is None:
-            return {}
-
-        vfio_pci_options_table = {"host": pci.address}
-        vfio_pci_options_table.update(pci.get_vfio_pci_options_table(vm_meta_data))
-        return {"-device": {"vfio-pci": vfio_pci_options_table}}
-
     def get_kernel_parameters(self) -> list[dict]:
         if len(self.__pci_list) == 0:
             return []
@@ -53,6 +43,7 @@ class VfioPci:
     def get_qemu_parameters(self, vm_meta_data) -> list[dict]:
         result = []
         for pci in self.__pci_list:
+            result.append(self.__get_device_for_passthrough(pci, vm_meta_data))
             result.extend(pci.get_qemu_parameters(vm_meta_data))
         return result
 
@@ -61,3 +52,13 @@ class VfioPci:
 
     def check_platform(self, qemu_platform) -> None:
         self.__pci_list.check_platform(qemu_platform)
+
+    @staticmethod
+    def __get_device_for_passthrough(pci: Pci, vm_meta_data: VmMetaData):
+        # PCI устройство нельзя пробросить если оно не включено в iommu группу
+        if pci.iommu_group is None:
+            return {}
+
+        vfio_pci_options_table = {"host": pci.address}
+        vfio_pci_options_table.update(pci.get_vfio_pci_options_table(vm_meta_data))
+        return {"-device": {"vfio-pci": vfio_pci_options_table}}
