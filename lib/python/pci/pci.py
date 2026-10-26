@@ -143,12 +143,6 @@ class Pci(BaseParser):
         """
         return []
 
-    def is_other_vga_disable(self):
-        return False
-
-    def check_platform(self, qemu_platform):
-        pass
-
     # https://www.intel.com/content/www/us/en/docs/graphics-for-linux/developer-reference/1-0/dump-video-bios.html
     # https://stackoverflow.com/a/52174005
     def get_rom(self, dir_path_for_save_rom_file: str | os.PathLike[str]) -> Path:
@@ -377,23 +371,6 @@ class Pci(BaseParser):
 
         def get_pci_id_list(self) -> list[PciVidPid]:
             return [pci.get_id() for pci in self]
-
-        ## Заблокировать ли прочие VGA для данной виртуальной машины
-        # @details Требуется для обеспечения проброса Intel integrated GPU (IGD, Integrated Graphics Device) в так называемом legacy режиме, подробно https://gitlab.com/qemu-project/qemu/-/blob/master/docs/igd-assign.txt?ref_type=heads
-        # @return true - заблокировать прочие VGA для данной виртуальной машины; false - можно использовать множественные VGA, в том числе виртуальные VGA
-        def is_other_vga_disable(self) -> bool:
-            for pci in self:
-                if pci.is_other_vga_disable():
-                    return True
-            return False
-
-        ## Проверить пригодность платформы (чипсета) для данной виртуальной машины
-        # @details Некоторые сочетания Host BIOS/UEFI / Guest BIOS/UEFI не совместимы с пробросом PCI устройств
-        # @details Если платформа (чипсет) не подходят метод бросит исключение с описанием проблемы
-        # @param [in] qemu_platform Платформа (чипсет) виртуальной машины
-        def check_platform(self, qemu_platform) -> None:
-            for pci in self:
-                pci.check_platform(qemu_platform)
 
         def to_sorted_list(self):
             result = list(self)

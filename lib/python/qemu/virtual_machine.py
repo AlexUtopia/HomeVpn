@@ -118,12 +118,9 @@ class VirtualMachine:
         return "-monitor telnet:127.0.0.1:55555,server,nowait"
 
     def __get_qemu_vga_command_line(self):
-        if self.__vfio_pci is not None and self.__vfio_pci.is_other_vga_disable():
-            return ""
         return self.__serializer.serialize(self.__qemu_vga.get_qemu_parameters())
 
     def __qemu_pci_passthrough_command_line(self):
         if self.__vfio_pci is None:
             return ""
-        self.__vfio_pci.check_platform(self.__qemu_platform)
         return self.__serializer.serialize(self.__vfio_pci.get_qemu_parameters(self.__vm_meta_data))

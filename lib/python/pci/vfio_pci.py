@@ -59,12 +59,6 @@ class VfioPci:
             result.extend(pci.get_qemu_parameters(vm_meta_data))
         return result
 
-    def is_other_vga_disable(self) -> bool:
-        return self.__pci_list.is_other_vga_disable()
-
-    def check_platform(self, qemu_platform) -> None:
-        self.__pci_list.check_platform(qemu_platform)
-
     @staticmethod
     def __get_device_for_passthrough(pci: Pci, vm_meta_data: VmMetaData) -> list[dict[str, typing.Any]]:
         """Получить параметры QEMU для одного пробрасываемого PCI устройства
