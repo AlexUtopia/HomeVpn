@@ -1,16 +1,18 @@
 #!/bin/bash
 
-## @brief Функции по установке VPN v2rayA
-## https://github.com/v2rayA/v2rayA
+# @file v2raya.include.sh
+# @brief Функции по установке VPN v2rayA
+# @description
+# https://github.com/v2rayA/v2rayA
 
 
 V2RAYA_PACKAGE_NAME="v2rayA"
 V2RAYA_VERSION="2.4.16"
 
 
-## @brief Получить архитектуру для v2rayA
-## @return Архитектура для v2rayA
-## @retval 0 - успешно
+# @description Получить архитектуру для v2rayA
+# @stdout Архитектура для v2rayA
+# @exitcode 0 успешно
 function v2raya_get_arch() {
     if os_arch_is_x86_64; then
         echo "x64"
@@ -25,10 +27,10 @@ function v2raya_get_arch() {
     return 1
 }
 
-## @brief Получить ссылку для скачивания v2rayA
-## @details Функция учитывает текущую ОС и её архитектуру (архитектура CPU)
-## @return Ссылка для скачивания v2rayA
-## @retval 0 - успешно
+# @description Получить ссылку для скачивания v2rayA
+# Функция учитывает текущую ОС и её архитектуру (архитектура CPU)
+# @stdout Ссылка для скачивания v2rayA
+# @exitcode 0 успешно
 function v2raya_get_download_url() {
     local OS_ARCH=""
     local OS_DISTR=""
@@ -56,8 +58,8 @@ function v2raya_get_download_url() {
     return 0
 }
 
-## @brief Установить пакет v2rayA
-## @retval 0 - успешно
+# @description Установить пакет v2rayA
+# @exitcode 0 успешно
 function v2raya_packages_setup() {
     if is_termux; then
         return 0
@@ -74,8 +76,8 @@ function v2raya_packages_setup() {
     return 0
 }
 
-## @brief Установить и настроить v2rayA
-## @retval 0 - успешно
+# @description Установить и настроить v2rayA
+# @exitcode 0 успешно
 function v2raya_setup() {
     local SERVICE="v2raya"
 

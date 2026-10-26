@@ -1,7 +1,9 @@
 #!/bin/bash
 
-## @brief Функции по установке и работе с waydroid
-## https://repo.waydro.id/
+# @file waydroid.include.sh
+# @brief Функции по установке и работе с waydroid
+# @description
+# https://repo.waydro.id/
 
 
 # Чтобы waydroid не спрашивал разрешения на подключение adb, прописать в конфиге
@@ -16,10 +18,10 @@
 
 
 
-## @brief Установить пакет waydroid
-## @details https://docs.waydro.id/usage/install-on-desktops#ubuntu-debian-and-derivatives
-## @details https://learn.microsoft.com/en-us/windows/android/wsa/
-## @retval 0 - успешно
+# @description Установить пакет waydroid
+# https://docs.waydro.id/usage/install-on-desktops#ubuntu-debian-and-derivatives
+# https://learn.microsoft.com/en-us/windows/android/wsa/
+# @exitcode 0 успешно
 function waydroid_packages_setup() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
@@ -38,8 +40,8 @@ function waydroid_packages_setup() {
     return 1
 }
 
-## @brief Установить и настроить waydroid
-## @retval 0 - успешно
+# @description Установить и настроить waydroid
+# @exitcode 0 успешно
 function waydroid_setup() {
     if ! is_linux; then
         return 0
@@ -51,21 +53,21 @@ function waydroid_setup() {
     return 0
 }
 
-## @brief Попытаться запустить waydroid сессию
-## @details waydroid сессия требует запуска с рамках wayland сессии,
-##          которая может отсутствовать на X11 системах. В таком случае функция вернёт ошибку
-## @retval 0 - успешно
+# @description Попытаться запустить waydroid сессию
+# waydroid сессия требует запуска с рамках wayland сессии,
+#         которая может отсутствовать на X11 системах. В таком случае функция вернёт ошибку
+# @exitcode 0 успешно
 function waydroid_session_try_start() {
     waydroid session stop || return $?
     waydroid show-full-ui || return $? # Будет запущена сессия waydroid (waydroid session start)
     return 0
 }
 
-## @brief Запустить waydroid сессию
-## @details waydroid сессия требует запуска с рамках wayland сессии,
-##          которая может отсутствовать на X11 системах.
-##          В таком случае wayland сессия будет запущена через weston
-## @retval 0 - успешно
+# @description Запустить waydroid сессию
+# waydroid сессия требует запуска с рамках wayland сессии,
+#         которая может отсутствовать на X11 системах.
+#         В таком случае wayland сессия будет запущена через weston
+# @exitcode 0 успешно
 function waydroid_session_start() {
     echo "[waydroid] Session start 1"
     if waydroid_session_try_start; then
@@ -82,15 +84,15 @@ function waydroid_session_start() {
     return 0
 }
 
-## @brief Ожидать запуска waydroid ОС
-## @details Максимальное время ожидания 30 секунд
-## @details FIFO в качестве временного файла не подходит,
-##          т.к. операции чтения/записи для FIFO работают в строго блокирующем режиме
-##          что приводит к необходимости запуска отдельного job'а который будет читать FIFO
-##          вплоть до завершения job'а waydroid_session_start().
-##          Читатель FIFO необходим, т.к. писатель FIFO может быть приостановлен ОС при заполнении FIFO "под завязку"
-## @param [in] Путь до временного файла куда перенаправляется stdout/stderr от waydroid сессии
-## @retval 0 - успешно
+# @description Ожидать запуска waydroid ОС
+# Максимальное время ожидания 30 секунд
+# FIFO в качестве временного файла не подходит,
+#         т.к. операции чтения/записи для FIFO работают в строго блокирующем режиме
+#         что приводит к необходимости запуска отдельного job'а который будет читать FIFO
+#         вплоть до завершения job'а waydroid_session_start().
+#         Читатель FIFO необходим, т.к. писатель FIFO может быть приостановлен ОС при заполнении FIFO "под завязку"
+# @arg $1 string Путь до временного файла куда перенаправляется stdout/stderr от waydroid сессии
+# @exitcode 0 успешно
 function waydroid_wait_start() {
     local TEMP_FILE_PATH="${1}"
     local TOTAl_TIMEOUT_SEC=30
@@ -115,9 +117,9 @@ function waydroid_wait_start() {
     return 1
 }
 
-## @brief Установить termux в waydroid
-## @details Путь до termux apk берётся из вызова функции termux_get_apk_path()
-## @retval 0 - успешно
+# @description Установить termux в waydroid
+# Путь до termux apk берётся из вызова функции termux_get_apk_path()
+# @exitcode 0 успешно
 function waydroid_termux_install() {
     local TERMUX_APK_PATH=""
     TERMUX_APK_PATH=$(termux_get_apk_path) || return $?
@@ -125,12 +127,12 @@ function waydroid_termux_install() {
     return 0
 }
 
-## @brief Установить для ssh сервера в termux ключ для подключения ssh клиента (текущий хост)
-## @details Если текущий хост не имеет ssh ключа (публичный/приватный),
-##          ключ будет сгенерирован автоматически (без запросов пользователю)
-## @details Текущий публичный ключ хоста копируется в файл (директория .ssh уже должна существовать)
-##          ~/.local/share/waydroid/data/data/com.termux/files/home/.ssh/authorized_keys
-## @retval 0 - успешно
+# @description Установить для ssh сервера в termux ключ для подключения ssh клиента (текущий хост)
+# Если текущий хост не имеет ssh ключа (публичный/приватный),
+#         ключ будет сгенерирован автоматически (без запросов пользователю)
+# Текущий публичный ключ хоста копируется в файл (директория .ssh уже должна существовать)
+#         ~/.local/share/waydroid/data/data/com.termux/files/home/.ssh/authorized_keys
+# @exitcode 0 успешно
 function waydroid_termux_setup_ssh_server_authorized_keys() {
     local USER_HOME_DIR_PATH=""
     USER_HOME_DIR_PATH="$(user_get_logname_home_dir_path)" || return $?
@@ -145,12 +147,12 @@ function waydroid_termux_setup_ssh_server_authorized_keys() {
     return 0
 }
 
-## @brief Установить все требуемые разрешения для termux
-## @details Узнать разрешения запрашиваемые приложением можно так:
-##          sudo waydroid shell -- bash -c "dumpsys package com.termux"
-##
-##          См. секцию "runtime permissions"
-## @retval 0 - успешно
+# @description Установить все требуемые разрешения для termux
+# Узнать разрешения запрашиваемые приложением можно так:
+#         sudo waydroid shell -- bash -c "dumpsys package com.termux"
+#
+#         См. секцию "runtime permissions"
+# @exitcode 0 успешно
 function waydroid_termux_setup_permissions() {
     sudo waydroid shell -- bash -c \
     "pm grant ${TERMUX_PACKAGE_NAME} android.permission.POST_NOTIFICATIONS && \
@@ -163,9 +165,9 @@ pm grant ${TERMUX_PACKAGE_NAME} android.permission.ACCESS_MEDIA_LOCATION" || ret
     return 0
 }
 
-## @brief Запустить termux
-## @details Функция учитывает необходимые задержки до и после запуска termux
-## @retval 0 - успешно
+# @description Запустить termux
+# Функция учитывает необходимые задержки до и после запуска termux
+# @exitcode 0 успешно
 function waydroid_termux_run() {
     sleep 3
     waydroid app launch "${TERMUX_PACKAGE_NAME}" || return $?
@@ -173,19 +175,19 @@ function waydroid_termux_run() {
     return 0
 }
 
-## @brief Запустить ssh сервер в termux
-## @details Запуск осуществляется при помощи ввода текста средствами отладки Android.
-##          При этом обратной связи от termux мы не имеем
-## @details ssh сервер (sshd) упредительно устанавливается если нужно (пакет openssh)
-## @retval 0 - успешно
+# @description Запустить ssh сервер в termux
+# Запуск осуществляется при помощи ввода текста средствами отладки Android.
+#         При этом обратной связи от termux мы не имеем
+# ssh сервер (sshd) упредительно устанавливается если нужно (пакет openssh)
+# @exitcode 0 успешно
 function waydroid_termux_run_ssh_server() {
     local ENTER_KEY_EVENT_CODE=66
     sudo waydroid shell -- bash -c "input text \"apt update && apt install -y openssh && sshd\" && input keyevent ${ENTER_KEY_EVENT_CODE}" || return $?
     return 0
 }
 
-## @brief Подготовить termux для удалённого к нему подключения по ssh
-## @retval 0 - успешно
+# @description Подготовить termux для удалённого к нему подключения по ssh
+# @exitcode 0 успешно
 function waydroid_termux_setup() {
     waydroid_termux_install || return $?
     waydroid_termux_setup_ssh_server_authorized_keys || return $?
@@ -195,9 +197,9 @@ function waydroid_termux_setup() {
     return 0
 }
 
-## @brief Получить IP адрес waydroid
-## @return IP адрес waydroid
-## @retval 0 - успешно
+# @description Получить IP адрес waydroid
+# @stdout IP адрес waydroid
+# @exitcode 0 успешно
 function waydroid_get_ip_address() {
     local WAYDROID_STATUS=""
     WAYDROID_STATUS=$(waydroid status) || return $?
@@ -212,13 +214,13 @@ function waydroid_get_ip_address() {
     return 1
 }
 
-## @brief Попытаться выполнить удалённую команду по ssh в termux (bash)
-## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей.
-##          См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
-## @param [in] ... Команда на исполнение в termux (bash)
-## @retval 0 - успешно;
-##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
-##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
+# @description Попытаться выполнить удалённую команду по ssh в termux (bash)
+# Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей.
+#         См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
+# @arg $1 string ... Команда на исполнение в termux (bash)
+# @exitcode 0 успешно
+# @exitcode 255 специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось
+# @exitcode ${1} прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
 function waydroid_termux_shell_try_run_command_over_ssh() {
     local USER_NAME=""
     USER_NAME=$(user_get_logname) || return $?
@@ -233,14 +235,14 @@ function waydroid_termux_shell_try_run_command_over_ssh() {
     return 0
 }
 
-## @brief Выполнить удалённую команду по ssh в termux (bash)
-## @details Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей.
-##          См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
-## @details Максимальное время ожидания подключения по ssh - 40 секунд
-## @param [in] ... Команда на исполнение в termux (bash)
-## @retval 0 - успешно;
-##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
-##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
+# @description Выполнить удалённую команду по ssh в termux (bash)
+# Подключение не требуется ввода пароля. Подключение осуществляется с помощью ключей.
+#         См. функцию waydroid_termux_setup_ssh_server_authorized_keys()
+# Максимальное время ожидания подключения по ssh - 40 секунд
+# @arg $1 string ... Команда на исполнение в termux (bash)
+# @exitcode 0 успешно
+# @exitcode 255 специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось
+# @exitcode ${1} прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
 function waydroid_termux_shell_run_command_over_ssh() {
     local TOTAl_TIMEOUT_SEC=40
 
@@ -261,11 +263,11 @@ function waydroid_termux_shell_run_command_over_ssh() {
     return ${SSH_CLIENT_ERROR_CODE}
 }
 
-## @brief Выполнить команду в termux (bash)
-## @param [in] ... Команда на исполнение в termux (bash)
-## @retval 0 - успешно;
-##         255 - специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось;
-##         прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
+# @description Выполнить команду в termux (bash)
+# @arg $1 string ... Команда на исполнение в termux (bash)
+# @exitcode 0 успешно
+# @exitcode 255 специальный код ошибки обозначающий что соединение с ssh сервером установить не удалось
+# @exitcode ${1} прочие коды ошибок - результат выполнения удалённой команды в termux (bash)
 function waydroid_termux_shell_run_command() {
     local TEMP_FILE_PATH=""
     TEMP_FILE_PATH=$(mktemp) &&

@@ -1,11 +1,12 @@
 #!/bin/bash
 
-## @brief Функции по установке openvpn(2)
+# @file openvpn.include.sh
+# @brief Функции по установке openvpn(2)
 
 
-## @brief Установить openvpn(2)
-## @details https://community.openvpn.net/openvpn/wiki/OpenvpnSoftwareRepos#DebianUbuntu:UsingOpenVPNaptrepositories
-## @retval 0 - успешно
+# @description Установить openvpn(2)
+# https://community.openvpn.net/openvpn/wiki/OpenvpnSoftwareRepos#DebianUbuntu:UsingOpenVPNaptrepositories
+# @exitcode 0 успешно
 function openvpn_setup() {
     if is_termux || is_msys; then
         return 0

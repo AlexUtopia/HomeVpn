@@ -1,10 +1,11 @@
 #!/bin/bash
 
-## @brief Функции работы с пользователями ОС
+# @file user.include.sh
+# @brief Функции работы с пользователями ОС
 
 
-## @brief Установить пакеты работы с пользователями
-## @retval 0 - успешно
+# @description Установить пакеты работы с пользователями
+# @exitcode 0 успешно
 function user_setup() {
     if is_msys; then
         return 0
@@ -21,9 +22,9 @@ function user_setup() {
     return 0
 }
 
-## @brief Получить имя текущего пользователя
-## @return Имя текущего пользователя
-## @retval 0 - успешно
+# @description Получить имя текущего пользователя
+# @stdout Имя текущего пользователя
+# @exitcode 0 успешно
 function user_get_current() {
     local USER_NAME=""
     USER_NAME=$(whoami) || return $?
@@ -35,10 +36,10 @@ function user_get_current() {
     return 0
 }
 
-## @brief Получить имя текущего зарегистрированного пользователя
-## @details Текущий зарегистрированный пользователь - результат команды logname
-## @return Имя текущего зарегистрированного пользователя
-## @retval 0 - успешно
+# @description Получить имя текущего зарегистрированного пользователя
+# Текущий зарегистрированный пользователь - результат команды logname
+# @stdout Имя текущего зарегистрированного пользователя
+# @exitcode 0 успешно
 function user_get_logname() {
     local USER_NAME=""
     USER_NAME=$(logname) || return $?
@@ -50,9 +51,9 @@ function user_get_logname() {
     return 0
 }
 
-## @brief Создать нового пользователя
-## @param [in] Имя нового пользователя
-## @retval 0 - успешно
+# @description Создать нового пользователя
+# @arg $1 string Имя нового пользователя
+# @exitcode 0 успешно
 function user_create() {
     local USER_NAME="${1}"
 
@@ -60,9 +61,10 @@ function user_create() {
     return 0
 }
 
-## @brief Проверить существует ли пользователь
-## @param [in] Имя пользователя
-## @retval 0 - пользователь существует; 1 - нет
+# @description Проверить существует ли пользователь
+# @arg $1 string Имя пользователя
+# @exitcode 0 пользователь существует
+# @exitcode 1 нет
 function user_is_exists() {
     local USER_NAME="${1}"
 
@@ -70,10 +72,10 @@ function user_is_exists() {
     return 0
 }
 
-## @brief Добавить пользователя в группу
-## @param [in] Имя пользователя
-## @param [in] Имя группы
-## @retval 0 - успешно
+# @description Добавить пользователя в группу
+# @arg $1 string Имя пользователя
+# @arg $2 string Имя группы
+# @exitcode 0 успешно
 function user_add_to_group() {
     local USER_NAME="${1}"
     local GROUP_NAME="${2}"
@@ -82,10 +84,11 @@ function user_add_to_group() {
     return 0
 }
 
-## @brief Проверить добавлен ли пользователь в группу
-## @param [in] Имя пользователя
-## @param [in] Имя группы
-## @retval 0 - пользователь добавлен в группу; 1 - нет
+# @description Проверить добавлен ли пользователь в группу
+# @arg $1 string Имя пользователя
+# @arg $2 string Имя группы
+# @exitcode 0 пользователь добавлен в группу
+# @exitcode 1 нет
 function user_is_added_to_group() {
     local USER_NAME="${1}"
     local GROUP_NAME="${2}"
@@ -100,11 +103,11 @@ function user_is_added_to_group() {
     return 1
 }
 
-## @brief Проверить пользователя
-## @details Проверяется существование заданного пользователя
-## @param [in] Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
-## @return Имя пользователя
-## @retval 0 - успешно
+# @description Проверить пользователя
+# Проверяется существование заданного пользователя
+# @arg $1 string Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
+# @stdout Имя пользователя
+# @exitcode 0 успешно
 function user_check() {
    local USER_NAME="${1}"
 
@@ -120,13 +123,13 @@ function user_check() {
     return 0
 }
 
-## @brief Получить домашнюю директорию пользователя
-## @details https://unix.stackexchange.com/a/758316
-## @details В Android/termux возможен только один пользователь, поэтому имя пользователя игнорируется
-##          https://wiki.termux.com/wiki/Differences_from_Linux
-## @param [in] Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
-## @return Домашняя директория пользователя
-## @retval 0 - успешно
+# @description Получить домашнюю директорию пользователя
+# https://unix.stackexchange.com/a/758316
+# В Android/termux возможен только один пользователь, поэтому имя пользователя игнорируется
+#         https://wiki.termux.com/wiki/Differences_from_Linux
+# @arg $1 string Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
+# @stdout Домашняя директория пользователя
+# @exitcode 0 успешно
 function user_get_home_dir_path() {
     if is_termux; then
         termux_user_get_home_dir_path || return $?
@@ -140,10 +143,10 @@ function user_get_home_dir_path() {
     return 0
 }
 
-## @brief Получить домашнюю директорию текущего зарегистрированного пользователя
-## @details Текущий зарегистрированный пользователь - результат команды logname
-## @return Домашняя директория текущего зарегистрированного пользователя
-## @retval 0 - успешно, 1 - logname вернул пустое имя пользователя или ошибку
+# @description Получить домашнюю директорию текущего зарегистрированного пользователя
+# Текущий зарегистрированный пользователь - результат команды logname
+# @stdout Домашняя директория текущего зарегистрированного пользователя
+# @exitcode 0 успешно, 1 - logname вернул пустое имя пользователя или ошибку
 function user_get_logname_home_dir_path() {
     local USER_NAME=""
     USER_NAME=$(user_get_logname) || return $?
@@ -152,9 +155,10 @@ function user_get_logname_home_dir_path() {
     return 0
 }
 
-## @brief Проверить задан ли пароль у пользователя
-## @param [in] Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
-## @retval 0 - пароль задан; 1 - нет
+# @description Проверить задан ли пароль у пользователя
+# @arg $1 string Имя пользователя, необязательный аргумент (если не задано, будет подставлено имя текущего пользователя)
+# @exitcode 0 пароль задан
+# @exitcode 1 нет
 function user_is_exists_password() {
     if is_termux; then
         termux_user_is_exists_password || return $?
@@ -168,9 +172,9 @@ function user_is_exists_password() {
     return 0
 }
 
-## @brief Создать пользователю пароль если пароль не задан
-## @return [in] Имя пользователя
-## @retval 0 - успешно
+# @description Создать пользователю пароль если пароль не задан
+# @stdout [in] Имя пользователя
+# @exitcode 0 успешно
 function user_create_password_if() {
     local USER_NAME="${1}"
 

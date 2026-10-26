@@ -1,19 +1,21 @@
 #!/bin/bash
 
-## @brief Функции работы с python
-## https://www.python.org/
-## https://docs.python.org/3/library/venv.html
+# @file python.include.sh
+# @brief Функции работы с python
+# @description
+# https://www.python.org/
+# https://docs.python.org/3/library/venv.html
 
 
-## @brief Получить целевую версию python для данной платформы
-## @details Для проекта требуется версия python >= 3.12 из-за использования
-##          [3.11+] regex atomic group
-##            https://docs.python.org/3/library/re.html#regular-expression-syntax
-##          [3.12+] возможность создания наследников от pathlib.Path
-##            https://docs.python.org/3.12/whatsnew/3.12.html
-##            The pathlib.Path class now supports subclassing
-## @return Целевая версия python для данной платформы
-## @retval 0 - успешно
+# @description Получить целевую версию python для данной платформы
+# Для проекта требуется версия python >= 3.12 из-за использования
+#         [3.11+] regex atomic group
+#           https://docs.python.org/3/library/re.html#regular-expression-syntax
+#         [3.12+] возможность создания наследников от pathlib.Path
+#           https://docs.python.org/3.12/whatsnew/3.12.html
+#           The pathlib.Path class now supports subclassing
+# @stdout Целевая версия python для данной платформы
+# @exitcode 0 успешно
 function python_get_version() {
     if package_manager_is_apt; then
         if ! is_termux; then
@@ -31,10 +33,10 @@ function python_get_executable() {
     return 0
 }
 
-## @brief Получить путь до директории venv python проекта
-## @param [in] Путь до корня python проекта
-## @return Путь до директории venv python проекта
-## @retval 0 - успешно
+# @description Получить путь до директории venv python проекта
+# @arg $1 string Путь до корня python проекта
+# @stdout Путь до директории venv python проекта
+# @exitcode 0 успешно
 function python_venv_get_dir_path() {
     PROJECT_DIR_PATH="${1}"
 
@@ -42,9 +44,9 @@ function python_venv_get_dir_path() {
     return 0
 }
 
-## @brief Активировать venv
-## @param [in] Путь до корня python проекта
-## @retval 0 - успешно
+# @description Активировать venv
+# @arg $1 string Путь до корня python проекта
+# @exitcode 0 успешно
 function python_venv_activate() {
     local PROJECT_DIR_PATH="${1}"
 
@@ -55,18 +57,18 @@ function python_venv_activate() {
     return 0
 }
 
-## @brief Деактивировать venv
-## @retval 0 - успешно
+# @description Деактивировать venv
+# @exitcode 0 успешно
 function python_venv_deactivate() {
     deactivate || return $?
     return 0
 }
 
-## @brief Установить python пакеты при помощи pip в venv
-## @details Пакеты форсированно переустанавливаются
-## @param [in] Путь до корня python проекта
-## @param [in] Путь до requirements.txt файла со списком пакетов для установки, если не задан то используется "${PROJECT_DIR_PATH}/requirements.txt"
-## @retval 0 - успешно
+# @description Установить python пакеты при помощи pip в venv
+# Пакеты форсированно переустанавливаются
+# @arg $1 string Путь до корня python проекта
+# @arg $2 string Путь до requirements.txt файла со списком пакетов для установки, если не задан то используется "${PROJECT_DIR_PATH}/requirements.txt"
+# @exitcode 0 успешно
 function pip_install_packages() {
     local PROJECT_DIR_PATH="${1}"
     local REQUIREMENTS_FILE_PATH="${2}"
@@ -88,8 +90,8 @@ function pip_install_packages() {
     return ${COMMAND_CHAIN_RESULT}
 }
 
-## @brief Установить python для проекта
-## @retval 0 - успешно
+# @description Установить python для проекта
+# @exitcode 0 успешно
 function python_setup() {
     local PYTHON_VERSION=""
     PYTHON_VERSION=$(python_get_version) || return $?

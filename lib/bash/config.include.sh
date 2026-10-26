@@ -1,36 +1,36 @@
 #!/bin/bash
 
-## @brief Переменные конфигурации разворота проекта
+# @file config.include.sh
+# @brief Переменные конфигурации разворота проекта
 
-## @brief Конфигурация пакетов
+# @set GLOBAL_CONFIG_SETUP_PACKAGES_MODE string Конфигурация пакетов
 export GLOBAL_CONFIG_SETUP_PACKAGES_MODE="full" # min, dev, full
 
-## @brief Конфигурация пути до корня файловой системы
+# @set GLOBAL_CONFIG_ROOT_PATH string Конфигурация пути до корня файловой системы
 export GLOBAL_CONFIG_ROOT_PATH=""
 if is_termux; then
     GLOBAL_CONFIG_ROOT_PATH="${PREFIX}/.."
 fi
 
-## @brief Конфигурация пути до директории usr
+# @set GLOBAL_CONFIG_USR_DIR_PATH string Конфигурация пути до директории usr
 export GLOBAL_CONFIG_USR_DIR_PATH="/usr"
 if is_termux; then
     GLOBAL_CONFIG_USR_DIR_PATH="${PREFIX}"
 fi
 
-## @brief Конфигурация пути до директории etc
+# @set GLOBAL_CONFIG_ETC_DIR_PATH string Конфигурация пути до директории etc
 export GLOBAL_CONFIG_ETC_DIR_PATH="/etc"
 if is_termux; then
     GLOBAL_CONFIG_ETC_DIR_PATH="${GLOBAL_CONFIG_USR_DIR_PATH}/etc"
 fi
 
-## @brief Конфигурация пути до директории opt
+# @set GLOBAL_CONFIG_OPT_DIR_PATH string Конфигурация пути до директории opt
 export GLOBAL_CONFIG_OPT_DIR_PATH="/opt"
 if is_termux; then
     GLOBAL_CONFIG_OPT_DIR_PATH="${GLOBAL_CONFIG_USR_DIR_PATH}/opt"
 fi
 
-## @brief Имя пользователя от которого будет работать VNC сервер
-## @details В Android/termux переменная окружения USER не установлена
+# @set GLOBAL_CONFIG_VNC_SERVER_USER string Имя пользователя от которого будет работать VNC сервер. В Android/termux переменная окружения USER не установлена
 export GLOBAL_CONFIG_VNC_SERVER_USER=""
 GLOBAL_CONFIG_VNC_SERVER_USER=$(logname) || exit $?
 if [[ -z "${GLOBAL_CONFIG_VNC_SERVER_USER}" ]]; then
@@ -38,8 +38,7 @@ if [[ -z "${GLOBAL_CONFIG_VNC_SERVER_USER}" ]]; then
     exit 1
 fi
 
-## @brief Имя пользователя от которого будет работать SMB сервер
-## @details В Android/termux переменная окружения USER не установлена
+# @set GLOBAL_CONFIG_SMB_SERVER_USER string Имя пользователя от которого будет работать SMB сервер. В Android/termux переменная окружения USER не установлена
 export GLOBAL_CONFIG_SMB_SERVER_USER=""
 GLOBAL_CONFIG_SMB_SERVER_USER=$(logname) || exit $?
 if [[ -z "${GLOBAL_CONFIG_SMB_SERVER_USER}" ]]; then
@@ -47,24 +46,22 @@ if [[ -z "${GLOBAL_CONFIG_SMB_SERVER_USER}" ]]; then
     exit 1
 fi
 
-## @brief Путь до публичной директории SMB сервера
+# @set GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH string Путь до публичной директории SMB сервера
 export GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH="${GLOBAL_CONFIG_ROOT_PATH}/smb_share_public"
 if is_msys; then
     GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH="${SYSTEMDRIVE}/smb_share_public"
 fi
 
-## @brief TCP порты на которых работает SMB сервер
-## @details https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/
-## @details Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
+# @set GLOBAL_CONFIG_SMB_SERVER_TCP_PORTS string TCP порты на которых работает SMB сервер. https://unlix.ru/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-%D1%84%D0%B0%D0%B5%D1%80%D0%B2%D0%BE%D0%BB%D0%B0-iptables-%D0%B4%D0%BB%D1%8F-samba/. Android не может использовать порты ниже 1024, см. https://android.stackexchange.com/a/205562
 export GLOBAL_CONFIG_SMB_SERVER_TCP_PORTS="139 445"
 if is_termux; then
     GLOBAL_CONFIG_SMB_SERVER_TCP_PORTS="1139 4445"
 fi
 
-## @brief Путь до директории данных проекта
+# @set GLOBAL_CONFIG_DATA_DIR_PATH string Путь до директории данных проекта
 export GLOBAL_CONFIG_DATA_DIR_PATH="${HOME_VPN_PROJECT_ROOT}/data"
 
-## @brief Префикс пакета для разворота проекта в среде MSYS2
+# @set GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX string Префикс пакета для разворота проекта в среде MSYS2
 export GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX=""
 if is_msys; then
     GLOBAL_CONFIG_MSYS2_PACKAGE_PREFIX="${MINGW_PACKAGE_PREFIX}-"

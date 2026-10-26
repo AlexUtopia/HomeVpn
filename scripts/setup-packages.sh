@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# @file setup-packages.sh
+# @brief Установка пакетов проекта
+
 # Понять что мы исполняемся внутри вирт машины
 # https://unix.stackexchange.com/questions/89714/easy-way-to-determine-the-virtualization-technology-of-a-linux-machine
 

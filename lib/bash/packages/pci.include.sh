@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции работы с PCI
-## https://eternallybored.org/misc/pciutils/
+# @file pci.include.sh
+# @brief Функции работы с PCI
+# @description
+# https://eternallybored.org/misc/pciutils/
 
 
-## @brief Установить утилиты работы с PCI
-## @details https://github.com/pciutils/pciutils
-## @retval 0 - успешно
+# @description Установить утилиты работы с PCI
+# https://github.com/pciutils/pciutils
+# @exitcode 0 успешно
 function pci_setup() {
     if is_msys; then
         return 0 # fixme utopia Скачать или собрать пакет

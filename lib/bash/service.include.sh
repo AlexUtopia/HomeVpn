@@ -1,18 +1,20 @@
 #!/bin/bash
 
-## @brief Функции работы со службами
-##        1) [Linux]          systemd
-##        2) [Android/termux] runit
-##        3) [Windows/MSYS2]  cygrunsrv (неготов)
-##        4) [Windows]        sc (неготов)
+# @file service.include.sh
+# @brief Функции работы со службами
+# @description
+#        1) [Linux]          systemd
+#        2) [Android/termux] runit
+#        3) [Windows/MSYS2]  cygrunsrv (неготов)
+#        4) [Windows]        sc (неготов)
 
 
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/systemd.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/service/runit.include.sh"
 
 
-## @brief Инициализировать службы
-## @retval 0 - успешно
+# @description Инициализировать службы
+# @exitcode 0 успешно
 function service_setup() {
     if is_termux; then
         runit_setup || return $?
@@ -25,12 +27,11 @@ function service_setup() {
     return 0
 }
 
-## @brief Проверить запущена ли служба
-## @param [in] Имя службы
-## @param [in] Имя пользователя, необязательный аргумент
-##             - если не задано, то действие для системной службы
-##             - если задано, то действие для пользовательской службы
-## @retval 0 - служба запущена; 1 - нет
+# @description Проверить запущена ли служба
+# @arg $1 string Имя службы
+# @arg $2 string Имя пользователя, необязательный аргумент - если не задано, то действие для системной службы - если задано, то действие для пользовательской службы
+# @exitcode 0 служба запущена
+# @exitcode 1 нет
 function service_is_active() {
     local SERVICE_NAME="${1}"
     local USER_NAME="${2}"
@@ -46,12 +47,10 @@ function service_is_active() {
     return 0
 }
 
-## @brief Добавить службу в автозапуск (при старте ОС) и запустить
-## @param [in] Имя службы
-## @param [in] Имя пользователя, необязательный аргумент
-##             - если не задано, то действие для системной службы
-##             - если задано, то действие для пользовательской службы
-## @retval 0 - успешно
+# @description Добавить службу в автозапуск (при старте ОС) и запустить
+# @arg $1 string Имя службы
+# @arg $2 string Имя пользователя, необязательный аргумент - если не задано, то действие для системной службы - если задано, то действие для пользовательской службы
+# @exitcode 0 успешно
 function service_enable() {
     local SERVICE_NAME="${1}"
     local USER_NAME="${2}"
@@ -67,12 +66,10 @@ function service_enable() {
     return 0
 }
 
-## @brief Остановить службу и убрать её из автозапуска (при старте ОС)
-## @param [in] Имя службы
-## @param [in] Имя пользователя, необязательный аргумент
-##             - если не задано, то действие для системной службы
-##             - если задано, то действие для пользовательской службы
-## @retval 0 - успешно
+# @description Остановить службу и убрать её из автозапуска (при старте ОС)
+# @arg $1 string Имя службы
+# @arg $2 string Имя пользователя, необязательный аргумент - если не задано, то действие для системной службы - если задано, то действие для пользовательской службы
+# @exitcode 0 успешно
 function service_disable() {
     local SERVICE_NAME="${1}"
     local USER_NAME="${2}"

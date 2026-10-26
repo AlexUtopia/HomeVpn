@@ -1,11 +1,12 @@
 #!/bin/bash
 
-## @brief Функции работы со вспомогательными пакетами разработчика проекта
+# @file dev_packages.include.sh
+# @brief Функции работы со вспомогательными пакетами разработчика проекта
 
 
-## @brief Установить вспомогательными пакеты разработчика проекта
-## @details Утилиты nano, htop, kvm-ok, lsusb, lshw
-## @retval 0 - успешно
+# @description Установить вспомогательными пакеты разработчика проекта
+# Утилиты nano, htop, kvm-ok, lsusb, lshw
+# @exitcode 0 успешно
 function dev_packages_setup() {
     if is_msys; then
         return 0

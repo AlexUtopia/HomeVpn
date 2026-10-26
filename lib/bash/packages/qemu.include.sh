@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции работы с qemu
-## https://www.qemu.org/
-## https://gitlab.com/qemu-project/qemu
+# @file qemu.include.sh
+# @brief Функции работы с qemu
+# @description
+# https://www.qemu.org/
+# https://gitlab.com/qemu-project/qemu
 
 
-## @brief Установить пакеты требуемые для сборки qemu
-## @retval 0 - успешно
+# @description Установить пакеты требуемые для сборки qemu
+# @exitcode 0 успешно
 function qemu_build_setup_dependencies() {
     local REQUIRED_ADDITIONAL_PACKAGES="libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build"
     local RECOMMENDED_ADDITIONAL_PACKAGES="libaio-dev libbluetooth-dev libcapstone-dev libbrlapi-dev libbz2-dev libcap-ng-dev libcurl4-gnutls-dev libgtk-3-dev libibverbs-dev libjpeg8-dev libncurses5-dev libnuma-dev librbd-dev librdmacm-dev libsasl2-dev libsdl2-dev libseccomp-dev libsnappy-dev libssh-dev valgrind xfslibs-dev"
@@ -15,9 +17,9 @@ function qemu_build_setup_dependencies() {
     return 0
 }
 
-## @brief Собрать qemu из исходников
-## @details Версия 10.2.0
-## @retval 0 - успешно
+# @description Собрать qemu из исходников
+# Версия 10.2.0
+# @exitcode 0 успешно
 function qemu_build_from_sources() {
     local PACKAGE_NAME="qemu"
     local DOWNLOAD_URL="https://gitlab.com/qemu-project/${PACKAGE_NAME}.git"
@@ -43,8 +45,8 @@ function qemu_build_from_sources() {
     return ${COMMAND_CHAIN_RESULT}
 }
 
-## @brief Установить умолчательный qemu
-## @retval 0 - успешно
+# @description Установить умолчательный qemu
+# @exitcode 0 успешно
 function qemu_setup_default() {
     local PACKAGE_LIST="qemu-system swtpm"
     if is_termux; then
@@ -57,8 +59,8 @@ function qemu_setup_default() {
     return 0
 }
 
-## @brief Установить qemu
-## @retval 0 - успешно
+# @description Установить qemu
+# @exitcode 0 успешно
 function qemu_setup() {
     qemu_setup_default || return $?
     return 0

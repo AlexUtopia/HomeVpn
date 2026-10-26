@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции по установке openjdk
-## @details Открытая реализация Java платформы
-## https://openjdk.org/
+# @file openjdk.include.sh
+# @brief Функции по установке openjdk
+# @description
+# Открытая реализация Java платформы
+# https://openjdk.org/
 
 
-## @brief Установить openjdk
-## @retval 0 - успешно
+# @description Установить openjdk
+# @exitcode 0 успешно
 function openjdk_setup() {
     if is_msys; then # Скачаем и установим приложение вручную
         return 0

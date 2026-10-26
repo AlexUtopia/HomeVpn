@@ -1,11 +1,12 @@
 #!/bin/bash
 
-## @brief Функции работы с пакетным менеджером apt
+# @file apt.include.sh
+# @brief Функции работы с пакетным менеджером apt
 
 
-## @brief Получить главную архитектуру пакетов
-## @return Главная архитектура пакетов, например, amd64 или aarch64
-## @retval 0 - успешно
+# @description Получить главную архитектуру пакетов
+# @stdout Главная архитектура пакетов, например, amd64 или aarch64
+# @exitcode 0 успешно
 function dpkg_get_main_architecture() {
     local RESULT=""
     RESULT=$(dpkg --print-architecture) || return $?
@@ -13,10 +14,10 @@ function dpkg_get_main_architecture() {
     return 0
 }
 
-## @brief Установить список пакетов
-## @details Список может состоять из одного пакета
-## @param [in] Список пакетов
-## @retval 0 - успешно
+# @description Установить список пакетов
+# Список может состоять из одного пакета
+# @arg $1 string Список пакетов
+# @exitcode 0 успешно
 function apt_install_packages() {
     local PACKAGE_NAME_LIST="${1}"
 
@@ -24,8 +25,8 @@ function apt_install_packages() {
     return 0
 }
 
-## @brief Обновить установленные пакеты
-## @retval 0 - успешно
+# @description Обновить установленные пакеты
+# @exitcode 0 успешно
 function apt_update_and_upgrade() {
     # https://wiki.debian.org/Multiarch/HOWTO
     # https://wiki.ubuntu.com/MultiarchCross
@@ -43,9 +44,9 @@ function apt_update_and_upgrade() {
     return 0
 }
 
-## @brief Проверить установлен ли пакет
-## @param [in] Имя пакета
-## @retval 0 - пакет установлен, 1 - нет
+# @description Проверить установлен ли пакет
+# @arg $1 string Имя пакета
+# @exitcode 0 пакет установлен, 1 - нет
 function apt_is_package_installed() {
     local PACKAGE_NAME="${1}"
 
@@ -53,9 +54,9 @@ function apt_is_package_installed() {
     return 0
 }
 
-## @brief Проверить существует (доступен) ли пакет в репозитории пакетов
-## @param [in] Имя пакета
-## @retval 0 - пакет существует (доступен) в репозитории пакетов, 1 - нет
+# @description Проверить существует (доступен) ли пакет в репозитории пакетов
+# @arg $1 string Имя пакета
+# @exitcode 0 пакет существует (доступен) в репозитории пакетов, 1 - нет
 function apt_is_package_exists_in_repository() {
     local PACKAGE_NAME="${1}"
 
@@ -63,17 +64,17 @@ function apt_is_package_exists_in_repository() {
     return 0
 }
 
-## @brief Создать source файл в формате deb822 для apt
-## @details https://wiki.debian.org/ArchitectureSpecificsMemo
-## @details https://manpages.ubuntu.com/manpages/xenial/man5/sources.list.5.html
-## @param [in] Путь куда сформировать *.source файл
-## @param [in] URIs параметр (обязательный)
-## @param [in] Suites параметр (обязательный)
-## @param [in] Components параметр (обязательный)
-## @param [in] Signed-By параметр (не обязательный)
-## @param [in] Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
-## @param [in] Types параметр (не обязательный, будет "deb")
-## @retval 0 - успешно
+# @description Создать source файл в формате deb822 для apt
+# https://wiki.debian.org/ArchitectureSpecificsMemo
+# https://manpages.ubuntu.com/manpages/xenial/man5/sources.list.5.html
+# @arg $1 string Путь куда сформировать *.source файл
+# @arg $2 string URIs параметр (обязательный)
+# @arg $3 string Suites параметр (обязательный)
+# @arg $4 string Components параметр (обязательный)
+# @arg $5 string Signed-By параметр (не обязательный)
+# @arg $6 string Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
+# @arg $7 string Types параметр (не обязательный, будет "deb")
+# @exitcode 0 успешно
 function apt_create_sources() {
     local SOURCES_FILE_PATH="${1}"
     local URIS="${2}"
@@ -105,11 +106,11 @@ ${SIGNED_BY_PATH}" "${SOURCES_FILE_PATH}" || return $?
     return 0
 }
 
-## @brief Получить путь до файла ключа пакета
-## @details https://habr.com/ru/articles/683716/
-## @param [in] Имя пакета
-## @return Путь до файла ключа пакет
-## @retval 0 - успешно
+# @description Получить путь до файла ключа пакета
+# https://habr.com/ru/articles/683716/
+# @arg $1 string Имя пакета
+# @stdout Путь до файла ключа пакет
+# @exitcode 0 успешно
 function apt_get_key_file_path() {
     local PACKAGE_NAME="${1}"
 
@@ -119,11 +120,11 @@ function apt_get_key_file_path() {
     return 0
 }
 
-## @brief Получить путь до sources-файла пакета
-## @details https://habr.com/ru/articles/683716/
-## @param [in] Имя пакета
-## @return Путь до sources-файла пакета
-## @retval 0 - успешно
+# @description Получить путь до sources-файла пакета
+# https://habr.com/ru/articles/683716/
+# @arg $1 string Имя пакета
+# @stdout Путь до sources-файла пакета
+# @exitcode 0 успешно
 function apt_get_source_file_path() {
     local PACKAGE_NAME="${1}"
     local APT_SOURCES_LIST_DIR_PATH="${GLOBAL_CONFIG_ETC_DIR_PATH}/apt/sources.list.d"
@@ -132,10 +133,10 @@ function apt_get_source_file_path() {
     return 0
 }
 
-## @brief Скачать ключ пакета
-## @param [in] Имя пакета
-## @param [in] URL для скачивания ключа пакета
-## @retval 0 - успешно
+# @description Скачать ключ пакета
+# @arg $1 string Имя пакета
+# @arg $2 string URL для скачивания ключа пакета
+# @exitcode 0 успешно
 function apt_download_key() {
     local PACKAGE_NAME="${1}"
     local KEY_FILE_URL="${2}"
@@ -158,17 +159,17 @@ function apt_download_key() {
     return 0
 }
 
-## @brief Добавить source файл в формате deb822 для apt
-## @details https://wiki.debian.org/ArchitectureSpecificsMemo
-## @details https://manpages.ubuntu.com/manpages/xenial/man5/sources.list.5.html
-## @param [in] Имя пакета
-## @param [in] URL для скачивания ключа пакета
-## @param [in] URIs параметр (обязательный)
-## @param [in] Suites параметр (обязательный)
-## @param [in] Components параметр (обязательный)
-## @param [in] Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
-## @param [in] Types параметр (не обязательный, будет "deb")
-## @retval 0 - успешно
+# @description Добавить source файл в формате deb822 для apt
+# https://wiki.debian.org/ArchitectureSpecificsMemo
+# https://manpages.ubuntu.com/manpages/xenial/man5/sources.list.5.html
+# @arg $1 string Имя пакета
+# @arg $2 string URL для скачивания ключа пакета
+# @arg $3 string URIs параметр (обязательный)
+# @arg $4 string Suites параметр (обязательный)
+# @arg $5 string Components параметр (обязательный)
+# @arg $6 string Architectures параметр (не обязательный, будет использована архитектура по умолчанию)
+# @arg $7 string Types параметр (не обязательный, будет "deb")
+# @exitcode 0 успешно
 function apt_add_sources() {
     local PACKAGE_NAME="${1}"
     local KEY_FILE_URL="${2}"
@@ -199,10 +200,10 @@ function apt_add_sources() {
     return 0
 }
 
-## @brief Добавить ppa репозиторий для apt
-## @param [in] Имя ppa репозитория, например "deadsnakes/ppa"
-## @param [in] Подпись ppa репозитория, необязательный аргумент
-## @retval 0 - успешно
+# @description Добавить ppa репозиторий для apt
+# @arg $1 string Имя ppa репозитория, например "deadsnakes/ppa"
+# @arg $2 string Подпись ppa репозитория, необязательный аргумент
+# @exitcode 0 успешно
 function apt_add_ppa() {
     local PPA_NAME="${1}"
 

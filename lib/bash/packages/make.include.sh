@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции работы с make
-## https://www.gnu.org/software/make/
-## @details Требуется для установки/сборки некоторых пакетов проекта
+# @file make.include.sh
+# @brief Функции работы с make
+# @description
+# https://www.gnu.org/software/make/
+# Требуется для установки/сборки некоторых пакетов проекта
 
 
-## @brief Установить make
-## @retval 0 - успешно
+# @description Установить make
+# @exitcode 0 успешно
 function make_setup() {
     package_manager_install_packages "make" || return $?
     return 0

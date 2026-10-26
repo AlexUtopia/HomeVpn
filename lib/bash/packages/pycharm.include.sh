@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции по установке pycharm
-## @details IDE для разработки на python
-## https://www.jetbrains.com/pycharm/
+# @file pycharm.include.sh
+# @brief Функции по установке pycharm
+# @description
+# IDE для разработки на python
+# https://www.jetbrains.com/pycharm/
 
 
-## @brief Установить pycharm
-## @retval 0 - успешно
+# @description Установить pycharm
+# @exitcode 0 успешно
 function pycharm_setup() {
     local PACKAGE_VERSION="2026.1.1"
     local PACKAGE_NAME="pycharm-community-${PACKAGE_VERSION}"

@@ -1,22 +1,24 @@
-## @brief Функции работы с runit
-## https://smarden.org/runit/
-## https://wiki.termux.com/wiki/Termux-services
-## https://wiki.termux.com/wiki/Termux:Boot
-## https://wiki.gentoo.org/wiki/Runit
-## https://docs.voidlinux.org/config/services/index.html
+# @file runit.include.sh
+# @brief Функции работы с runit
+# @description
+# https://smarden.org/runit/
+# https://wiki.termux.com/wiki/Termux-services
+# https://wiki.termux.com/wiki/Termux:Boot
+# https://wiki.gentoo.org/wiki/Runit
+# https://docs.voidlinux.org/config/services/index.html
 
 
-## @brief Получить путь до директории размещения скриптов запуска служб
-## @return Путь до директории размещения скриптов запуска системных сервисов
-## @retval 0 - успешно
+# @description Получить путь до директории размещения скриптов запуска служб
+# @stdout Путь до директории размещения скриптов запуска системных сервисов
+# @exitcode 0 успешно
 function runit_get_base_dir_path() {
     echo "${SVDIR}"
     return 0
 }
 
-## @brief Включить логирование для службы
-## @param [in] Имя службы
-## @retval 0 - успешно
+# @description Включить логирование для службы
+# @arg $1 string Имя службы
+# @exitcode 0 успешно
 function runit_create_log_run_file() {
     local SERVICE_NAME="${1}"
 
@@ -29,12 +31,12 @@ function runit_create_log_run_file() {
     return 0
 }
 
-## @brief Создать скрипты запуска службы: run и finish
-## @details Примеры скриптов https://smarden.org/runit/runscripts
-## @param [in] Имя службы
-## @param [in] Содержимое скрипта run
-## @param [in] Содержимое скрипта finish
-## @retval 0 - успешно
+# @description Создать скрипты запуска службы: run и finish
+# Примеры скриптов https://smarden.org/runit/runscripts
+# @arg $1 string Имя службы
+# @arg $2 string Содержимое скрипта run
+# @arg $3 string Содержимое скрипта finish
+# @exitcode 0 успешно
 function runit_create_run_file() {
     local SERVICE_NAME="${1}"
     local RUN_FILE_CONTENT="${2}"
@@ -56,8 +58,8 @@ function runit_create_run_file() {
     return 0
 }
 
-## @brief Инициализировать runit
-## @retval 0 - успешно
+# @description Инициализировать runit
+# @exitcode 0 успешно
 function runit_setup() {
     if is_termux; then
         termux_service_packages_setup || return $?
@@ -81,9 +83,10 @@ function runit_setup() {
     return 0
 }
 
-## @brief Проверить запущена ли служба
-## @param [in] Имя службы
-## @retval 0 - служба запущена; 1 - нет
+# @description Проверить запущена ли служба
+# @arg $1 string Имя службы
+# @exitcode 0 служба запущена
+# @exitcode 1 нет
 function runit_service_is_active() {
     local SERVICE_NAME="${1}"
 
@@ -97,9 +100,9 @@ function runit_service_is_active() {
     return 1
 }
 
-## @brief Добавить службу в автозапуск (при старте ОС) и запустить
-## @param [in] Имя службы
-## @retval 0 - успешно
+# @description Добавить службу в автозапуск (при старте ОС) и запустить
+# @arg $1 string Имя службы
+# @exitcode 0 успешно
 function runit_service_enable() {
     local SERVICE_NAME="${1}"
 
@@ -118,9 +121,9 @@ function runit_service_enable() {
     return 0
 }
 
-## @brief Остановить службу и убрать её из автозапуска (при старте ОС)
-## @param [in] Имя службы
-## @retval 0 - успешно
+# @description Остановить службу и убрать её из автозапуска (при старте ОС)
+# @arg $1 string Имя службы
+# @exitcode 0 успешно
 function runit_service_disable() {
     local SERVICE_NAME="${1}"
 

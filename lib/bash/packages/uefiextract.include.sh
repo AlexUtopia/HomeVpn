@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции работы с uefiextract
-## https://github.com/LongSoft/UEFITool
+# @file uefiextract.include.sh
+# @brief Функции работы с uefiextract
+# @description
+# https://github.com/LongSoft/UEFITool
 
 
-## @brief Получить платформу для uefiextract
-## @return Платформа для uefiextract
-## @retval 0 - успешно
+# @description Получить платформу для uefiextract
+# @stdout Платформа для uefiextract
+# @exitcode 0 успешно
 function uefiextract_get_platform() {
     if is_linux; then
         if os_arch_is_x86_64; then
@@ -26,19 +28,19 @@ function uefiextract_get_platform() {
     return 1
 }
 
-## @brief Получить путь до исполняемого файла uefiextract
-## @return Путь до исполняемого файла uefiextract
-## @retval 0 - успешно
+# @description Получить путь до исполняемого файла uefiextract
+# @stdout Путь до исполняемого файла uefiextract
+# @exitcode 0 успешно
 function uefiextract_get_executable_path() {
     echo "${GLOBAL_CONFIG_OPT_DIR_PATH}/uefiextract/uefiextract"
     return 0
 }
 
-## @brief Установить uefiextract
-## @details Версия A72
-## @details Поддерживаемые платформы Linux|x64, Windows/MSYS2|i386, Windows/MSYS2|i686, Windows/MSYS2|x86_64
-## @details Установка в директорию ${GLOBAL_CONFIG_OPT_DIR_PATH}
-## @retval 0 - успешно
+# @description Установить uefiextract
+# Версия A72
+# Поддерживаемые платформы Linux|x64, Windows/MSYS2|i386, Windows/MSYS2|i686, Windows/MSYS2|x86_64
+# Установка в директорию ${GLOBAL_CONFIG_OPT_DIR_PATH}
+# @exitcode 0 успешно
 function uefiextract_setup() {
     local UEFIEXTRACT_PLATFORM=""
     UEFIEXTRACT_PLATFORM=$(uefiextract_get_platform) || return $?
@@ -51,12 +53,11 @@ function uefiextract_setup() {
     return 0
 }
 
-## @brief Извлечь IntelGopDriver из UEFI образа
-## @param [in] Путь до UEFI образа материнской платы
-## @param [in] Путь до конечного файла куда извлечь IntelGopDriver из UEFI
-##             Если файл существует, он будет перезаписан
-## @param [in] Uuid секции uefi для извлечения
-## @retval 0 - успешно
+# @description Извлечь IntelGopDriver из UEFI образа
+# @arg $1 string Путь до UEFI образа материнской платы
+# @arg $2 string Путь до конечного файла куда извлечь IntelGopDriver из UEFI Если файл существует, он будет перезаписан
+# @arg $3 string Uuid секции uefi для извлечения
+# @exitcode 0 успешно
 function uefiextract_get_efi_section() {
     local UEFI_IMAGE_FILE_PATH="${1}"
     local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
@@ -76,11 +77,10 @@ function uefiextract_get_efi_section() {
     return 0
 }
 
-## @brief Извлечь IntelGopDriver из UEFI образа
-## @param [in] Путь до UEFI образа материнской платы
-## @param [in] Путь до конечного файла куда извлечь IntelGopDriver из UEFI
-##             Если файл существует, он будет перезаписан
-## @retval 0 - успешно
+# @description Извлечь IntelGopDriver из UEFI образа
+# @arg $1 string Путь до UEFI образа материнской платы
+# @arg $2 string Путь до конечного файла куда извлечь IntelGopDriver из UEFI Если файл существует, он будет перезаписан
+# @exitcode 0 успешно
 function uefiextract_get_intel_gop_driver() {
     local UEFI_IMAGE_FILE_PATH="${1}"
     local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"
@@ -90,12 +90,11 @@ function uefiextract_get_intel_gop_driver() {
     return 0
 }
 
-## @brief Извлечь IntelLegacyVideoBIOS из UEFI образа
-## @details Может отсутствовать
-## @param [in] Путь до UEFI образа материнской платы
-## @param [in] Путь до конечного файла куда извлечь IntelLegacyVideoBIOS из UEFI
-##             Если файл существует, он будет перезаписан
-## @retval 0 - успешно
+# @description Извлечь IntelLegacyVideoBIOS из UEFI образа
+# Может отсутствовать
+# @arg $1 string Путь до UEFI образа материнской платы
+# @arg $2 string Путь до конечного файла куда извлечь IntelLegacyVideoBIOS из UEFI Если файл существует, он будет перезаписан
+# @exitcode 0 успешно
 function uefiextract_get_intel_legacy_vbios() {
     local UEFI_IMAGE_FILE_PATH="${1}"
     local OUT_INTEL_GOP_DRIVER_FILE_PATH="${2}"

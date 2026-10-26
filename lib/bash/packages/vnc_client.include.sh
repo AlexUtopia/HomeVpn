@@ -1,11 +1,12 @@
 #!/bin/bash
 
-## @brief Функции работы с VNC клиентом
+# @file vnc_client.include.sh
+# @brief Функции работы с VNC клиентом
 
 
-## @brief Установить VNC клиент
-## @details https://tigervnc.org/
-## @retval 0 - успешно
+# @description Установить VNC клиент
+# https://tigervnc.org/
+# @exitcode 0 успешно
 function vnc_client_setup() {
     if is_msys; then
         local TIGER_VNC_VERSION="1.15.0"

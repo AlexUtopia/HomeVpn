@@ -1,14 +1,15 @@
 #!/bin/bash
 
-## @brief Функции работы с VNC сервером
+# @file vnc_server.include.sh
+# @brief Функции работы с VNC сервером
 
 
-## @brief Установить пакеты для VNC сервера
-## @details Пакет autocutsel используется для организации буфера обмена для VNC сессии,
-##          см. https://superuser.com/a/1524282
-## @details Пакет x11-xserver-utils / xorg-xhost содержит утилиту xhost
-##          с помощью которой можно получить root права на запуск графических приложений
-## @retval 0 - успешно
+# @description Установить пакеты для VNC сервера
+# Пакет autocutsel используется для организации буфера обмена для VNC сессии,
+#         см. https://superuser.com/a/1524282
+# Пакет x11-xserver-utils / xorg-xhost содержит утилиту xhost
+#         с помощью которой можно получить root права на запуск графических приложений
+# @exitcode 0 успешно
 function vnc_server_packages_setup() {
     if is_msys; then
         # https://sourceforge.net/projects/tigervnc/files/stable/1.15.0/

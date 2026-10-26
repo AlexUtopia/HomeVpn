@@ -1,6 +1,7 @@
 #!/bin/bash
 
-## @brief Настроить сертификаты для openvpn клиента
+# @file setup-openvpn-client.sh
+# @brief Настроить сертификаты для openvpn клиента
 
 
 # set -x # Раскомментировать для отладки

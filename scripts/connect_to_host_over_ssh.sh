@@ -1,8 +1,10 @@
 #!/bin/bash
 
-## @brief Подключиться к удалённому ПК по ssh
-## @details С возможностью запускать графические приложения в том числе от имени администратора (root)
-## @details https://www.simplified.guide/ssh/x11-forwarding-as-root
+# @file connect_to_host_over_ssh.sh
+# @brief Подключиться к удалённому ПК по ssh
+# @description
+# С возможностью запускать графические приложения в том числе от имени администратора (root)
+# https://www.simplified.guide/ssh/x11-forwarding-as-root
 
 
 REMOTE_HOST="192.168.0.43"

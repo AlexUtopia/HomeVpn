@@ -1,15 +1,17 @@
 #!/bin/bash
 
-## @brief Функции по установке и работе с nodejs
-## Требуется для работы плагина Roo code для pycharm IDE
+# @file nodejs.include.sh
+# @brief Функции по установке и работе с nodejs
+# @description
+# Требуется для работы плагина Roo code для pycharm IDE
 
 
 NODEJS_VERSION="24.x"
 
-## @brief Установить пакет nodejs
-## @details https://nodejs.org/en/download
-## @details https://ruvds.com/ru/helpcenter/kak-ustanovit-nodejs/
-## @retval 0 - успешно
+# @description Установить пакет nodejs
+# https://nodejs.org/en/download
+# https://ruvds.com/ru/helpcenter/kak-ustanovit-nodejs/
+# @exitcode 0 успешно
 function nodejs_packages_setup() {
     if package_manager_is_apt; then
         local PACKAGE_NAME="nodejs"

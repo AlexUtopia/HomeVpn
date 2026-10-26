@@ -1,13 +1,15 @@
 #!/bin/bash
 
-## @brief Функции работы с Android SDK platform-tools (пакет включает в себя adb)
-## https://developer.android.com/tools/releases/platform-tools
+# @file adb.include.sh
+# @brief Функции работы с Android SDK platform-tools (пакет включает в себя adb)
+# @description
+# https://developer.android.com/tools/releases/platform-tools
 
 
-## @brief Получить платформу для Android SDK platform-tools
-## @details Только для ОС с архитектурой x86_64
-## @return Платформа для Android SDK platform-tools
-## @retval 0 - успешно
+# @description Получить платформу для Android SDK platform-tools
+# Только для ОС с архитектурой x86_64
+# @stdout Платформа для Android SDK platform-tools
+# @exitcode 0 успешно
 function android_sdk_platform_tools_get_platform() {
     if ! os_arch_is_x86_64; then
         return 1
@@ -24,9 +26,9 @@ function android_sdk_platform_tools_get_platform() {
     return 1
 }
 
-## @brief Установить последний Android SDK platform-tools (пакет включает в себя adb)
-## @details https://developer.android.com/tools/releases/platform-tools
-## @retval 0 - успешно
+# @description Установить последний Android SDK platform-tools (пакет включает в себя adb)
+# https://developer.android.com/tools/releases/platform-tools
+# @exitcode 0 успешно
 function android_sdk_platform_tools_setup_latest() {
     local ANDROID_SDK_PLATFORM_TOOLS_PLATFORM=""
     ANDROID_SDK_PLATFORM_TOOLS_PLATFORM=$(android_sdk_platform_tools_get_platform) || return $?
@@ -40,10 +42,10 @@ function android_sdk_platform_tools_setup_latest() {
     return 0
 }
 
-## @brief Установить системный Android SDK platform-tools (пакет включает в себя adb)
-## @details Android/termux: android-tools
-##          Ubuntu:         android-sdk-platform-tools
-## @retval 0 - успешно
+# @description Установить системный Android SDK platform-tools (пакет включает в себя adb)
+# Android/termux: android-tools
+#         Ubuntu:         android-sdk-platform-tools
+# @exitcode 0 успешно
 function android_sdk_platform_tools_setup_default() {
     if is_termux; then
         package_manager_install_packages "android-tools" || return $?
@@ -58,8 +60,8 @@ function android_sdk_platform_tools_setup_default() {
     return 1
 }
 
-## @brief Установить Android SDK platform-tools (пакет включает в себя adb)
-## @retval 0 - успешно
+# @description Установить Android SDK platform-tools (пакет включает в себя adb)
+# @exitcode 0 успешно
 function android_sdk_platform_tools_setup() {
     android_sdk_platform_tools_setup_latest || android_sdk_platform_tools_setup_default || return $?
     return 0

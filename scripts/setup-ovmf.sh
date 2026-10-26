@@ -1,6 +1,7 @@
 #!/bin/bash
 
-## @brief Собрать и установить ovmf
+# @file setup-ovmf.sh
+# @brief Собрать и установить ovmf
 
 
 # set -x # Раскомментировать для отладки

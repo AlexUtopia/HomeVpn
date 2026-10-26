@@ -1,13 +1,15 @@
 #!/bin/bash
 
-## @brief Функции для работы с сетью
-## https://wiki.linuxfoundation.org/networking/iproute2
-## https://wiki.archlinux.org/title/Dnsmasq
-## @details Требуется для настройки сетевых интерфейсов TAP и сетевого моста виртуальных машин
+# @file network.include.sh
+# @brief Функции для работы с сетью
+# @description
+# https://wiki.linuxfoundation.org/networking/iproute2
+# https://wiki.archlinux.org/title/Dnsmasq
+# Требуется для настройки сетевых интерфейсов TAP и сетевого моста виртуальных машин
 
 
-## @brief Установить iproute2
-## @retval 0 - успешно
+# @description Установить iproute2
+# @exitcode 0 успешно
 function network_setup() {
     if is_msys; then
         return 0

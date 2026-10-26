@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции по установке opencode
-## @details AI агент используемый для создания проекта HomeVpn
-## https://opencode.ai/v2/docs/
+# @file opencode.include.sh
+# @brief Функции по установке opencode
+# @description
+# AI агент используемый для создания проекта HomeVpn
+# https://opencode.ai/v2/docs/
 
 
-## @brief Установить пакет opencode
-## @retval 0 - успешно
+# @description Установить пакет opencode
+# @exitcode 0 успешно
 function opencode_packages_setup() {
     local DOWNLOAD_URL="https://opencode.ai/v2/install"
 
@@ -14,16 +16,16 @@ function opencode_packages_setup() {
     return 0
 }
 
-## @brief Установить LSP (Language Server Protocol) для opencode
-## @details Для языков используемых в проекте: python, bash
-## @retval 0 - успешно
+# @description Установить LSP (Language Server Protocol) для opencode
+# Для языков используемых в проекте: python, bash
+# @exitcode 0 успешно
 function opencode_setup_lsp() {
     # Cм. https://opencode.ai/docs/lsp/
     return 0
 }
 
-## @brief Установить и настроить opencode
-## @retval 0 - успешно
+# @description Установить и настроить opencode
+# @exitcode 0 успешно
 function opencode_setup() {
     opencode_packages_setup || return $?
     opencode_setup_lsp || return $?

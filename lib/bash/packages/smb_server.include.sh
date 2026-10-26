@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции работы с smd сервером
-## https://www.samba.org/
-## https://wiki.archlinux.org/title/Samba_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)
+# @file smb_server.include.sh
+# @brief Функции работы с smd сервером
+# @description
+# https://www.samba.org/
+# https://wiki.archlinux.org/title/Samba_(%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9)
 
 
-## @brief Установить пакет SMB сервера
-## @retval 0 - успешно
+# @description Установить пакет SMB сервера
+# @exitcode 0 успешно
 function smb_server_packages_setup() {
     if is_msys; then
         return 0
@@ -16,9 +18,9 @@ function smb_server_packages_setup() {
     return 0
 }
 
-## @brief Получить путь до файла конфигурации smb сервера
-## @return Путь до файла конфигурации smb сервера
-## @retval 0 - успешно
+# @description Получить путь до файла конфигурации smb сервера
+# @stdout Путь до файла конфигурации smb сервера
+# @exitcode 0 успешно
 function smb_server_get_config_file_path() {
     local SMB_SERVER_BUILD_OPTIONS=""
     SMB_SERVER_BUILD_OPTIONS=$(smbd -b) || return $?
@@ -34,16 +36,16 @@ function smb_server_get_config_file_path() {
     return 1
 }
 
-## @brief Создать публичную (общедоступную) директорию
-## @retval 0 - успешно
+# @description Создать публичную (общедоступную) директорию
+# @exitcode 0 успешно
 function smb_server_make_public_dir() {
     fs_make_dirs "${GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH}" || return $?
     chmod 0777 "${GLOBAL_CONFIG_SMB_SERVER_PUBLIC_DIR_PATH}" || return $?
     return 0
 }
 
-## @brief Создать конфиг SMB сервера
-## @retval 0 - успешно
+# @description Создать конфиг SMB сервера
+# @exitcode 0 успешно
 function smb_server_make_config() {
     # https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
 
@@ -98,10 +100,10 @@ function windows_net_share_setup() {
     return 0
 }
 
-## @brief Настроить Android/termux специфику SMB сервера
-## @details https://smarden.org/runit/runscripts#samba
-## @param [in] Имя службы
-## @retval 0 - успешно
+# @description Настроить Android/termux специфику SMB сервера
+# https://smarden.org/runit/runscripts#samba
+# @arg $1 string Имя службы
+# @exitcode 0 успешно
 function termux_smb_server_setup() {
     local SMB_SERVER="${1}"
 
@@ -117,8 +119,8 @@ exit 0" || return $?
     return 0
 }
 
-## @brief Установить и настроить SMB сервер
-## @retval 0 - успешно
+# @description Установить и настроить SMB сервер
+# @exitcode 0 успешно
 function smb_server_setup() {
     smb_server_packages_setup || return $?
 

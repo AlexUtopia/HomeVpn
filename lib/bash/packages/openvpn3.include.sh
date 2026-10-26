@@ -1,11 +1,12 @@
 #!/bin/bash
 
-## @brief Функции по установке openvpn3
+# @file openvpn3.include.sh
+# @brief Функции по установке openvpn3
 
 
-## @brief Установить openvpn3
-## @details https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
-## @retval 0 - успешно
+# @description Установить openvpn3
+# https://openvpn.net/cloud-docs/owner/connectors/connector-user-guides/openvpn-3-client-for-linux.html
+# @exitcode 0 успешно
 function openvpn3_setup() {
     if is_termux || is_msys; then
         return 0

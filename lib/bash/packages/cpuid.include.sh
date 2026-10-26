@@ -1,12 +1,14 @@
 #!/bin/bash
 
-## @brief Функции по установке cpuid
-## Приложение позволяет получить информацию по CPU с архитектурой i386/i686/x86_64/ia64
-## https://www.etallen.com/cpuid.html
+# @file cpuid.include.sh
+# @brief Функции по установке cpuid
+# @description
+# Приложение позволяет получить информацию по CPU с архитектурой i386/i686/x86_64/ia64
+# https://www.etallen.com/cpuid.html
 
 
-## @brief Установить cpuid
-## @retval 0 - успешно
+# @description Установить cpuid
+# @exitcode 0 успешно
 function cpuid_setup() {
     local PACKAGE_NAME="cpuid"
     local DOWNLOAD_URL="https://www.etallen.com/cpuid/cpuid-20250513.src.tar.gz"

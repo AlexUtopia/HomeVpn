@@ -1,20 +1,21 @@
 #!/bin/bash
 
-## @brief Функции работы с git
+# @file git.include.sh
+# @brief Функции работы с git
 
 
-## @brief Установить git
-## @retval 0 - успешно
+# @description Установить git
+# @exitcode 0 успешно
 function git_setup() {
     package_manager_install_packages "git" || return $?
     return 0
 }
 
-## @brief Клонировать проект (clone) или подтянуть (fetch) последние изменения с перезаписью
-## @param [in] URL проекта
-## @param [in] Путь до директории проекта
-## @param [in] Бранч/тэг
-## @retval 0 - успешно
+# @description Клонировать проект (clone) или подтянуть (fetch) последние изменения с перезаписью
+# @arg $1 string URL проекта
+# @arg $2 string Путь до директории проекта
+# @arg $3 string Бранч/тэг
+# @exitcode 0 успешно
 function git_clone_or_fetch() {
     local PROJECT_URL="${1}"
     local PROJECT_DIR_PATH="${2}"

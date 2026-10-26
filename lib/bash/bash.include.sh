@@ -1,15 +1,17 @@
 #!/bin/bash
 
-## @brief Функции интерпретатора bash
-## @details Руководство по регулярным выражениям в bash (POSIX-ExtendedRegularExpressions)
-##          https://www.gnu.org/software/bash/manual/bash.html#Pattern-Matching-1
-##          https://en.wikibooks.org/wiki/Regular_Expressions/POSIX-Extended_Regular_Expressions
+# @file bash.include.sh
+# @brief Функции интерпретатора bash
+# @description
+# Руководство по регулярным выражениям в bash (POSIX-ExtendedRegularExpressions)
+#          https://www.gnu.org/software/bash/manual/bash.html#Pattern-Matching-1
+#          https://en.wikibooks.org/wiki/Regular_Expressions/POSIX-Extended_Regular_Expressions
 
 
-## @brief Получить путь до исполняемого файла
-## @details https://stackoverflow.com/a/26759734
-## @param [in] Имя исполняемого файла, можно с полным путём до исполняемого файла
-## @retval 0 - успешно
+# @description Получить путь до исполняемого файла
+# https://stackoverflow.com/a/26759734
+# @arg $1 string Имя исполняемого файла, можно с полным путём до исполняемого файла
+# @exitcode 0 успешно
 function get_executable_path() {
     local EXECUTABLE_OR_PATH="${1}"
 
@@ -17,10 +19,11 @@ function get_executable_path() {
     return 0
 }
 
-## @brief Проверить существует ли целевой исполняемый файл
-## @details https://stackoverflow.com/a/26759734
-## @param [in] Имя исполняемого файла, можно с полным путём до исполняемого файла
-## @retval 0 - если целевой исполняемый файл существует; 1 - не существует
+# @description Проверить существует ли целевой исполняемый файл
+# https://stackoverflow.com/a/26759734
+# @arg $1 string Имя исполняемого файла, можно с полным путём до исполняемого файла
+# @exitcode 0 если целевой исполняемый файл существует
+# @exitcode 1 не существует
 function is_executable_available() {
     local EXECUTABLE_OR_PATH="${1}"
 
@@ -32,35 +35,32 @@ function is_executable_available() {
     return 1
 }
 
-## @brief Проверить результат выполнения функции на успех
-## @details Использовать с оператором if, пример
-##
-##          target_function_call
-##          local TARGET_FUNCTION_RESULT=$?
-##          if [[ ! check_return_code ${TARGET_FUNCTION_RESULT} ]]; then
-##              # Обработать неуспешное исполнение target_function_call
-##              return ${TARGET_FUNCTION_RESULT}
-##          else
-##              # Обработать успешное исполнение target_function_call
-##          fi
-##
-## @param [in] Результат выполнения целевой функции
-## @retval Результат выполнения целевой функции пригодный для использования с оператором if
+# @description Проверить результат выполнения функции на успех
+# Использовать с оператором if, пример
+#
+#         target_function_call
+#         local TARGET_FUNCTION_RESULT=$?
+#         if [[ ! check_return_code ${TARGET_FUNCTION_RESULT} ]]; then
+#             # Обработать неуспешное исполнение target_function_call
+#             return ${TARGET_FUNCTION_RESULT}
+#         else
+#             # Обработать успешное исполнение target_function_call
+#         fi
+#
+# @arg $1 string Результат выполнения целевой функции
+# @exitcode ${1} Результат выполнения целевой функции пригодный для использования с оператором if
 function check_return_code() {
     return ${1}
 }
 
-## @brief Глобальный словарь обработчиков событий
-## @details Ключ: "<название события>|<текущий shell/subshell PID>"
-##          Значение: обработчики события в LIFO порядке
-## @details Функция trap перетирает уже заданный обработчик, требуется обойти данное поведение
+# @set TRAP_TABLE assoc array Глобальный словарь обработчиков событий. Ключ: "<название события>|<текущий shell/subshell PID>" Значение: обработчики события в LIFO порядке. Функция trap перетирает уже заданный обработчик, требуется обойти данное поведение
 declare -A TRAP_TABLE
 
-## @brief Установить обработчик события (trap)
-## @details https://www.gnu.org/software/bash/manual/bash.html#index-trap
-## @param [in] Обработчик события в виде строки
-## @param [in] Имя события
-## @retval 0 - успешно
+# @description Установить обработчик события (trap)
+# https://www.gnu.org/software/bash/manual/bash.html#index-trap
+# @arg $1 string Обработчик события в виде строки
+# @arg $2 string Имя события
+# @exitcode 0 успешно
 function trap_add_handler() {
     local TRAP_HANDLER="${1}"
     local TRAP_SIGNAL="${2}"
@@ -79,9 +79,9 @@ function trap_add_handler() {
     return 0
 }
 
-## @brief Установить обработчик удаления временного файла или директории
-## @param [in] Путь до удаляемого временного файла или директории
-## @retval 0 - успешно
+# @description Установить обработчик удаления временного файла или директории
+# @arg $1 string Путь до удаляемого временного файла или директории
+# @exitcode 0 успешно
 function trap_add_remove_temp_path_handler() {
     local TEMP_FILE_OR_DIR_PATH="${1}"
 
@@ -92,13 +92,13 @@ function trap_add_remove_temp_path_handler() {
     return 0
 }
 
-## @brief Установить обработчик завершения job'a
-## @details Вызывать функцию сразу после запуска job'a
-## @details Обработчик устанавливается на сигнал SIGINT и завершение shell/subshell процесса
-##          с ожиданием завершения (wait <job PID>)
-## @param [in] Имя job'a (для отладки)
-## @param [in] Обработчик завершения job'a в виде строки, необязательный аргумент (если не задано, = kill -SIGTERM <job PID>)
-## @retval 0 - успешно
+# @description Установить обработчик завершения job'a
+# Вызывать функцию сразу после запуска job'a
+# Обработчик устанавливается на сигнал SIGINT и завершение shell/subshell процесса
+#         с ожиданием завершения (wait <job PID>)
+# @arg $1 string Имя job'a (для отладки)
+# @arg $2 string Обработчик завершения job'a в виде строки, необязательный аргумент (если не задано, = kill -SIGTERM <job PID>)
+# @exitcode 0 успешно
 function job_setup_kill_handler() {
     JOB_NAME="${1}"
     KILL_JOB_HANDLER="${2}"

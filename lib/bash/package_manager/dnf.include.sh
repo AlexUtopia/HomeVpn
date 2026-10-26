@@ -1,19 +1,20 @@
 #!/bin/bash
 
-## @brief Функции работы с пакетным менеджером dnf
+# @file dnf.include.sh
+# @brief Функции работы с пакетным менеджером dnf
 
 
-## @brief Обновить установленные пакеты
-## @retval 0 - успешно
+# @description Обновить установленные пакеты
+# @exitcode 0 успешно
 function dnf_update_and_upgrade() {
     dnf upgrade -y || return $?
     return 0
 }
 
-## @brief Установить список пакетов
-## @details Список может состоять из одного пакета
-## @param [in] Список пакетов
-## @retval 0 - успешно
+# @description Установить список пакетов
+# Список может состоять из одного пакета
+# @arg $1 string Список пакетов
+# @exitcode 0 успешно
 function dnf_install_packages() {
     local PACKAGE_NAME_LIST="${1}"
 
@@ -21,9 +22,9 @@ function dnf_install_packages() {
     return 0
 }
 
-## @brief Проверить установлен ли пакет
-## @param [in] Имя пакета
-## @retval 0 - пакет установлен, 1 - нет
+# @description Проверить установлен ли пакет
+# @arg $1 string Имя пакета
+# @exitcode 0 пакет установлен, 1 - нет
 function dnf_is_package_installed() {
     local PACKAGE_NAME="${1}"
 
@@ -31,9 +32,9 @@ function dnf_is_package_installed() {
     return 0
 }
 
-## @brief Проверить существует (доступен) ли пакет в репозитории пакетов
-## @param [in] Имя пакета
-## @retval 0 - пакет существует (доступен) в репозитории пакетов, 1 - нет
+# @description Проверить существует (доступен) ли пакет в репозитории пакетов
+# @arg $1 string Имя пакета
+# @exitcode 0 пакет существует (доступен) в репозитории пакетов, 1 - нет
 function dnf_is_package_exists_in_repository() {
     local PACKAGE_NAME="${1}"
 

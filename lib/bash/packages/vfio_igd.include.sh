@@ -1,21 +1,22 @@
 #!/bin/bash
 
-## @brief Функции работы с VfioIgdPkg
-## @details Осуществляется сборка для архитектуры X64, так заложено в оригинальном проекте https://github.com/tomitamoeko/VfioIgdPkg/blob/master/build.sh#L16
-##          Т.е. запуск 32-ух битных ОС будет недоступен
-## https://github.com/tomitamoeko/VfioIgdPkg
+# @file vfio_igd.include.sh
+# @brief Функции работы с VfioIgdPkg
+# @description
+# Осуществляется сборка для архитектуры X64, так заложено в оригинальном проекте https://github.com/tomitamoeko/VfioIgdPkg/blob/master/build.sh#L16
+#          Т.е. запуск 32-ух битных ОС будет недоступен
+# https://github.com/tomitamoeko/VfioIgdPkg
 
 
-## @brief PCI VID (Vendor IDentifier) Intel
+# @set INTEL_PCI_VID int PCI VID (Vendor IDentifier) Intel
 INTEL_PCI_VID=0x8086
 
 
-## @brief Получить путь до видеобиоса для виртуальный машины qemu + uefi (ovmf)
-## @param [in] PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter)
-##             Пример: 0x0126
-## @param [in] Передать "with_video_out", если планируется поддержка вывода изображения на монитор, необязательный аргумент
-## @return Путь до видеобиоса для виртуальный машины qemu + uefi (ovmf)
-## @retval 0 - успешно
+# @description Получить путь до видеобиоса для виртуальный машины qemu + uefi (ovmf)
+# @arg $1 string PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter) Пример: 0x0126
+# @arg $2 string Передать "with_video_out", если планируется поддержка вывода изображения на монитор, необязательный аргумент
+# @stdout Путь до видеобиоса для виртуальный машины qemu + uefi (ovmf)
+# @exitcode 0 успешно
 function vfio_igd_get_vbios_path() {
    local VGA_PID="${1}"
    local WITH_VIDEO_OUT="${2}"
@@ -32,14 +33,12 @@ function vfio_igd_get_vbios_path() {
    return 0
 }
 
-## @brief Собрать и установить VfioIgdPkg
-## @details Конечный продукт - видеобиос для виртуальный машины qemu
-## @param [in] Путь до директории проекта EDK2
-## @param [in] PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter)
-##             Пример: 0x0126
-## @param [in] Путь до файла IntelGopDriver, необязательный аргумент
-##             Если не задан то видеобиос будет собран без поддержки вывода изображения на монитор
-## @retval 0 - успешно
+# @description Собрать и установить VfioIgdPkg
+# Конечный продукт - видеобиос для виртуальный машины qemu
+# @arg $1 string Путь до директории проекта EDK2
+# @arg $2 string PCI PID (Product IDentifier) целевого VGA (Video Graphics Adapter) Пример: 0x0126
+# @arg $3 string Путь до файла IntelGopDriver, необязательный аргумент Если не задан то видеобиос будет собран без поддержки вывода изображения на монитор
+# @exitcode 0 успешно
 function vfio_igd_setup() {
     local EDK2_DIR_PATH="${1}"
     local VGA_PID="${2}"

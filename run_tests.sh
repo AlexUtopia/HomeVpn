@@ -1,6 +1,7 @@
 #!/bin/bash
 
-## @brief Скрипт для запуска юнит-тестов проекта
+# @file run_tests.sh
+# @brief Скрипт для запуска юнит-тестов проекта
 
 
 export HOME_VPN_PROJECT_ROOT="$(dirname "$(readlink -f "${0}")")"

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-## @brief Собрать и установить qemu
+# @file build-qemu-from-sources.sh
+# @brief Собрать и установить qemu
 
 
 # set -x # Раскомментировать для отладки

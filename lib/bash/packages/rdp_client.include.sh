@@ -1,13 +1,15 @@
 #!/bin/bash
 
-## @brief Функции по установке RDP клиента
-## @details Клиент удалённого управления ОС Windows (по протоколу RPD)
-## https://www.freerdp.com/
+# @file rdp_client.include.sh
+# @brief Функции по установке RDP клиента
+# @description
+# Клиент удалённого управления ОС Windows (по протоколу RPD)
+# https://www.freerdp.com/
 
 
-## @brief Установить умолчательный RPD клиент
-## @details Умолчательный - тот который предоставляется системным менеджером пакетов
-## @retval 0 - успешно
+# @description Установить умолчательный RPD клиент
+# Умолчательный - тот который предоставляется системным менеджером пакетов
+# @exitcode 0 успешно
 function rdp_client_setup_default() {
     local PACKAGE_LIST="freerdp2-x11 freerdp2-wayland"
     if is_termux; then
@@ -20,8 +22,8 @@ function rdp_client_setup_default() {
     return 0
 }
 
-## @brief Установить "nightly" сборку RPD клиента
-## @retval 0 - успешно
+# @description Установить "nightly" сборку RPD клиента
+# @exitcode 0 успешно
 function rdp_client_setup_nightly() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
@@ -40,8 +42,8 @@ function rdp_client_setup_nightly() {
     return 1
 }
 
-## @brief Установить RPD клиент
-## @retval 0 - успешно
+# @description Установить RPD клиент
+# @exitcode 0 успешно
 function rdp_client_setup() {
     if is_termux || is_msys; then
         rdp_client_setup_default || return $?

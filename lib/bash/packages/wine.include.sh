@@ -1,13 +1,15 @@
 #!/bin/bash
 
-## @brief Функции по установке WineHQ
-## @details Эмулятор Windows для unix подобных ОС
-## https://www.winehq.org/
+# @file wine.include.sh
+# @brief Функции по установке WineHQ
+# @description
+# Эмулятор Windows для unix подобных ОС
+# https://www.winehq.org/
 
 
-## @brief Установить последний winetricks
-## @details https://github.com/Winetricks/winetricks
-## @retval 0 - успешно
+# @description Установить последний winetricks
+# https://github.com/Winetricks/winetricks
+# @exitcode 0 успешно
 function winetricks_setup_latest() {
     local PACKAGE_NAME="winetricks"
     local DOWNLOAD_URL="https://github.com/Winetricks/winetricks/archive/refs/tags/20260125.tar.gz"
@@ -20,9 +22,9 @@ function winetricks_setup_latest() {
     return 0
 }
 
-## @brief Установить умолчательный WineHQ
-## @details Умолчательный - тот который предоставляется системным менеджером пакетов
-## @retval 0 - успешно
+# @description Установить умолчательный WineHQ
+# Умолчательный - тот который предоставляется системным менеджером пакетов
+# @exitcode 0 успешно
 function wine_setup_default() {
     local PACKAGE_LIST="wine"
     if is_termux; then
@@ -33,9 +35,9 @@ function wine_setup_default() {
     return 0
 }
 
-## @brief Установить "nightly" сборку WineHQ
-## @details https://wiki.winehq.org/Ubuntu
-## @retval 0 - успешно
+# @description Установить "nightly" сборку WineHQ
+# https://wiki.winehq.org/Ubuntu
+# @exitcode 0 успешно
 function wine_setup_nightly() {
     if package_manager_is_apt; then
         local OS_DISTRO_VERSION_CODENAME=""
@@ -61,10 +63,10 @@ function wine_setup_nightly() {
     return 1
 }
 
-## @brief Установить 32-ух битные пакеты для запуска 32-ух битных приложений под WineHQ
-## @details https://wiki.archlinux.org/title/Wine#32-bit_Windows_applications
-## @details https://gitlab.winehq.org/wine/wine/-/wikis/Debian-Ubuntu
-## @retval 0 - успешно
+# @description Установить 32-ух битные пакеты для запуска 32-ух битных приложений под WineHQ
+# https://wiki.archlinux.org/title/Wine#32-bit_Windows_applications
+# https://gitlab.winehq.org/wine/wine/-/wikis/Debian-Ubuntu
+# @exitcode 0 успешно
 function wine_setup_32bit_dependencies() {
     # Зависимости для wine32 fixme utopia Это Ubuntu специфичные пакеты?
     # https://pkgs.org/search/?q=libgl1
@@ -73,8 +75,8 @@ function wine_setup_32bit_dependencies() {
     return 0
 }
 
-## @brief Установить WineHQ
-## @retval 0 - успешно
+# @description Установить WineHQ
+# @exitcode 0 успешно
 function wine_setup() {
     if is_msys; then
         return 0
