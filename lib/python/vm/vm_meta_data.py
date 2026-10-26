@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import ipaddress
 import netaddr
 import os
@@ -15,6 +16,22 @@ from lib.python.vm import QemuPlatform, VmName
 
 # https://stackoverflow.com/questions/17493307/creating-set-of-objects-of-user-defined-class-in-python
 class VmMetaData:
+    class IgdPassthroughMode(enum.Enum):
+        """Режим проброса встроенной графики Intel (IGD)
+
+        .. note::
+           Значение ``DEFAULT`` раскрывается в конкретный режим в
+           :class:`lib.python.pci.pci_vga_intel.VgaPciIntel` по платформе гостя
+           и режиму загрузки хоста
+        """
+
+        DEFAULT = "default"
+        UPT = "upt"
+        UPT_OPREGION = "upt+opregion"
+        LEGACY = "legacy"
+        VFIO_IGD_PKG = "vfioigd"
+        I915OVMF_PKG = "i915ovmf"
+
     class Parameter[T]:
         def __init__(self, name: str,
                      parameter_dir_path: str | os.PathLike[str],
@@ -73,7 +90,8 @@ class VmMetaData:
     def __init__(self, name: VmName | str,
                  image_dir_path: str | os.PathLike[str],
                  platform: QemuPlatform = QemuPlatform(arch=Arch(ARCH_DEFAULT)),
-                 vnc_display_port: TcpPort = TcpPort.get_vnc_port(10)):
+                 vnc_display_port: TcpPort = TcpPort.get_vnc_port(10),
+                 dns_suffix: str = "homevpn.org"):
         self.__image_path = VmMetaData.Parameter[VmName](str(VmName(name)), image_dir_path,
                                                          extension=self.IMAGE_EXTENSION)
         self.__mac_address = VmMetaData.Parameter[netaddr.EUI]("mac_address", image_dir_path,
@@ -82,8 +100,16 @@ class VmMetaData:
         self.__ssh_forward_port = VmMetaData.Parameter[TcpPort]("ssh_forward_port", image_dir_path)
         self.__rdp_forward_port = VmMetaData.Parameter[TcpPort]("rdp_forward_port", image_dir_path)
         self.__dns_suffix = dns_suffix
-        self.__platform = VmMetaData.Parameter[QemuPlatform]("platform", image_dir_path,
-                                                             value_default_handler=lambda: platform)
+        self.__platform = VmMetaData.Parameter[QemuPlatform](
+            "platform", image_dir_path,
+            value_default_handler=lambda: platform,
+            deserialize_handler=lambda x: QemuPlatform(x),
+            serialize_handler=lambda x: f"{x.get_arch()}:{x.get_machine()}")
+        self.__igd_passthrough_mode = VmMetaData.Parameter[VmMetaData.IgdPassthroughMode](
+            "igd_passthrough_mode", image_dir_path,
+            value_default_handler=lambda: VmMetaData.IgdPassthroughMode.DEFAULT,
+            deserialize_handler=lambda x: VmMetaData.IgdPassthroughMode(x),
+            serialize_handler=lambda x: x.value)
         self.__vnc_display_port = VmMetaData.Parameter[TcpPort]("vnc_display_port", image_dir_path,
                                                                 value_default_handler=lambda: vnc_display_port)
         self.makedirs()
@@ -175,6 +201,28 @@ class VmMetaData:
         if not result:
             raise Exception("[Vm] Platform UNDEFINED")
         return result
+
+    def get_igd_passthrough_mode(self) -> IgdPassthroughMode:
+        """Получить режим проброса IGD
+
+        :return: Режим проброса IGD
+        :raises Exception: Если режим не задан
+
+        .. note::
+           Если параметр отсутствует на диске, сохраняется и возвращается
+           значение по умолчанию (``DEFAULT``)
+        """
+        result = self.__igd_passthrough_mode.load()
+        if not result:
+            raise Exception("[Vm] IGD passthrough mode UNDEFINED")
+        return result
+
+    def set_igd_passthrough_mode(self, mode: IgdPassthroughMode | str) -> None:
+        """Сохранить режим проброса IGD
+
+        :param mode: Режим проброса IGD или его строковое значение
+        """
+        self.__igd_passthrough_mode.store(self.IgdPassthroughMode(mode))
 
     def get_vnc_display_port(self) -> TcpPort:
         result = self.__vnc_display_port.load()

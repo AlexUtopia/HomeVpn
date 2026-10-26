@@ -1,0 +1,7 @@
+{
+    "generation": "Gen7 (Ivy Bridge)",
+    "number": 7,
+    "upt_supported": false,
+    "legacy_supported": true,
+    "stolen_memory_size_supported": true
+}

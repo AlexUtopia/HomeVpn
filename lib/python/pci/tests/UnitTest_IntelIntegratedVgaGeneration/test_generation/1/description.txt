@@ -1,0 +1,3 @@
+Проверка классификации Intel Ivy Bridge (Gen7).
+Device ID 0x0162 (Intel HD Graphics 4000) взят из списка i915_pciids.h.
+Ожидается поколение 7: режим Legacy поддерживается, UPT - нет.

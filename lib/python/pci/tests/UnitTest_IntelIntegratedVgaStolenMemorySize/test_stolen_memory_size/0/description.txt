@@ -1,0 +1,6 @@
+Дамп PCI configuration space HostBridge 0000:00:00.0, полученный командой (выполнять команду в корне проекта):
+  sudo cat /sys/bus/pci/devices/0000:00:00.0/config > lib/python/pci/tests/UnitTest_IntelIntegratedVgaStolenMemorySize/test_stolen_memory_size/0/input_config.bin
+В дампе HostBridge 8086:6f00 (Intel Xeon E5 v4).
+Байты 0x50..0x53 задают регистр GGC = 0xc7ffe000.
+Для проверки выбрано поколение GPU 9 (Intel Skylake): GMS извлекается из битов 8..15,
+GMS = 0xe0, размер = 0xe0 * 32 MiB = 7168 MiB.

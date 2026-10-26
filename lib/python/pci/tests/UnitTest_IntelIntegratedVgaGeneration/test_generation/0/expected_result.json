@@ -1,0 +1,7 @@
+{
+    "generation": "Gen6 (Sandy Bridge)",
+    "number": 6,
+    "upt_supported": false,
+    "legacy_supported": true,
+    "stolen_memory_size_supported": true
+}

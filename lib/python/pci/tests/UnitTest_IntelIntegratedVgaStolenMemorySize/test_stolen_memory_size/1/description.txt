@@ -1,0 +1,4 @@
+Производный тестовый набор от lib/python/pci/tests/UnitTest_IntelIntegratedVgaStolenMemorySize/test_stolen_memory_size/0/input_config.bin: в регистр GGC (offset 0x50) записано значение 0x0000f000
+(байты 00 f0 00 00). Поколение GPU 9 (Intel Skylake).
+Проверяется ветка кодирования 4 MiB для значений 0xf0..0xfe: GMS = 0xf0,
+размер = (0xf0 - 0xf0 + 1) * 4 MiB = 4 MiB.

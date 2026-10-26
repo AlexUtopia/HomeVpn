@@ -1,0 +1,4 @@
+Проверка классификации Intel Lunar Lake (Intel Xe2).
+Device ID 0x64a0 взят из списка i915_pciids.h.
+Формат регистра GGC для этого поколения не известен, поэтому размер Data Stolen Memory
+вычислить нельзя. UPT поддерживается, Legacy - нет.

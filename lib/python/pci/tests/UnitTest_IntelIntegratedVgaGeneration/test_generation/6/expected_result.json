@@ -1,0 +1,7 @@
+{
+    "generation": "Intel Xe (Alder Lake / N-series)",
+    "number": 12,
+    "upt_supported": true,
+    "legacy_supported": false,
+    "stolen_memory_size_supported": true
+}

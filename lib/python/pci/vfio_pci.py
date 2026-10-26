@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import typing
+
 from lib.python.types import JsonType
 
 from lib.python.pci import Pci, PciVidPid
@@ -40,10 +42,20 @@ class VfioPci:
             result.extend(pci.get_kernel_parameters())
         return result
 
-    def get_qemu_parameters(self, vm_meta_data) -> list[dict]:
+    def get_qemu_parameters(self, vm_meta_data: VmMetaData) -> list[dict[str, typing.Any]]:
+        """Получить параметры QEMU для пробрасываемых PCI устройств
+
+        :param vm_meta_data: Метаданные виртуальной машины
+        :return: Список параметров QEMU
+
+        .. note::
+           Параметры устройства формируются только для устройств, включённых
+           в IOMMU группу. Дополнительные параметры режима проброса (например,
+           ``-vga none``) добавляются сразу после соответствующего ``-device``
+        """
         result = []
         for pci in self.__pci_list:
-            result.append(self.__get_device_for_passthrough(pci, vm_meta_data))
+            result.extend(self.__get_device_for_passthrough(pci, vm_meta_data))
             result.extend(pci.get_qemu_parameters(vm_meta_data))
         return result
 
@@ -54,11 +66,20 @@ class VfioPci:
         self.__pci_list.check_platform(qemu_platform)
 
     @staticmethod
-    def __get_device_for_passthrough(pci: Pci, vm_meta_data: VmMetaData):
-        # PCI устройство нельзя пробросить если оно не включено в iommu группу
-        if pci.iommu_group is None:
-            return {}
+    def __get_device_for_passthrough(pci: Pci, vm_meta_data: VmMetaData) -> list[dict[str, typing.Any]]:
+        """Получить параметры QEMU для одного пробрасываемого PCI устройства
 
-        vfio_pci_options_table = {"host": pci.address}
-        vfio_pci_options_table.update(pci.get_vfio_pci_options_table(vm_meta_data))
-        return {"-device": {"vfio-pci": vfio_pci_options_table}}
+        :param pci: PCI устройство
+        :param vm_meta_data: Метаданные виртуальной машины
+        :return: Список параметров QEMU (``-device vfio-pci`` и дополнительные параметры)
+
+        .. note::
+           PCI устройство нельзя пробросить, если оно не включено в IOMMU группу:
+           в этом случае список параметров пуст
+        """
+        if pci.iommu_group is None:
+            return []
+
+        vfio_pci_options_table, qemu_parameters = pci.get_vfio_pci_options_table(vm_meta_data)
+        vfio_pci_options_table = {"host": pci.address, **vfio_pci_options_table}
+        return [{"-device": {"vfio-pci": vfio_pci_options_table}}, *qemu_parameters]

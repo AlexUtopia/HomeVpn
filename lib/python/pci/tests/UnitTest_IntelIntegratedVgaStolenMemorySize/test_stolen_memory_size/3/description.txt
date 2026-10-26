@@ -1,0 +1,3 @@
+Дамп lib/python/pci/tests/UnitTest_IntelIntegratedVgaStolenMemorySize/test_stolen_memory_size/3/input_config.bin без изменений, поколение GPU - Intel Lunar Lake (Intel Xe2).
+Формат регистра GGC для этого поколения не известен, поэтому вычисление размера
+Data Stolen Memory должно завершиться исключением.

@@ -1,0 +1,7 @@
+{
+    "generation": "Gen9.5 (Kaby Lake)",
+    "number": 9,
+    "upt_supported": true,
+    "legacy_supported": true,
+    "stolen_memory_size_supported": true
+}

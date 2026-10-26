@@ -1,0 +1,3 @@
+Проверка обработки неизвестного Device ID.
+Значение 0xffff не входит в таблицы поколений QEMU/Intel и должно классифицироваться
+как Unknown Intel GPU: Legacy и размер Data Stolen Memory недоступны, UPT разрешён.

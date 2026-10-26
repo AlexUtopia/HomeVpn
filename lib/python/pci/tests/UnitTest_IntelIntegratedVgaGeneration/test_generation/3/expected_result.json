@@ -1,0 +1,7 @@
+{
+    "generation": "Gen8 (Broadwell)",
+    "number": 8,
+    "upt_supported": true,
+    "legacy_supported": true,
+    "stolen_memory_size_supported": true
+}

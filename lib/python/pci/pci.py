@@ -2,10 +2,12 @@ import json
 import os
 import re
 import subprocess
+import typing
 
 from lib.python.logger import Logger
 from lib.python.types import Path
 from lib.python.utils import BaseParser, String, UInt8, UInt8Hex, get_all_subclasses
+from lib.python.vm import VmMetaData
 
 from lib.python.pci import PciAddress, PciClassCode, PciPassthroughMode, PciVidPid
 
@@ -114,10 +116,31 @@ class Pci(BaseParser):
     def get_kernel_parameters(self):
         return [{"module_blacklist": self.kernel_module}]
 
-    def get_vfio_pci_options_table(self, vm_meta_data):
-        return {"multifunction": "on"}
+    def get_vfio_pci_options_table(self, vm_meta_data: VmMetaData) -> tuple[
+            dict[str, typing.Any], list[dict[str, typing.Any]]]:
+        """Получить параметры устройства ``vfio-pci`` и дополнительные параметры QEMU
 
-    def get_qemu_parameters(self, vm_meta_data):
+        :param vm_meta_data: Метаданные виртуальной машины
+        :return: Кортеж из параметров устройства ``vfio-pci`` и дополнительных
+                 параметров QEMU, которые добавляются вне блока ``-device``
+
+        .. note::
+           Параметр ``host`` (адрес PCI устройства) добавляет
+           :class:`VfioPci`, а не сам PCI класс
+        """
+        return {"multifunction": "on"}, []
+
+    def get_qemu_parameters(self, vm_meta_data: VmMetaData) -> list[dict[str, typing.Any]]:
+        """Получить дополнительные параметры QEMU для PCI устройства
+
+        :param vm_meta_data: Метаданные виртуальной машины
+        :return: Список дополнительных параметров QEMU
+
+        .. note::
+           По умолчанию устройство не добавляет параметров. Параметры,
+           зависящие от режима проброса, устройство возвращает вторым
+           элементом кортежа из :meth:`get_vfio_pci_options_table`
+        """
         return []
 
     def is_other_vga_disable(self):

@@ -1,0 +1,3 @@
+Проверка классификации Intel Broadwell (Gen8).
+Device ID 0x1616 (Intel HD Graphics 5500) взят из списка i915_pciids.h.
+Ожидается поколение 8: поддерживаются и Legacy, и UPT.

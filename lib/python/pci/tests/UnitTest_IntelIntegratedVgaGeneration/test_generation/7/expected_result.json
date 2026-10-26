@@ -1,0 +1,7 @@
+{
+    "generation": "Intel Xe2 / Arc (Lunar Lake)",
+    "number": null,
+    "upt_supported": true,
+    "legacy_supported": false,
+    "stolen_memory_size_supported": false
+}
