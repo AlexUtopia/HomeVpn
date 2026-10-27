@@ -65,17 +65,14 @@ function python_venv_deactivate() {
 }
 
 # @description Установить python пакеты при помощи pip в venv
-# Пакеты форсированно переустанавливаются
 # @arg $1 string Путь до корня python проекта
-# @arg $2 string Путь до requirements.txt файла со списком пакетов для установки, если не задан то используется "${PROJECT_DIR_PATH}/requirements.txt"
+# @arg $2 string Путь до requirements.txt файла (для сторонних проектов); если не задан, проект ставится из pyproject.toml
+# @arg $3 string Дополнительные зависимости (extras) из pyproject.toml, например "dev"
 # @exitcode 0 успешно
 function pip_install_packages() {
     local PROJECT_DIR_PATH="${1}"
     local REQUIREMENTS_FILE_PATH="${2}"
-
-    if [[ -z "${REQUIREMENTS_FILE_PATH}" && -n "${PROJECT_DIR_PATH}" ]]; then
-        REQUIREMENTS_FILE_PATH="${PROJECT_DIR_PATH}/requirements.txt"
-    fi
+    local EXTRAS="${3}"
 
     local PYTHON_EXECUTABLE="$(python_get_executable)"
 
@@ -84,8 +81,24 @@ function pip_install_packages() {
 
     "${PYTHON_EXECUTABLE}" -m venv "${VENV_DIR_PATH}" || return $?
     python_venv_activate "${PROJECT_DIR_PATH}" || return $?
-    pip install -r "${REQUIREMENTS_FILE_PATH}" --force-reinstall --ignore-installed
-    local COMMAND_CHAIN_RESULT=$?
+
+    # pip в venv обновляем всегда: это безопасно и изолировано от системного python
+    python -m pip install --upgrade pip || { python_venv_deactivate; return $?; }
+
+    local COMMAND_CHAIN_RESULT=0
+    if [[ -n "${REQUIREMENTS_FILE_PATH}" ]]; then
+        # Сторонние сборки (qemu, edk2) используют собственный requirements-файл
+        python -m pip install -r "${REQUIREMENTS_FILE_PATH}" --force-reinstall --ignore-installed
+        COMMAND_CHAIN_RESULT=$?
+    else
+        local PROJECT_SPEC="${PROJECT_DIR_PATH}"
+        if [[ -n "${EXTRAS}" ]]; then
+            PROJECT_SPEC="${PROJECT_DIR_PATH}[${EXTRAS}]"
+        fi
+        python -m pip install --upgrade --editable "${PROJECT_SPEC}"
+        COMMAND_CHAIN_RESULT=$?
+    fi
+
     python_venv_deactivate
     return ${COMMAND_CHAIN_RESULT}
 }
@@ -114,4 +127,11 @@ function python_setup() {
 
     pip_install_packages "${HOME_VPN_PROJECT_ROOT}" || return $?
     return 0
+}
+
+# @description Установить dev-зависимости python (mypy, pylint)
+# @exitcode 0 успешно
+function python_dev_setup() {
+    pip_install_packages "${HOME_VPN_PROJECT_ROOT}" "" "dev"
+    return $?
 }

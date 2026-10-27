@@ -4,6 +4,10 @@ __pycache__/
 
 .venv/
 
+.mypy_cache/
+
+*.egg-info/
+
 logs/
 
 vm/

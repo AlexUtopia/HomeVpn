@@ -33,7 +33,7 @@ function qemu_build_from_sources() {
 
     local PIP_REQUIREMENTS_FILE_PATH="${BUILD_DIR_PATH}/requirements.txt"
     fs_create_file "tomli" "${PIP_REQUIREMENTS_FILE_PATH}" "" "rewrite_if_exist" || return $?
-    pip_install_packages "${BUILD_DIR_PATH}" || return $?
+    pip_install_packages "${BUILD_DIR_PATH}" "${PIP_REQUIREMENTS_FILE_PATH}" || return $?
 
     pushd "${BUILD_DIR_PATH}" || return $?
     python_venv_activate "${BUILD_DIR_PATH}" &&
