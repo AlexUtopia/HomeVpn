@@ -1,13 +1,30 @@
-import os
+"""Декоратор запуска команды в docker-контейнере"""
+
+import typing
 
 
 class ShellDockerDecorator:
-    def __init__(self, docker_image: str = "ghcr.io/msys2/msys2-docker-experimental", user: str = os.getlogin()):
-        self.__docker_image = docker_image
-        self.__user = user
+    """Оборачивает команду в запуск docker-контейнера
 
-    def __call__(self, func):
-        def __decorator_func(*args, **kwargs) -> str:
+    .. note::
+       Контейнер запускается в интерактивном режиме (``-it``)
+    """
+
+    def __init__(self, docker_image: str = "ghcr.io/msys2/msys2-docker-experimental") -> None:
+        """Инициализировать декоратор
+
+        :param docker_image: Имя docker-образа
+        """
+        self.__docker_image = docker_image
+
+    def __call__(self, func: typing.Callable[..., str]) -> typing.Callable[..., str]:
+        """Обернуть функцию, возвращающую команду, в запуск docker-контейнера
+
+        :param func: Функция, возвращающая команду
+        :return: Обёрнутая функция
+        """
+
+        def __decorator_func(*args: typing.Any, **kwargs: typing.Any) -> str:
             cmd_line = func(*args, **kwargs)
             return f'docker run -it "{self.__docker_image}" {cmd_line}'
 

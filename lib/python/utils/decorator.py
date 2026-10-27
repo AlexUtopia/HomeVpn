@@ -1,12 +1,20 @@
+"""Утилиты декорирования"""
+
+import typing
 
 
-def apply_decorators(decorators_list):
-    """A decorator that applies a list of other decorators."""
+def apply_decorators(
+        decorators_list: typing.Sequence[typing.Callable[..., typing.Any]]
+) -> typing.Callable[..., typing.Any]:
+    """Применить список декораторов к функции
 
-    def decorator(func):
-        # Apply each decorator in reverse order
-        for dec in reversed(decorators_list):
-            func = dec(func)
+    :param decorators_list: Последовательность декораторов
+    :return: Декоратор, применяющий список декораторов в обратном порядке
+    """
+
+    def decorator(func: typing.Callable[..., typing.Any]) -> typing.Callable[..., typing.Any]:
+        for decorator_item in reversed(decorators_list):
+            func = decorator_item(func)
         return func
 
     return decorator

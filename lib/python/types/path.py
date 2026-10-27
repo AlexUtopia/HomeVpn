@@ -13,7 +13,7 @@ from lib.python.system import CurrentOs
 
 
 class Path(pathlib.Path):
-    def __init__(self, *args):
+    def __init__(self, *args: str | os.PathLike[str]) -> None:
         path = pathlib.Path(*args)
         if not path.is_absolute():
             path = pathlib.Path(os.environ.get("HOME_VPN_PROJECT_ROOT", pathlib.Path.cwd())) / path

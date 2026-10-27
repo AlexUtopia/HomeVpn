@@ -1,3 +1,5 @@
+"""Запуск команд и скриптов в командных оболочках разных ОС"""
+
 from .shell_script_extension import UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT, UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST, \
     WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT, WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST
 
@@ -14,3 +16,21 @@ from .run_in_cmd_shell_decorator import RunInCmdShellDecorator
 from .run_script_in_shell_decorator import RunScriptInShellDecorator
 
 from .shell import Shell
+
+__all__ = [
+    "UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT",
+    "UNIX_SHELL_SCRIPT_FILE_EXTENSION_LIST",
+    "WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT",
+    "WIN_SHELL_SCRIPT_FILE_EXTENSION_LIST",
+    "ShellBashDecorator",
+    "ShellBashScriptDecorator",
+    "ShellCmdDecorator",
+    "ShellDockerDecorator",
+    "ShellMsys2Decorator",
+    "ShellTermuxWaydroid",
+    "ShellWineDecorator",
+    "RunInBashShellDecorator",
+    "RunInCmdShellDecorator",
+    "RunScriptInShellDecorator",
+    "Shell",
+]

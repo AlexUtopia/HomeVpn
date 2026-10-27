@@ -1,3 +1,4 @@
+"""Расширения файлов shell-скриптов"""
 
 WIN_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT = ".cmd"
 UNIX_SHELL_SCRIPT_FILE_EXTENSION_DEFAULT = ".sh"
