@@ -60,5 +60,8 @@ init-hook = "import sys; sys.path.insert(0, '.')"
 enable = ["all"]
 disable = []
 
+[tool.pylint.design]
+min-public-methods = 1
+
 [tool.pylint.format]
 max-line-length = 120

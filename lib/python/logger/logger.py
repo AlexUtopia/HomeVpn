@@ -1,3 +1,9 @@
+"""Логгер проекта
+
+.. note::
+   Логгер пишет одновременно в файл ``logs/<дата>_<имя_экземпляра>.log`` и в stdout
+"""
+
 import datetime
 import logging
 import logging.handlers
@@ -21,7 +27,7 @@ class Logger:
             Если переменная окружения не задана используется умолчательное имя "HomeVpn"
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.__logger = logging.getLogger(self.__LOG_NAME)
             self.__logger.setLevel(logging.DEBUG)
             file_handler = logging.handlers.TimedRotatingFileHandler(self.__get_log_file_path(),
