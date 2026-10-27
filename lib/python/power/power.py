@@ -9,7 +9,7 @@ from lib.python.system import CurrentOs
 class Power:
     # https://pythonassets.com/posts/shutdown-reboot-and-log-off-on-windows-and-linux/
     @staticmethod
-    def reboot():
+    def reboot() -> None:
         if CurrentOs.is_linux():
             Logger.instance().warning("[Power] reboot!!!")
             Power.__reboot_linux()
