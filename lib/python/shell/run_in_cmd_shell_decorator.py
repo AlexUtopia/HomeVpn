@@ -7,27 +7,25 @@ from lib.python.system.current_os import CurrentOs
 from .shell_bash_decorator import ShellBashDecorator
 from .shell_bash_script_decorator import ShellBashScriptDecorator
 from .shell_cmd_decorator import ShellCmdDecorator
-from .shell_wine_decorator import ShellWineDecorator
 from .shell_decorator_type import ShellCommand, ShellDecorator
+from .shell_wine_decorator import ShellWineDecorator
 
 
 class RunInCmdShellDecorator:
     """Оборачивает команду в запуск cmd.exe с учётом особенностей платформы
 
     .. note::
-       На Unix-подобных системах cmd.exe запускается через wine
+       Windows использует ``%COMSPEC%``, MSYS2/Cygwin — путь, полученный через ``cygpath``,
+       на Unix-подобных системах cmd.exe запускается через wine
     """
 
-    def __init__(self, shell_cmd_decorator: ShellDecorator = ShellCmdDecorator(),
-                 shell_bash_decorator: ShellDecorator = ShellBashDecorator(),
-                 shell_wine_decorator: ShellDecorator = ShellWineDecorator()) -> None:
+    def __init__(self, shell_bash_decorator: ShellDecorator = ShellBashDecorator(),
+                 shell_wine_decorator: ShellDecorator | None = None) -> None:
         """Инициализировать декоратор
 
-        :param shell_cmd_decorator: Декоратор запуска в cmd.exe
         :param shell_bash_decorator: Декоратор запуска в bash
-        :param shell_wine_decorator: Декоратор запуска через wine
+        :param shell_wine_decorator: Декоратор запуска через wine; если не задан, создаётся при необходимости
         """
-        self.__shell_cmd_decorator = shell_cmd_decorator
         self.__shell_bash_decorator = shell_bash_decorator
         self.__shell_wine_decorator = shell_wine_decorator
 
@@ -37,23 +35,28 @@ class RunInCmdShellDecorator:
         :param func: Функция, возвращающая команду
         :return: Обёрнутая функция
         """
+        if CurrentOs.is_windows():
 
-        @self.__shell_cmd_decorator
-        def __decorator_func_cmd(*args: typing.Any, **kwargs: typing.Any) -> str:
-            return func(*args, **kwargs)
+            @ShellCmdDecorator()
+            def __decorator_func_cmd(*args: typing.Any, **kwargs: typing.Any) -> str:
+                return func(*args, **kwargs)
+
+            return __decorator_func_cmd
+
+        if CurrentOs.is_msys() or CurrentOs.is_cygwin():
+
+            @self.__shell_bash_decorator
+            @ShellCmdDecorator(cmd_path=r'$(cygpath -u "${COMSPEC}")')
+            def __decorator_func_win_unix(*args: typing.Any, **kwargs: typing.Any) -> str:
+                return func(*args, **kwargs)
+
+            return __decorator_func_win_unix
+
+        shell_wine_decorator = self.__shell_wine_decorator if self.__shell_wine_decorator else ShellWineDecorator()
 
         @self.__shell_bash_decorator
-        @self.__shell_cmd_decorator
-        def __decorator_func_win_unix(*args: typing.Any, **kwargs: typing.Any) -> str:
-            return func(*args, **kwargs)
-
-        @self.__shell_bash_decorator
-        @ShellBashScriptDecorator([self.__shell_wine_decorator, self.__shell_cmd_decorator], ".cmd")
+        @ShellBashScriptDecorator([shell_wine_decorator, ShellCmdDecorator()], ".cmd")
         def __decorator_func_unix(*args: typing.Any, **kwargs: typing.Any) -> str:
             return func(*args, **kwargs)
 
-        if CurrentOs.is_windows():
-            return __decorator_func_cmd
-        if CurrentOs.is_msys() or CurrentOs.is_cygwin():
-            return __decorator_func_win_unix
         return __decorator_func_unix

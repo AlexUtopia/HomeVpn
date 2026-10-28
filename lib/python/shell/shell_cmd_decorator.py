@@ -1,7 +1,5 @@
 """Декоратор запуска команды в cmd.exe"""
 
-import os
-import pathlib
 import typing
 
 from lib.python.utils.escape_literal import EscapeLiteral
@@ -22,12 +20,12 @@ class ShellCmdDecorator:
 
     __ENCODE_TABLE: list[tuple[str, str]] = [("^", "^^"), ("&", "^&"), ("%", "%%"), ("|", "^|"), ("\"", "\"\"")]
 
-    def __init__(self, cmd_path: str | os.PathLike[str] = r'cmd.exe') -> None:
+    def __init__(self, cmd_path: str = r'%COMSPEC%') -> None:
         """Инициализировать декоратор
 
-        :param cmd_path: Путь до исполняемого файла cmd.exe
+        :param cmd_path: Путь до исполняемого файла cmd.exe; раскрывается при выполнении командной строки
         """
-        self.__cmd_path = pathlib.Path(os.path.expandvars(cmd_path))
+        self.__cmd_path = cmd_path
 
     def __call__(self, func: typing.Callable[..., str]) -> typing.Callable[..., str]:
         """Обернуть функцию, возвращающую команду, в вызов cmd.exe

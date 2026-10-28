@@ -53,7 +53,7 @@ class ShellMsys2Decorator:
             return "clang64"
         if Arch() == Arch("aarch64"):
             return "clangarm64"
-        raise RuntimeError("[msys2] Platform NOT SUPPORT")
+        raise RuntimeError("[msys2] Platform NOT SUPPORTED")
 
     def __init__(self, msys2_shell_script_path: str | os.PathLike[str] = get_msys2_shell(),
                  msys2_environment: str = get_msys2_environment()) -> None:

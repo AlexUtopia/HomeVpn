@@ -34,14 +34,14 @@ class ShellWineDecorator:
             return pathlib.Path("wine-stable")
         raise RuntimeError("[wine] Wine is not available")
 
-    def __init__(self, wine_path: str | os.PathLike[str] = get_wine_executable_path(),
+    def __init__(self, wine_path: str | os.PathLike[str] | None = None,
                  is_crutch_for_msys2_over_wine: bool = False) -> None:
         """Инициализировать декоратор
 
-        :param wine_path: Путь до исполняемого файла wine
+        :param wine_path: Путь до исполняемого файла wine; если не задан, определяется автоматически
         :param is_crutch_for_msys2_over_wine: Применить обход для MSYS2 поверх wine
         """
-        self.__wine_path = pathlib.Path(wine_path)
+        self.__wine_path = pathlib.Path(wine_path) if wine_path else self.get_wine_executable_path()
         self.__is_crutch_for_msys2_over_wine = is_crutch_for_msys2_over_wine
 
     def __call__(self, func: typing.Callable[..., str]) -> typing.Callable[..., str]:
