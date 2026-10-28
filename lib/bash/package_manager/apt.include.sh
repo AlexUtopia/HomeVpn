@@ -136,6 +136,7 @@ function apt_get_source_file_path() {
 # @description Скачать ключ пакета
 # @arg $1 string Имя пакета
 # @arg $2 string URL для скачивания ключа пакета
+# @stdout Путь до ключа пакета
 # @exitcode 0 успешно
 function apt_download_key() {
     local PACKAGE_NAME="${1}"

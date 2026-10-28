@@ -50,6 +50,7 @@ source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/python.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/cpuid.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/dev_packages.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/dns_dhcp_server.include.sh"
+source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/docker.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/firewall.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/make.include.sh"
 source "${HOME_VPN_PROJECT_ROOT}/lib/bash/packages/network.include.sh"
@@ -501,6 +502,7 @@ function main_install_dev_packages() {
     main_install_min_packages || return $?
 
     dev_packages_setup || return $?
+    docker_setup || return $?
     rdp_client_setup || return $?
     smb_server_setup || return $?
     vnc_client_setup || return $?
@@ -565,5 +567,5 @@ function main() {
 #vnc_server_setup
 #v2raya_setup
 #throne_setup
-nodejs_packages_setup
+docker_setup
 #main
