@@ -1,20 +1,50 @@
+"""Базовый класс моделей с табличным описанием полей."""
+
 import json
+import re
+import typing
 
 
-# fixme utopia Перевести BaseParser на прогон по __dict__ и from typing import Annotated
+# Класс, экземпляры которого можно присвоить полю: должен уметь разобрать строку и отдать регулярку
+FieldType = type[typing.Any]
+FieldValue = typing.Any
+# {"type": FieldType, "default": FieldValue}
+FieldMetadata = dict[str, typing.Any]
+
+
 class BaseParser:
-    def __init__(self, table):
-        self.__table = table
+    """Модель с динамическим набором полей
+
+    Поля описываются таблицей ``{имя: {"type": <тип>, "default": <значение>}}``.
+    Ключ ``default`` необязателен: если он отсутствует, полю присваивается
+    значение ``<тип>()``, если присутствует — указанное значение (в том числе
+    ``None``).
+
+    .. note::
+       Тип поля должен предоставлять статический метод ``get_regex()`` и
+       конструктор, принимающий строковое представление значения.
+    """
+
+    def __init__(self, table: typing.Mapping[str, FieldMetadata]) -> None:
+        """Создать модель и заполнить поля значениями по умолчанию
+
+        :param table: Таблица полей модели
+        """
+        self.__table = dict(table)
         self.init_fields_default()
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: FieldValue) -> None:
+        """Присвоить значение полю по имени
+
+        :param key: Имя поля
+        :param value: Значение поля; ``None`` сохраняется без преобразования типа
+        :raises KeyError: Поле отсутствует в таблице модели
+        """
         metadata = self.__table.get(key)
         if metadata is None:
-            return
+            raise KeyError(f"[{type(self).__name__}] Unknown field: {key}")
 
         field_type = self.__get_field_type(metadata)
-        if field_type is None:
-            return
 
         if value is None:
             setattr(self, key, value)
@@ -22,18 +52,35 @@ class BaseParser:
 
         setattr(self, key, field_type(value))
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> FieldValue:
+        """Получить значение поля по имени
+
+        :param key: Имя поля
+        :return: Значение поля
+        """
         return getattr(self, key)
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Сериализовать модель в JSON
+
+        :return: JSON-представление полей модели
+        """
         return json.dumps(self.get_fields_as_dict())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """Сериализовать модель в JSON
+
+        :return: JSON-представление полей модели
+        """
         return self.__str__()
 
-    def get_fields_as_dict(self):
-        result = dict()
-        for field_name, metadata in self.__table.items():
+    def get_fields_as_dict(self) -> dict[str, FieldValue]:
+        """Получить поля модели в виде словаря
+
+        :return: Словарь ``{имя поля: значение}``; вложенные модели раскрываются рекурсивно
+        """
+        result: dict[str, FieldValue] = {}
+        for field_name in self.__table:
             field_value = self[field_name]
             if isinstance(field_value, BaseParser):
                 result[field_name] = field_value.get_fields_as_dict()
@@ -41,18 +88,30 @@ class BaseParser:
                 result[field_name] = field_value
         return result
 
-    def init_fields_default(self):
-        for field_name, metadata in self.__table.items():
-            if "default" in metadata:
-                self[field_name] = metadata.get("default")
-            else:
-                setattr(self, field_name, self.__get_field_type(metadata)())
+    def init_fields_default(self) -> None:
+        """Заполнить поля значениями по умолчанию
 
-    def init_fields(self, re_object, value_as_str):
+        Использует ``default`` из таблицы поля, а при его отсутствии —
+        результат вызова ``<тип>()``.
+        """
+        for field_name, metadata in self.__table.items():
+            self.__set_field_default(field_name, metadata)
+
+    def init_fields(self, re_object: re.Pattern[str], value_as_str: FieldValue) -> bool:
+        """Заполнить поля из строки по регулярному выражению
+
+        Имена именованных групп регулярного выражения должны совпадать с
+        именами полей модели.
+
+        :param re_object: Скомпилированное регулярное выражение
+        :param value_as_str: Строка для разбора
+        :return: ``True`` — строка разобрана, ``False`` — значение не является строкой
+                 или не соответствует выражению
+        """
         if not isinstance(value_as_str, str):
             return False
 
-        match = re_object.search(str(value_as_str))
+        match = re_object.search(value_as_str)
         if match is None:
             return False
 
@@ -61,42 +120,62 @@ class BaseParser:
                 self[field_name] = value
         return True
 
-    def copy_if(self, other):
-        if isinstance(other, type(self)) or isinstance(self, type(other)) or isinstance(other, dict):
-            other_dict = other if isinstance(other, dict) else other.get_fields_as_dict()
-            for field_name, metadata in self.__table.items():
-                if field_name in other_dict:
-                    self[field_name] = other[field_name]
-                else:
-                    setattr(self, field_name, self.__get_field_type(metadata)())
-            return True
-        else:
+    def copy_if(self, other: FieldValue) -> bool:
+        """Скопировать поля из другой модели или словаря
+
+        Отсутствующие в источнике поля заполняются значением по умолчанию:
+        ``default`` из метаданных поля, а при его отсутствии — ``<тип>()``.
+
+        :param other: Модель того же типа (или его предка) либо словарь значений
+        :return: ``True`` — источник подходит и поля скопированы, ``False`` — источник не подходит
+        """
+        if not (isinstance(other, (type(self), dict)) or isinstance(self, type(other))):
             return False
 
-    # @staticmethod
-    # def from_string(model):
-    #     Pci.from_json(json.loads(model))
-    #
-    # @staticmethod
-    # def from_json(model):
-    #     result = Pci()
-    #     for key, value in model.items():
-    #         result[key] = value
-    #     return Pci.__build(result)
+        other_dict = other if isinstance(other, dict) else other.get_fields_as_dict()
+        for field_name, metadata in self.__table.items():
+            if field_name in other_dict:
+                self[field_name] = other[field_name]
+            else:
+                self.__set_field_default(field_name, metadata)
+        return True
 
-    def get_regex_for(self, field_name, is_capture=True):
+    def get_regex_for(self, field_name: str, is_capture: bool = True) -> str:
+        """Получить регулярное выражение поля
+
+        :param field_name: Имя поля
+        :param is_capture: Обернуть выражение в именованную группу с именем поля
+        :return: Регулярное выражение поля или пустая строка, если поле отсутствует
+        """
         metadata = self.__table.get(field_name)
         if metadata is None:
             return ""
 
         field_type = self.__get_field_type(metadata)
-        if field_type is None:
-            return ""
-
         if is_capture:
             return f"(?P<{field_name}>{field_type.get_regex()})"
-        else:
-            return field_type.get_regex()
+        return str(field_type.get_regex())
 
-    def __get_field_type(self, metadata):
-        return metadata.get("type")
+    def __set_field_default(self, field_name: str, metadata: FieldMetadata) -> None:
+        """Присвоить полю значение по умолчанию
+
+        :param field_name: Имя поля
+        :param metadata: Метаданные поля
+        """
+        if "default" in metadata:
+            self[field_name] = metadata["default"]
+            return
+        setattr(self, field_name, self.__get_field_type(metadata)())
+
+    @staticmethod
+    def __get_field_type(metadata: FieldMetadata) -> FieldType:
+        """Получить тип поля из метаданных
+
+        :param metadata: Метаданные поля
+        :return: Тип поля
+        :raises ValueError: В метаданных отсутствует тип поля
+        """
+        field_type = metadata.get("type")
+        if field_type is None:
+            raise ValueError(f"Field metadata has no type: {metadata}")
+        return typing.cast(FieldType, field_type)
