@@ -49,7 +49,7 @@ class UnitTest_RunInShell(unittest.TestCase):
     TEST_DATA_LIST: list[TestData] = [
         {
             "description": "Запуск msys2 bash через wine (с использованием docker, только linux:x86_64)",
-            "requires": ["docker", "wine"],
+            "requires": ["docker"],
             "decorator_list": [ShellDockerDecorator(),
                                RunInCmdShellDecorator(shell_wine_decorator=ShellWineDecorator(wine_path="wine",
                                                                                               is_crutch_for_msys2_over_wine=True)),
@@ -59,28 +59,28 @@ class UnitTest_RunInShell(unittest.TestCase):
                     {
                         "cmd": r'echo "\"TEST message $SYSTEMDRIVE $WINEHOMEDIR $MSYSTEM_PREFIX\""',
                         "cmd_for_executing": {
-                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"echo \\\"\\\"\\\\\\\\\\\"\\\"TEST message \\\$SYSTEMDRIVE \\\$WINEHOMEDIR \\\$MSYSTEM_PREFIX\\\\\\\\\\\"\\\"\\\"\\\"\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
+                            "linux:x86_64": r'''docker run "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"echo \\\"\\\"\\\\\\\\\\\"\\\"TEST message \\\$SYSTEMDRIVE \\\$WINEHOMEDIR \\\$MSYSTEM_PREFIX\\\\\\\\\\\"\\\"\\\"\\\"\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
                         },
                         "stdout": r'''"TEST message C: \??\Z:\root /clang64"'''
                     },
                     {
                         "cmd": r'exit 17',
                         "cmd_for_executing": {
-                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"exit 17\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
+                            "linux:x86_64": r'''docker run "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"exit 17\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
                         },
                         "exit_code": 17
                     },
                     {
                         "cmd": r'whoami',
                         "cmd_for_executing": {
-                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"whoami\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
+                            "linux:x86_64": r'''docker run "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"whoami\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
                         },
-                        "stdout": getpass.getuser()
+                        "stdout": "root"
                     },
                     {
                         "cmd": r'uname -o',
                         "cmd_for_executing": {
-                            "linux:x86_64": r'''docker run -it "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"uname -o\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
+                            "linux:x86_64": r'''docker run "ghcr.io/msys2/msys2-docker-experimental" bash -l -c "TEMP_PATH=\"\$(mktemp ~/XXXXXXXXX.cmd)\" && trap \"rm -f \"\$TEMP_PATH\"\" EXIT && echo \"\\\"%SYSTEMDRIVE%\\\\msys64\\\\msys2_shell.cmd\\\" -no-start -clang64 -defterm -c \\\"uname -o\\\"\" > \"\$TEMP_PATH\" && chmod +x \"\$TEMP_PATH\" && sed -i 's/delims=,;=	 \"/delims=,;= \"/g' ~/.wine/drive_c/msys64/msys2_shell.cmd && WINEDEBUG=-all && \"wine\" \"%COMSPEC%\" /q /c \"\$TEMP_PATH\""'''
                         },
                         "stdout": "Msys"
                     }

@@ -7,7 +7,7 @@ class ShellDockerDecorator:
     """Оборачивает команду в запуск docker-контейнера
 
     .. note::
-       Контейнер запускается в интерактивном режиме (``-it``)
+       Контейнер запускается без TTY и без подключения stdin
     """
 
     def __init__(self, docker_image: str = "ghcr.io/msys2/msys2-docker-experimental") -> None:
@@ -26,6 +26,6 @@ class ShellDockerDecorator:
 
         def __decorator_func(*args: typing.Any, **kwargs: typing.Any) -> str:
             cmd_line = func(*args, **kwargs)
-            return f'docker run -it "{self.__docker_image}" {cmd_line}'
+            return f'docker run "{self.__docker_image}" {cmd_line}'
 
         return __decorator_func
