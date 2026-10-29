@@ -63,6 +63,7 @@ disable = []
 
 [tool.pylint.design]
 min-public-methods = 1
+max-public-methods = 30
 
 [tool.pylint.format]
 max-line-length = 120

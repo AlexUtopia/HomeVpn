@@ -1,7 +1,7 @@
 """Общие утилиты проекта"""
 
 from .async_runner import AsyncRunner
-from .base_parser import BaseParser
+from .base_parser import BaseParser, Field
 from .daemon_manager_base import DaemonManagerBase
 from .decorator import apply_decorators
 from .escape_literal import EscapeLiteral
@@ -15,6 +15,7 @@ __all__ = ["AsyncRunner",
            "BaseParser",
            "DaemonManagerBase",
            "EscapeLiteral",
+           "Field",
            "ShellSerializer",
            "String",
            "StringAsciiLetter",

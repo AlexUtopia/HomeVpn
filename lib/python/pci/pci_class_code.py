@@ -1,9 +1,13 @@
+"""Классы PCI устройств."""
+
 from lib.python.utils import UInt16Hex
 from lib.python.utils.binary import BitUtils
 
 
 # https://pcisig.com/sites/default/files/files/PCI_Code-ID_r_1_11__v24_Jan_2019.pdf
 class PciClassCode(UInt16Hex):
+    """Код класса PCI устройства (base class, sub class, programming interface)"""
+
     BASE_CLASS_BACKWARD_COMPATIBILITY = 0x00
     BASE_CLASS_BACKWARD_COMPATIBILITY_ALL_EXCEPT_VGA = 0x00
     BASE_CLASS_BACKWARD_COMPATIBILITY_VGA = 0x01
@@ -43,48 +47,95 @@ class PciClassCode(UInt16Hex):
     BASE_CLASS_SERIAL_BUS_CONTROLLER_SMBUS = 0x05
     BASE_CLASS_SERIAL_BUS_CONTROLLER_CAN = 0x09
 
-    def __new__(cls, class_code=0):
-        return super(PciClassCode, cls).__new__(cls, class_code)
+    def get_base_class(self) -> int:
+        """Получить базовый класс устройства
 
-    def get_base_class(self):
-        return (self.__int__() >> BitUtils.BITS_IN_BYTE) & BitUtils.LSB_TETRAD_MASK
+        :return: Номер базового класса
+        """
+        return (int(self) >> BitUtils.BITS_IN_BYTE) & BitUtils.LSB_TETRAD_MASK
 
-    def get_sub_class(self):
-        return self.__int__() & BitUtils.LSB_TETRAD_MASK
+    def get_sub_class(self) -> int:
+        """Получить подкласс устройства
+
+        :return: Номер подкласса
+        """
+        return int(self) & BitUtils.LSB_TETRAD_MASK
 
     # https://github.com/xiaoran007/pypci/blob/v0.0.4/src/pypci/backend/pci.py#L74
-    def is_vga(self):
-        return self.get_base_class() == self.BASE_CLASS_VGA or (
-                self.get_base_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
+    def is_vga(self) -> bool:
+        """Проверить, что устройство является VGA контроллером
 
-    def is_audio(self):
+        :return: ``True`` — VGA контроллер
+        """
+        return self.get_base_class() == self.BASE_CLASS_VGA or (
+                self.get_base_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY
+                and self.get_sub_class() == self.BASE_CLASS_BACKWARD_COMPATIBILITY_VGA)
+
+    def is_audio(self) -> bool:
+        """Проверить, что устройство является аудиоустройством
+
+        :return: ``True`` — аудиоустройство
+        """
         return (self.get_base_class() == self.BASE_CLASS_MULTIMEDIA_DEVICE) and (
                 self.get_sub_class() == self.BASE_CLASS_MULTIMEDIA_DEVICE_HIGH_DEFINITION_AUDIO_V1)
 
-    def is_usb_host_controller(self, prog_if):
+    def is_usb_host_controller(self, prog_if: int) -> bool:
+        """Проверить, что устройство является USB контроллером
+
+        :param prog_if: Programming interface устройства
+        :return: ``True`` — USB контроллер
+        """
         return self.is_usb_uhci_controller(prog_if) or self.is_usb_ohci_controller(
             prog_if) or self.is_usb_ehci_controller(prog_if) or self.is_usb_xhci_controller(prog_if)
 
-    def is_usb_uhci_controller(self, prog_if):
+    def is_usb_uhci_controller(self, prog_if: int) -> bool:
+        """Проверить, что устройство является USB UHCI контроллером
+
+        :param prog_if: Programming interface устройства
+        :return: ``True`` — USB UHCI контроллер
+        """
         return self.is_usb() and (
                 prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_UHCI)
 
-    def is_usb_ohci_controller(self, prog_if):
+    def is_usb_ohci_controller(self, prog_if: int) -> bool:
+        """Проверить, что устройство является USB OHCI контроллером
+
+        :param prog_if: Programming interface устройства
+        :return: ``True`` — USB OHCI контроллер
+        """
         return self.is_usb() and (
                 prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_OHCI)
 
-    def is_usb_ehci_controller(self, prog_if):
+    def is_usb_ehci_controller(self, prog_if: int) -> bool:
+        """Проверить, что устройство является USB EHCI контроллером
+
+        :param prog_if: Programming interface устройства
+        :return: ``True`` — USB EHCI контроллер
+        """
         return self.is_usb() and (
                 prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_EHCI)
 
-    def is_usb_xhci_controller(self, prog_if):
+    def is_usb_xhci_controller(self, prog_if: int) -> bool:
+        """Проверить, что устройство является USB XHCI контроллером
+
+        :param prog_if: Programming interface устройства
+        :return: ``True`` — USB XHCI контроллер
+        """
         return self.is_usb() and (
                 prog_if == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB_XHCI)
 
-    def is_usb(self):
+    def is_usb(self) -> bool:
+        """Проверить, что устройство является USB контроллером
+
+        :return: ``True`` — USB контроллер
+        """
         return (self.get_base_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER) and (
                 self.get_sub_class() == self.BASE_CLASS_SERIAL_BUS_CONTROLLER_USB)
 
-    def is_isa_bridge(self):
+    def is_isa_bridge(self) -> bool:
+        """Проверить, что устройство является ISA мостом
+
+        :return: ``True`` — ISA мост
+        """
         return (self.get_base_class() == self.BASE_CLASS_BRIDGE_DEVICE) and (
                 self.get_sub_class() == self.BASE_CLASS_BRIDGE_DEVICE_ISA)

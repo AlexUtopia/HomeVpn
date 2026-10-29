@@ -5,7 +5,7 @@ import re
 import typing
 import unittest
 
-from lib.python.utils import BaseParser, String, UInt8, UInt8Hex
+from lib.python.utils import BaseParser, Field, String, UInt8, UInt8Hex
 
 
 class NestedParser(BaseParser):
@@ -158,3 +158,87 @@ class UnitTest_BaseParser(unittest.TestCase):  # pylint: disable=invalid-name
         self.assertEqual(model.get_regex_for("count"), fr"(?P<count>{UInt8.get_regex()})")
         self.assertEqual(model.get_regex_for("count", is_capture=False), UInt8.get_regex())
         self.assertEqual(model.get_regex_for("unknown"), "")
+
+
+class AnnotatedNestedParser(BaseParser):
+    """Вложенная модель, описанная аннотациями"""
+
+    value: typing.Annotated[UInt8, Field()]
+
+    def __init__(self, source: typing.Any = None) -> None:
+        """Создать модель
+
+        :param source: Источник значений (модель или словарь)
+        """
+        super().__init__()
+        if source is not None:
+            self.copy_if(source)
+
+
+class AnnotatedParser(BaseParser):
+    """Модель, описанная аннотациями ``typing.Annotated``"""
+
+    name: typing.Annotated[String, Field()]
+    count: typing.Annotated[UInt8, Field()]
+    optional: typing.Annotated[UInt8 | None, Field(default=None)]
+    explicit: typing.Annotated[UInt8, Field(default=7)]
+    nested: typing.Annotated[AnnotatedNestedParser, Field()]
+
+    def __init__(self, source: typing.Any = None) -> None:
+        """Создать модель
+
+        :param source: Источник значений (модель или словарь)
+        """
+        super().__init__()
+        if source is not None:
+            self.copy_if(source)
+
+
+class AnnotatedChildParser(AnnotatedParser):
+    """Наследник модели, добавляющий поле"""
+
+    child: typing.Annotated[UInt8, Field(default=9)]
+
+
+class UnitTest_AnnotatedBaseParser(unittest.TestCase):  # pylint: disable=invalid-name
+    """Проверка модели, поля которой описаны аннотациями"""
+
+    def test_defaults(self) -> None:
+        """Значения по умолчанию берутся из Field и из <тип>()"""
+        model = AnnotatedParser()
+
+        self.assertEqual(model["name"], "")
+        self.assertEqual(model["count"], 0)
+        self.assertIsNone(model["optional"])
+        self.assertEqual(model["explicit"], 7)
+        self.assertIsNone(model.get_fields_as_dict()["optional"])
+
+    def test_setitem_and_regex(self) -> None:
+        """Присвоение преобразует тип, None сохраняется, regex берётся из union"""
+        model = AnnotatedParser()
+
+        model["count"] = "5"
+        model["optional"] = "3"
+        model["nested"] = {"value": "9"}
+
+        self.assertEqual(model["count"], 5)
+        self.assertEqual(model["optional"], 3)
+        self.assertEqual(model["nested"]["value"], 9)
+        self.assertEqual(model.get_regex_for("optional"), fr"(?P<optional>{UInt8.get_regex()})")
+        self.assertEqual(model.get_regex_for("optional", is_capture=False), UInt8.get_regex())
+
+    def test_unknown_field(self) -> None:
+        """Неизвестное поле приводит к KeyError"""
+        model = AnnotatedParser()
+
+        with self.assertRaises(KeyError):
+            model["unknown"] = 1
+
+    def test_inheritance(self) -> None:
+        """Поля предка сохраняются, поля наследника добавляются в конец"""
+        model = AnnotatedChildParser({"count": "5", "child": "11"})
+
+        self.assertEqual(list(model.get_fields_as_dict().keys()),
+                         ["name", "count", "optional", "explicit", "nested", "child"])
+        self.assertEqual(model["count"], 5)
+        self.assertEqual(model["child"], 11)

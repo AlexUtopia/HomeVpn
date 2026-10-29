@@ -1,3 +1,5 @@
+"""PCI устройства, IOMMU группы и проброс в виртуальные машины."""
+
 from .pci_address import PciAddress
 from .pci_class_code import PciClassCode
 from .pci_passthrough_mode import PciPassthroughMode
@@ -13,3 +15,24 @@ from .pci_vga_intel import VgaPciIntel
 
 from .vfio_pci import VfioPci
 from .vfio import Vfio
+
+__all__ = ["BasePath",
+           "Dmi",
+           "IntelIntegratedVgaGeneration",
+           "IntelIntegratedVgaStolenMemorySize",
+           "LegacyVideoBiosRom",
+           "Pci",
+           "PciAddress",
+           "PciClassCode",
+           "PciPassthroughMode",
+           "PciVidPid",
+           "PlatformDescriptor",
+           "UsbEhciPci",
+           "UsbOhciPci",
+           "UsbUhciPci",
+           "UsbXhciPci",
+           "Vfio",
+           "VfioIgdPkgRom",
+           "VfioPci",
+           "VgaPciIntel",
+           "i915ovmfRom"]

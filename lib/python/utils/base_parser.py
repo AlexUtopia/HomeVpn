@@ -2,6 +2,7 @@
 
 import json
 import re
+import types
 import typing
 
 
@@ -11,11 +12,113 @@ FieldValue = typing.Any
 # {"type": FieldType, "default": FieldValue}
 FieldMetadata = dict[str, typing.Any]
 
+# Признак того, что значение по умолчанию у поля не задано
+_NO_DEFAULT = object()
+
+_FIELD_TABLE_CACHE: dict[type, dict[str, FieldMetadata]] = {}
+
+
+class Field:
+    """Метаданные поля модели для ``typing.Annotated``
+
+    ``Field()`` — значение по умолчанию не задано, полю будет присвоено
+    ``<тип>()``. ``Field(default=None)`` — полю будет присвоено ``None``.
+
+    .. note::
+       Метаданные читаются только из аннотаций самого класса и его предков,
+       унаследованных от :class:`BaseParser`.
+    """
+
+    def __init__(self, default: FieldValue = _NO_DEFAULT) -> None:
+        """Создать метаданные поля
+
+        :param default: Значение по умолчанию; если не задано, используется ``<тип>()``
+        """
+        self.default = default
+
+    @property
+    def has_default(self) -> bool:
+        """Признак явно заданного значения по умолчанию"""
+        return self.default is not _NO_DEFAULT
+
+
+def _get_annotations(cls: type) -> dict[str, typing.Any]:
+    """Получить аннотации, объявленные непосредственно в классе
+
+    :param cls: Класс модели
+    :return: Словарь ``{имя: аннотация}``
+    """
+    annotations: dict[str, typing.Any] = dict(cls.__dict__.get("__annotations__", {}))
+    if any(isinstance(annotation, str) for annotation in annotations.values()):
+        return dict(typing.get_type_hints(cls, include_extras=True))
+    return annotations
+
+
+def _get_parser_type(annotation: typing.Any) -> FieldType:
+    """Получить тип-разборщик из аннотации поля
+
+    :param annotation: Аннотация поля, например ``UInt8 | None``
+    :return: Тип, у которого берутся ``get_regex()`` и конструктор
+    """
+    union_args = [argument for argument in typing.get_args(annotation) if argument is not types.NoneType]
+    if len(union_args) == 1:
+        return typing.cast(FieldType, union_args[0])
+    return typing.cast(FieldType, annotation)
+
+
+def _get_field_metadata(annotation: typing.Any) -> FieldMetadata | None:
+    """Получить метаданные поля из ``typing.Annotated``
+
+    :param annotation: Аннотация поля
+    :return: Метаданные поля или ``None``, если аннотация не описывает поле
+    """
+    if typing.get_origin(annotation) is not typing.Annotated:
+        return None
+
+    annotation_args = typing.get_args(annotation)
+    field = next((argument for argument in annotation_args[1:] if isinstance(argument, Field)), None)
+    if field is None:
+        return None
+
+    metadata: FieldMetadata = {"type": _get_parser_type(annotation_args[0])}
+    if field.has_default:
+        metadata["default"] = field.default
+    return metadata
+
+
+def _get_field_table(cls: type) -> dict[str, FieldMetadata]:
+    """Собрать таблицу полей модели из аннотаций ``typing.Annotated``
+
+    Поля предков добавляются первыми, поля наследника могут их переопределить.
+    Результат кешируется по классу.
+
+    :param cls: Класс модели
+    :return: Таблица полей в формате :class:`BaseParser`
+    """
+    cached = _FIELD_TABLE_CACHE.get(cls)
+    if cached is not None:
+        return cached
+
+    result: dict[str, FieldMetadata] = {}
+    for base in reversed(cls.__mro__):
+        for field_name, annotation in _get_annotations(base).items():
+            metadata = _get_field_metadata(annotation)
+            if metadata is not None:
+                result[field_name] = metadata
+    _FIELD_TABLE_CACHE[cls] = result
+    return result
+
 
 class BaseParser:
     """Модель с динамическим набором полей
 
-    Поля описываются таблицей ``{имя: {"type": <тип>, "default": <значение>}}``.
+    Поля описываются таблицей ``{имя: {"type": <тип>, "default": <значение>}}``
+    либо аннотациями ``typing.Annotated``::
+
+        class Model(BaseParser):
+            name: typing.Annotated[String, Field()]
+            iommu_group: typing.Annotated[UInt8 | None, Field(default=None)]
+
     Ключ ``default`` необязателен: если он отсутствует, полю присваивается
     значение ``<тип>()``, если присутствует — указанное значение (в том числе
     ``None``).
@@ -25,12 +128,13 @@ class BaseParser:
        конструктор, принимающий строковое представление значения.
     """
 
-    def __init__(self, table: typing.Mapping[str, FieldMetadata]) -> None:
+    def __init__(self, table: typing.Mapping[str, FieldMetadata] | None = None) -> None:
         """Создать модель и заполнить поля значениями по умолчанию
 
-        :param table: Таблица полей модели
+        :param table: Таблица полей модели; при ``None`` собирается из аннотаций
+                      ``typing.Annotated`` самого класса и его предков
         """
-        self.__table = dict(table)
+        self.__table = dict(table) if table is not None else _get_field_table(type(self))
         self.init_fields_default()
 
     def __setitem__(self, key: str, value: FieldValue) -> None:
